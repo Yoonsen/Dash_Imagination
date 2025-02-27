@@ -92,11 +92,27 @@ return L.divIcon({
         'V': 'Skog og mark'          
     }
     
+    feature_frequencies = {}
+    for feature_class in feature_descriptions.keys():
+        feature_frequencies[feature_class] = significant_places[
+            significant_places['feature_class'] == feature_class
+        ]['frekv'].sum()
+    
+    # REPLACE THIS BLOCK
     feature_groups = {}
     for feature_class, description in feature_descriptions.items():
-        feature_groups[feature_class] = folium.FeatureGroup(name=description).add_to(m)
+        # Add the frequency to the layer name
+        freq = feature_frequencies.get(feature_class, 0)
+        layer_name = f"{description} ({int(freq)} forekomster)"
         
+        # Create a MarkerCluster for each feature group with your custom cluster_js
+        marker_cluster = folium.MarkerCluster(
+            icon_create_function=cluster_js,
+            name=layer_name
+        ).add_to(m)
         
+        feature_groups[feature_class] = marker_cluster
+    
     # Individual markers remain red
     # Add markers to their respective feature clusters
     for _, place in significant_places.iterrows():
@@ -106,8 +122,8 @@ return L.divIcon({
         html = f"""
         <div style='width:500px'>
             <h4>{place['name']}</h4>
-            <p><strong>Historisk navn:</strong> {place['token']}</p>
-            <p><strong>{place['frekv']} forekomster i {book_count} bøker</strong></p>
+            <p><strong>Historiske navn:</strong> {place['token']}</p>
+            <p><strong>{place['frekv']} i {book_count} bøker</strong></p>
             <div style='max-height: 400px; overflow-y: auto;'>
                 <table style='width: 100%; border-collapse: collapse;'>
                     <thead style='position: sticky; top: 0; background: white;'>
@@ -143,17 +159,31 @@ return L.divIcon({
 
 
         radius = min(8 + np.log(place['frekv']) * marker_size, 60)
-        marker = folium.CircleMarker(
-            radius=radius,
+        
+        # Create a regular marker instead of CircleMarker (for clustering)
+        marker = folium.Marker(
             location=[place['latitude'], place['longitude']],
             popup=folium.Popup(html, max_width=500),
             tooltip=f"{place['name']}: {place['frekv']} forekomster i {book_count} bøker",
-            color=feature_colors[place['feature_class']],
-            fill=True,
-            fill_color=feature_colors[place['feature_class']],
-            fill_opacity=0.4,
-            weight=2
+            icon=folium.Icon(
+                color=feature_colors[place['feature_class']],
+                icon='info-sign'
+            )
         )
+        
+        # Add marker to the appropriate cluster group
         marker.add_to(feature_groups[place['feature_class']])
+    #     marker = folium.CircleMarker(
+    #         radius=radius,
+    #         location=[place['latitude'], place['longitude']],
+    #         popup=folium.Popup(html, max_width=500),
+    #         tooltip=f"{place['name']}: {place['frekv']} forekomster i {book_count} bøker",
+    #         color=feature_colors[place['feature_class']],
+    #         fill=True,
+    #         fill_color=feature_colors[place['feature_class']],
+    #         fill_opacity=0.4,
+    #         weight=2
+    #     )
+    #     marker.add_to(feature_groups[place['feature_class']])
     folium.LayerControl().add_to(m)
     return m

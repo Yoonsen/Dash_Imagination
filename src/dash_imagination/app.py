@@ -1,5 +1,6 @@
 import dash
-from dash import dcc, html, Input, Output, State, callback, dash_table
+import os
+from dash import dcc, html, Input, Output, State, callback, dash_table, Dash
 import pandas as pd
 import numpy as np
 import folium
@@ -206,10 +207,16 @@ function(cluster) {{
 
     return get_cached_map_html(cache_key, create_map)
 
-app = dash.Dash(__name__, suppress_callback_exceptions=True,
-                    routes_pathname_prefix='/imagination/', 
-    requests_pathname_prefix="/run/imagination/")
-# Constants
+# Check if running in production or local
+is_production = os.environ.get('ENVIRONMENT') == 'production'
+
+if is_production:
+    app = Dash(__name__,  
+        routes_pathname_prefix='/imagination_map/', 
+        requests_pathname_prefix="/run/imagination_map/")
+else:
+    # For local development
+    app = Dash(__name__)
 
 
 BASEMAP_OPTIONS = [
