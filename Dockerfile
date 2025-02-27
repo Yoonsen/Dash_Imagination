@@ -10,6 +10,9 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn
 COPY src/ /app/src/
 COPY run.py .
 
+# Env
+ENV ENVIRONMENT=production
+
 # Expose port
 EXPOSE 8080
 
