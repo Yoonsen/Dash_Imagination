@@ -14,6 +14,8 @@ import tempfile
 import sqlite3
 import base64
 
+import dash_bootstrap_components as dbc
+
 import importlib.resources as pkg_resources
 from pathlib import Path
 
@@ -320,253 +322,476 @@ styles = {
     }
 }
 
-# Layout with Tabs
-# Layout with Tabs
 app.layout = html.Div([
-    # Left Control Panel
+    # Main Map Container (takes entire screen)
     html.Div([
-        html.H1("ImagiNation", style=styles['headerStyle']),
+        # Map View
+        html.Iframe(
+            id='map-iframe',
+            srcDoc='',
+            style={'width': '100%', 'height': '100%', 'border': 'none'}
+        ),
+        # Heatmap View (initially hidden)
+        html.Iframe(
+            id='heatmap-iframe',
+            srcDoc='',
+            style={'width': '100%', 'height': '100%', 'border': 'none', 'display': 'none'}
+        ),
+    ], style={
+        'position': 'absolute',
+        'top': 0,
+        'left': 0,
+        'width': '100%',
+        'height': '100vh'
+    }),
+    
+    # Top search bar and map/heatmap toggle
+    html.Div([
+        html.H3("ImagiNation", style={'margin': '0 15px 0 0', 'fontWeight': '400'}),
         
-        # Metadata Controls
+        # Map/Heatmap toggle
+        dcc.RadioItems(
+            id='view-toggle',
+            options=[
+                {'label': 'Map', 'value': 'map'},
+                {'label': 'Heatmap', 'value': 'heatmap'}
+            ],
+            value='map',
+            inline=True,
+            labelStyle={'marginRight': '10px'}
+        ),
+    ], style={
+        'position': 'absolute', 
+        'top': '10px', 
+        'left': '60px',
+        'backgroundColor': 'white',
+        'padding': '10px 15px',
+        'borderRadius': '4px',
+        'boxShadow': '0 2px 4px rgba(0,0,0,0.2)',
+        'zIndex': 1000,
+        'display': 'flex',
+        'alignItems': 'center'
+    }),
+    
+    # Left sidebar control button (hamburger menu)
+    html.Div([
+        html.Button(
+            html.I(className="fa fa-bars"),
+            id='sidebar-toggle',
+            style={
+                'background': 'white',
+                'border': 'none',
+                'borderRadius': '4px',
+                'padding': '10px',
+                'boxShadow': '0 2px 4px rgba(0,0,0,0.2)',
+                'cursor': 'pointer'
+            }
+        )
+    ], style={
+        'position': 'absolute',
+        'top': '10px',
+        'left': '10px',
+        'zIndex': 1000
+    }),
+    
+    # Left sidebar (initially collapsed to just show icons)
+    html.Div([
+        # Sidebar header
         html.Div([
-            html.H3("Filters", style={**styles['headerStyle'], 'fontSize': '18px'}),
+            html.H3("Layers & Filters", style={'margin': '0', 'fontWeight': '400'})
+        ], style={'padding': '15px', 'borderBottom': '1px solid #eee'}),
+        
+        # Sections - each expandable like Google Maps
+        
+        # 1. Base Map Selection
+        html.Div([
+            html.Button([
+                html.I(className="fa fa-map", style={'marginRight': '10px'}),
+                "Base Map"
+            ], id='basemap-toggle', className='section-toggle'),
             
-            html.Label("Period", style=styles['labelStyle']),
+            # Expanded content (initially hidden)
             html.Div([
+                dcc.RadioItems(
+                    id='basemap-dropdown',
+                    options=[{'label': bm, 'value': bm} for bm in BASEMAP_OPTIONS],
+                    value=BASEMAP_OPTIONS[0],
+                    labelStyle={'display': 'block', 'margin': '8px 0'}
+                ),
+            ], id='basemap-content', className='section-content')
+        ], className='sidebar-section'),
+        
+        # 2. Feature Layers
+        html.Div([
+            html.Button([
+                html.I(className="fa fa-layer-group", style={'marginRight': '10px'}),
+                "Feature Layers"
+            ], id='layers-toggle', className='section-toggle'),
+            
+            # Expanded content
+            html.Div([
+                # Feature layers with checkboxes
+                html.Div([
+                    dbc.Checkbox(
+                        id=f'layer-{fc}',
+                        value=True,
+                        className='layer-checkbox'
+                    ),
+                    html.Span(f"{color_emojis.get(fc, '🔲')} {desc}")
+                ], style={'margin': '8px 0'})
+                for fc, desc in feature_descriptions.items()
+            ], id='layers-content', className='section-content')
+        ], className='sidebar-section'),
+        
+        # 3. Display Settings
+        html.Div([
+            html.Button([
+                html.I(className="fa fa-sliders-h", style={'marginRight': '10px'}),
+                "Display Settings"
+            ], id='display-toggle', className='section-toggle'),
+            
+            # Expanded content
+            html.Div([
+                html.Label("Marker Size"),
+                dcc.Slider(
+                    id='marker-size-slider',
+                    min=1,
+                    max=6,
+                    value=3,
+                    step=1,
+                    marks={i: str(i) for i in range(1, 7)}
+                ),
+                
+                html.Label("Max Places", style={'marginTop': '15px'}),
+                dcc.Slider(
+                    id='max-places-slider',
+                    min=1,
+                    max=500,
+                    value=200,
+                    step=10,
+                    marks={i: str(i) for i in [1, 100, 250, 500]}
+                ),
+                
+                html.Label("Max Books", style={'marginTop': '15px'}),
+                dcc.Slider(
+                    id='max-books-slider',
+                    min=100,
+                    max=5000,
+                    value=400,
+                    step=100,
+                    marks={i: str(i) for i in [100, 1000, 2500, 5000]}
+                ),
+                
+                # Heatmap settings (conditionally shown)
+                html.Div([
+                    html.H4("Heatmap Settings", style={'marginTop': '15px'}),
+                    
+                    html.Label("Intensity"),
+                    dcc.Slider(
+                        id='heatmap-intensity-slider',
+                        min=1,
+                        max=10,
+                        value=3,
+                        marks={i: str(i) for i in range(1, 11, 2)}
+                    ),
+                    
+                    html.Label("Radius", style={'marginTop': '15px'}),
+                    dcc.Slider(
+                        id='heatmap-radius-slider',
+                        min=5,
+                        max=30,
+                        value=15,
+                        step=5,
+                        marks={i: str(i) for i in [5, 15, 30]}
+                    ),
+                    
+                    html.Label("Blur", style={'marginTop': '15px'}),
+                    dcc.Slider(
+                        id='heatmap-blur-slider',
+                        min=5,
+                        max=20,
+                        value=10,
+                        step=5,
+                        marks={i: str(i) for i in [5, 10, 20]}
+                    ),
+                    
+                    html.Label("Color Scheme", style={'marginTop': '15px'}),
+                    dcc.Dropdown(
+                        id='heatmap-color-scheme',
+                        options=[
+                            {'label': 'Blue-Lime-Red', 'value': 'blue-lime-red'},
+                            {'label': 'Yellow-Red', 'value': 'yellow-red'},
+                            {'label': 'Blue-Purple', 'value': 'blue-purple'}
+                        ],
+                        value='blue-lime-red',
+                        clearable=False
+                    )
+                ], id='heatmap-settings', style={'display': 'none'})
+            ], id='display-content', className='section-content')
+        ], className='sidebar-section'),
+        
+        # 4. Corpus Filters
+        html.Div([
+            html.Button([
+                html.I(className="fa fa-filter", style={'marginRight': '10px'}),
+                "Corpus Filters"
+            ], id='corpus-toggle', className='section-toggle'),
+            
+            # Expanded content
+            html.Div([
+                html.Label("Period"),
                 dcc.RangeSlider(
                     id='year-slider',
                     min=1814,
                     max=1905,
                     value=[1850, 1880],
                     marks={i: str(i) for i in range(1814, 1906, 20)}
-                )
-            ], style={'marginBottom': '20px'}),
-            
-            html.Label("Category", style=styles['labelStyle']),
-            dcc.Dropdown(
-                id='category-dropdown',
-                options=[{'label': cat, 'value': cat} for cat in categorylist],
-                multi=True,
-                style={**styles['dropdownStyle'], 'marginBottom': '15px'}
-            ),
-            
-            html.Label("Author", style=styles['labelStyle']),
-            dcc.Dropdown(
-                id='author-dropdown',
-                options=[{'label': author, 'value': author} for author in authorlist],
-                multi=True,
-                style={**styles['dropdownStyle'], 'marginBottom': '15px'}
-            ),
-            
-            html.Label("Work", style=styles['labelStyle']),
-            dcc.Dropdown(
-                id='title-dropdown',
-                options=[{'label': title, 'value': title} for title in titlelist],
-                multi=True,
-                style={**styles['dropdownStyle'], 'marginBottom': '15px'}
-            ),
-            
-            html.Label("Places", style=styles['labelStyle']),
-            dcc.Dropdown(
-                id='places-dropdown',
-                options=[{'label': place, 'value': place} 
-                        for place in sorted(preprocessed_places['name'].unique())],
-                multi=True,
-                style={'marginBottom': '20px'}
-            ),
-        ], style=styles['panel']),
+                ),
+                
+                html.Label("Category", style={'marginTop': '15px'}),
+                dcc.Dropdown(
+                    id='category-dropdown',
+                    options=[{'label': cat, 'value': cat} for cat in categorylist],
+                    multi=True
+                ),
+                
+                html.Label("Author", style={'marginTop': '15px'}),
+                dcc.Dropdown(
+                    id='author-dropdown',
+                    options=[{'label': author, 'value': author} for author in authorlist],
+                    multi=True
+                ),
+                
+                html.Label("Work", style={'marginTop': '15px'}),
+                dcc.Dropdown(
+                    id='title-dropdown',
+                    options=[{'label': title, 'value': title} for title in titlelist],
+                    multi=True
+                ),
+                
+                html.Label("Places", style={'marginTop': '15px'}),
+                dcc.Dropdown(
+                    id='places-dropdown',
+                    options=[{'label': place, 'value': place} 
+                            for place in sorted(preprocessed_places['name'].unique())],
+                    multi=True
+                ),
+            ], id='corpus-content', className='section-content')
+        ], className='sidebar-section'),
         
-        # Map Controls
-        html.Div([
-            html.H3("Map Controls", style={'marginBottom': '15px'}),
-            
-            html.Label("Max Books", style=styles['labelStyle']),
-            dcc.Slider(
-                id='max-books-slider',
-                min=100,
-                max=5000,
-                value=400,
-                step=100,
-                marks={i: str(i) for i in [100, 1000, 2500, 5000]}
-            ),
-            
-            html.Label("Max Places", style=styles['labelStyle']),
-            dcc.Slider(
-                id='max-places-slider',
-                min=1,
-                max=500,
-                value=200,
-                step=10,
-                marks={i: str(i) for i in [1, 100, 250, 500]}
-            ),
-            
-            html.Label("Marker Size", style=styles['labelStyle']),
-            dcc.Slider(
-                id='marker-size-slider',
-                min=1,
-                max=6,
-                value=3,
-                step=1,
-                marks={i: str(i) for i in range(1, 7)}
-            ),
-            
-            html.Label("Base Map", style=styles['labelStyle']),
-            dcc.Dropdown(
-                id='basemap-dropdown',
-                options=[{'label': bm, 'value': bm} for bm in BASEMAP_OPTIONS],
-                value=BASEMAP_OPTIONS[0],
-                style={'marginBottom': '15px'}
-            ),
-        ], style=styles['panel']),
-        
-        # Corpus Stats
-        html.Div(id='corpus-stats', style=styles['panel']),
-    ], style=styles['controlPanel']),
+        # Corpus stats at bottom
+        html.Div(id='corpus-stats', style={'padding': '15px', 'borderTop': '1px solid #eee', 'fontSize': '14px'})
+    ], id='sidebar', style={
+        'position': 'absolute',
+        'top': 0,
+        'left': 0,
+        'width': '0',  # Initially collapsed
+        'height': '100vh',
+        'backgroundColor': 'white',
+        'boxShadow': '2px 0 4px rgba(0,0,0,0.2)',
+        'zIndex': 900,
+        'overflowY': 'auto',
+        'overflowX': 'hidden',
+        'transition': 'width 0.3s ease'
+    }),
     
-    # Main Content Area
+    # Place summary card (Google Maps style - bottom left)
     html.Div([
-        dcc.Tabs([
-            # Map View Tab
-            dcc.Tab(label='Map View', children=[
-                html.Div([
-                    # Map Container
-                    html.Div([
-                        html.Iframe(
-                            id='map-iframe',
-                            srcDoc='',
-                            style={'width': '100%', 'height': '100%', 'border': 'none'}
-                        )
-                    ], style=styles['mapContainer']),
-                    
-                    # Place Summary
-                    html.Div([
-                        html.H3("Place Summary", style={'marginBottom': '15px'}),
-                        html.Div(id='place-summary', style=styles['panel'])
-                    ], style={**styles['panel'], 'width': '600px'})
-                ])
-            ]),
+        html.Div([
+            # Header with close button
+            html.Div([
+                html.H4("Place Summary", style={'marginBottom': '0', 'fontWeight': '400'}),
+                html.Button(
+                    html.I(className="fa fa-times"),
+                    id='close-summary',
+                    style={
+                        'background': 'none',
+                        'border': 'none',
+                        'cursor': 'pointer',
+                        'fontSize': '16px'
+                    }
+                )
+            ], style={
+                'display': 'flex',
+                'justifyContent': 'space-between',
+                'alignItems': 'center',
+                'marginBottom': '10px'
+            }),
             
-            # Heatmap Tab
-            dcc.Tab(label='Heatmap', children=[
-                html.Div([
-                    # Heatmap Controls
-                    html.Div([
-                        html.Div([
-                            html.Label("Heatmap Intensity", style=styles['labelStyle']),
-                            dcc.Slider(
-                                id='heatmap-intensity-slider',
-                                min=1,
-                                max=10,
-                                value=3,
-                                marks={i: str(i) for i in range(1, 11, 2)}
-                            )
-                        ], style={'marginBottom': '15px'}),
-                        
-                        html.Div([
-                            html.Label("Point Radius", style=styles['labelStyle']),
-                            dcc.Slider(
-                                id='heatmap-radius-slider',
-                                min=5,
-                                max=30,
-                                value=15,
-                                step=5,
-                                marks={i: str(i) for i in [5, 10, 15, 20, 25, 30]}
-                            )
-                        ], style={'marginBottom': '15px'}),
-                        
-                        html.Div([
-                            html.Label("Blur Amount", style=styles['labelStyle']),
-                            dcc.Slider(
-                                id='heatmap-blur-slider',
-                                min=5,
-                                max=20,
-                                value=10,
-                                step=5,
-                                marks={i: str(i) for i in [5, 10, 15, 20]}
-                            )
-                        ], style={'marginBottom': '15px'}),
-                        
-                        html.Div([
-                            html.Label("Color Scale", style=styles['labelStyle']),
-                            dcc.Dropdown(
-                                id='heatmap-color-scheme',
-                                options=[
-                                    {'label': 'Blue-Lime-Red', 'value': 'blue-lime-red'},
-                                    {'label': 'Yellow-Red', 'value': 'yellow-red'},
-                                    {'label': 'Blue-Purple', 'value': 'blue-purple'}
-                                ],
-                                value='blue-lime-red',
-                                clearable=False
-                            )
-                        ])
-                    ], style={**styles['panel'], 'marginBottom': '15px'}),
-                    
-                    # Heatmap Display
-                    html.Div([
-                        html.Iframe(
-                            id='heatmap-iframe',
-                            srcDoc='',
-                            style={'width': '100%', 'height': '700px', 'border': 'none'}
-                        )
-                    ])
-                ])
-            ])
-        ])
-    ], style=styles['mainContent']),
+            # Summary content
+            html.Div(id='place-summary')
+        ], style={
+            'padding': '15px',
+            'backgroundColor': 'white',
+            'borderRadius': '4px',
+            'boxShadow': '0 2px 4px rgba(0,0,0,0.2)'
+        })
+    ], id='place-summary-container', style={
+        'position': 'absolute',
+        'bottom': '20px',
+        'left': '20px',
+        'width': '300px',
+        'zIndex': 800,
+        'display': 'block'  # Initially visible
+    }),
+    # Hidden table for callback
+    dash_table.DataTable(
+        id='places-table',
+        data=[],  # Empty data initially
+        columns=[],  # Empty columns initially
+        style_table={'display': 'none'}  # Use style_table instead of style
+    ),
+    html.Div(id='context-menu', style={'display': 'none'}),
     
     # Store Components
     dcc.Store(id='filtered-corpus'),
     dcc.Store(id='map-view-state', data=EUROPE_VIEW),
     dcc.Store(id='places-data'),
-    dcc.Store(id='store-selected-row')
+    dcc.Store(id='store-selected-row'),
 ])
 
 
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+        <style>
+            body, html {
+                height: 100%;
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+                font-family: Roboto, Arial, sans-serif;
+            }
+            .sidebar-section {
+                border-bottom: 1px solid #eee;
+            }
+            .section-toggle {
+                background: none;
+                border: none;
+                padding: 15px;
+                width: 100%;
+                text-align: left;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 500;
+                display: flex;
+                align-items: center;
+            }
+            .section-toggle:hover {
+                background-color: #f8f8f8;
+            }
+            .section-content {
+                padding: 0 15px 15px 15px;
+                display: none;
+            }
+            /* Google Maps style scrollbars */
+            ::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+            }
+            ::-webkit-scrollbar-track {
+                background: #f1f1f1;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: #c1c1c1;
+                border-radius: 10px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background: #a8a8a8;
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
+
+# Sidebar toggle callback (your existing one)
 app.clientside_callback(
     """
-    function(active_cell, data) {
-        // If no active cell, hide context menu
-        if (!active_cell) {
-            return [
-                {'display': 'none'},
-                null
-            ];
+    function(n_clicks, currentStyle) {
+        const newStyle = {...currentStyle};
+        
+        if (newStyle.width === '0px' || newStyle.width === '0') {
+            newStyle.width = '300px';
+        } else {
+            newStyle.width = '0px';
         }
         
-        // Get the table element
-        const table = document.getElementById('places-table');
-        
-        // Check if row exists
-        const row = table.querySelector(`[data-rk="${active_cell.row}"]`);
-        if (!row) {
-            return [
-                {'display': 'none'},
-                null
-            ];
-        }
-        
-        // Calculate position
-        const rect = row.getBoundingClientRect();
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-        
-        return [
-            {
-                'display': 'block',
-                'left': (rect.left + scrollLeft + rect.width) + 'px',
-                'top': (rect.top + scrollTop) + 'px'
-            },
-            active_cell.row
-        ];
+        return newStyle;
     }
     """,
-    [Output('context-menu', 'style'),
-     Output('store-selected-row', 'data')],
-    [Input('places-table', 'active_cell'),
-     State('places-table', 'data')],
+    Output('sidebar', 'style'),
+    [Input('sidebar-toggle', 'n_clicks')],
+    [State('sidebar', 'style')],
     prevent_initial_call=True
 )
 
+
+# place summary close button
+app.clientside_callback(
+    """
+    function(n_clicks, currentStyle) {
+        // Guard against null or undefined values
+        if (!n_clicks) {
+            return dash_clientside.no_update;
+        }
+        
+        // Create a new style object safely
+        const newStyle = currentStyle ? {...currentStyle} : {};
+        newStyle.display = 'none';
+        return newStyle;
+    }
+    """,
+    Output('place-summary-container', 'style'),
+    [Input('close-summary', 'n_clicks')],
+    [State('place-summary-container', 'style')],
+    prevent_initial_call=True
+)
+
+# Replace the section toggle callbacks with this:
+for section in ['basemap', 'layers', 'display', 'corpus']:
+    app.clientside_callback(
+        """
+        function(n_clicks, currentStyle) {
+            const newStyle = {...currentStyle};
+            newStyle.display = newStyle.display === 'none' ? 'block' : 'none';
+            return newStyle;
+        }
+        """,
+        Output(f'{section}-content', 'style'),
+        [Input(f'{section}-toggle', 'n_clicks'),
+         State(f'{section}-content', 'style')],
+        prevent_initial_call=True
+    )
+# Toggle between map and heatmap
+@app.callback(
+    [Output('map-iframe', 'style'),
+     Output('heatmap-iframe', 'style'),
+     Output('heatmap-settings', 'style')],
+    [Input('view-toggle', 'value')]
+)
+def toggle_map_view(view):
+    if view == 'map':
+        return {'width': '100%', 'height': '100%', 'border': 'none'}, \
+               {'width': '100%', 'height': '100%', 'border': 'none', 'display': 'none'}, \
+               {'display': 'none'}
+    else:
+        return {'width': '100%', 'height': '100%', 'border': 'none', 'display': 'none'}, \
+               {'width': '100%', 'height': '100%', 'border': 'none'}, \
+               {'display': 'block'}
 
 @callback(
     [Output('corpus-stats', 'children'),
