@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 # Option 1: Import the app module and access its variables
 import importlib
-app_module = importlib.import_module('dash_imagination.app-sqlite')
+app_module = importlib.import_module('dash_imagination.app')
 
 # Get the app instance
 app = app_module.app
@@ -30,6 +30,6 @@ def log_request_info():
     logger.info(f'Full URL: {request.url}')
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
+    port = int(os.environ.get('PORT', 8095))
     logger.info(f'Starting server on port {port}')
     app.run_server(host='0.0.0.0', port=port, debug=False)

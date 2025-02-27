@@ -206,7 +206,9 @@ function(cluster) {{
 
     return get_cached_map_html(cache_key, create_map)
 
-app = dash.Dash(__name__, suppress_callback_exceptions=True)
+app = dash.Dash(__name__, suppress_callback_exceptions=True,
+                    routes_pathname_prefix='/imagination/', 
+    requests_pathname_prefix="/run/imagination/")
 # Constants
 
 
