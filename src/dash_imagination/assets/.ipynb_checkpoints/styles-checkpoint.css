@@ -1,0 +1,128 @@
+body, html {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family: Roboto, Arial, sans-serif;
+}
+
+/* Google Maps style scrollbars */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Make accordion items more Google Maps-like */
+.accordion-button {
+    padding: 12px 15px;
+    font-size: 14px;
+    font-weight: 500;
+}
+.accordion-button:not(.collapsed) {
+    color: #202124;
+    background-color: #f8f9fa;
+    box-shadow: none;
+}
+.accordion-body {
+    padding: 15px;
+}
+
+/* Place detail styling */
+.book-item {
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+}
+.book-item:last-child {
+    border-bottom: none;
+}
+/* Add this to your app.index_string, inside the <style> tags */
+
+/* Custom styles for the toggle buttons */
+.btn-check {
+    position: absolute;
+    clip: rect(0, 0, 0, 0);
+    pointer-events: none;
+}
+
+.btn-check:checked + .btn-outline-primary {
+    color: #fff;
+    background-color: #4285F4;
+    border-color: #4285F4;
+}
+
+.btn-outline-primary {
+    color: #4285F4;
+    border-color: #4285F4;
+    background-color: white;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.btn-outline-primary:hover {
+    background-color: rgba(66, 133, 244, 0.1);
+}
+
+/* Floating elements hover effects */
+.floating-btn:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transform: translateY(-1px);
+}
+
+/* Place the summary container correctly */
+#place-summary-container {
+    bottom: 80px; /* Move up to avoid overlapping with title */
+}
+
+/* Add these styles to your app.index_string, inside the <style> tags */
+
+/* Draggable container styling */
+#place-summary-container {
+    transition: box-shadow 0.2s ease, transform 0.1s ease;
+    will-change: transform;
+}
+
+#place-summary-container:active {
+    transform: scale(1.01);
+}
+
+#drag-handle {
+    opacity: 0.5;
+    transition: opacity 0.2s ease;
+}
+
+#drag-handle:hover {
+    opacity: 1;
+}
+
+#summary-header {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Add subtle animation when the container appears */
+@keyframes float-in {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+#place-summary-container[style*="display: block"] {
+    animation: float-in 0.3s ease-out forwards;
+}
