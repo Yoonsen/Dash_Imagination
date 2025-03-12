@@ -10,13 +10,61 @@ import base64
 import io
 from dash.exceptions import PreventUpdate
 
+#=== initialize
+
+# Determine environment
+is_production = os.getenv('ENVIRONMENT', 'development') == 'production'
+app_name = os.getenv('APP_NAME', 'imagination-map')  # Default to 'imagination_map' if not set
+
+is_production = os.getenv('ENVIRONMENT', 'development') == 'production'
+
+if is_production:
+    db_path = "/app/src/dash_imagination/data/imagination.db"
+else:
+    # Try the local path first, fall back to container path if that fails
+    local_path = "/mnt/disk1/Github/Dash_Imagination/src/dash_imagination/data/imagination.db"
+    container_path = "/app/src/dash_imagination/data/imagination.db"
+    
+    if os.path.exists(local_path):
+        db_path = local_path
+    else:
+        db_path = container_path
+
+print(f"Using database at: {db_path}")
+
+# Initialize Dash App
+if is_production:
+    app = dash.Dash(
+        __name__,
+        routes_pathname_prefix=f'/{app_name}/',
+        requests_pathname_prefix=f"/run/{app_name}/",
+        external_stylesheets=[
+            dbc.themes.BOOTSTRAP,
+            "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
+        ]
+    )
+else:
+    app = dash.Dash(
+        __name__,
+        external_stylesheets=[
+            dbc.themes.BOOTSTRAP,
+            "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
+        ]
+    )
+
+server = app.server
+
 # Database Connection & Queries
 def get_db_connection():
-    db_path = "/mnt/disk1/Github/Dash_Imagination/src/dash_imagination/data/imagination.db"
     print(f"Connecting to database at: {db_path}")
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        # You could return a dummy connection or raise the error
+        raise
 
 def pdquery(conn, query, params=()):
     return pd.read_sql_query(query, conn, params=params)
@@ -148,15 +196,6 @@ def get_place_details(token, filters=None):
     return books
 
 
-app = dash.Dash(
-    __name__,
-    external_stylesheets=[
-        dbc.themes.BOOTSTRAP,
-        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
-    ]
-)
-
-
 # Initialize variables before layout
 default_filters = {
     'year_range': [1850, 1880],
@@ -209,7 +248,25 @@ app.layout = html.Div([
     ], style={
         'position': 'absolute',
         'top': '20px',
-        'left': '70px',
+        'left': '70px',  # Positioned next to sidebar toggle
+        'zIndex': 1001
+    }),
+    html.Div([
+        dbc.Button(
+            [
+                html.I(className="fa fa-list", style={'marginRight': '5px'}),
+                "Places"
+            ],
+            id='place-names-toggle',
+            color="primary",
+            outline=True,
+            size="sm",
+            style={'margin': '5px'}
+        )
+    ], style={
+        'position': 'absolute',
+        'top': '20px',
+        'left': '210px',  # Positioned after the Categories button
         'zIndex': 1001
     }),
     
@@ -277,22 +334,70 @@ app.layout = html.Div([
         'zIndex': 1000
     }),
     
+    # Replace the current ImagiNation text div with this button and modal:
+
     html.Div([
-        html.H3("ImagiNation", style={
-            'margin': '0',
-            'fontWeight': '400',
-            'color': '#333',
-            'fontSize': '20px'
-        })
+        html.Button([
+            html.H3("ImagiNation", style={
+                'margin': '0',
+                'fontWeight': '400',
+                'color': '#333',
+                'fontSize': '20px'
+            }),
+            html.Span("Click for info", style={
+                'fontSize': '11px',
+                'color': '#666',
+                'display': 'block',
+                'marginTop': '2px'
+            })
+        ], 
+        id='info-button',
+        style={
+            'background': 'white',
+            'border': 'none',
+            'borderRadius': '4px',
+            'boxShadow': '0 2px 4px rgba(0,0,0,0.2)',
+            'padding': '8px 12px',
+            'cursor': 'pointer',
+            'textAlign': 'left',
+            'width': '100%'
+        }),
+        
+        # Modal for project information
+        dbc.Modal([
+            dbc.ModalHeader(dbc.ModalTitle("About the ImagiNation Project")),
+            dbc.ModalBody([
+                html.H5("Project Overview"),
+                html.P("The ImagiNation project maps places mentioned in Norwegian literature, visualizing the geography of our literary imagination."),
+                
+                html.H5("Tools & Resources"),
+                html.P([
+                    "Build your own corpus with our ",
+                    html.A("Corpus App", 
+                           href="https://korpus.imagination.it.ntnu.no/", 
+                           target="_blank",
+                           style={'fontWeight': 'bold'})
+                ]),
+                
+                html.H5("How to Use This Map"),
+                html.P("Use the controls to toggle between map and heatmap views. Enable clustering for a clearer overview of dense areas. Click on places to see details about their mentions in literature."),
+                
+                html.H5("About the Data"),
+                html.P("This visualization uses a database of literary works from the National Library of Norway, with place names extracted using natural language processing techniques."),
+                
+                html.Hr(),
+                html.P("A research project by the Norwegian University of Science and Technology (NTNU)", style={'fontSize': '0.9rem', 'color': '#666'}),
+            ]),
+            dbc.ModalFooter(
+                dbc.Button("Close", id="close-info-modal", className="ml-auto")
+            ),
+        ], id="info-modal", is_open=False, size="lg"),
     ], style={
         'position': 'absolute',
         'bottom': '20px',
         'left': '20px',
-        'backgroundColor': 'white',
-        'padding': '8px 12px',
-        'borderRadius': '4px',
-        'boxShadow': '0 2px 4px rgba(0,0,0,0.2)',
-        'zIndex': 800
+        'zIndex': 800,
+        'width': 'auto'
     }),
     
     html.Div([
@@ -402,13 +507,13 @@ app.layout = html.Div([
                     html.Label("Radius"),
                     dcc.Slider(
                         id='heatmap-radius',
-                        min=5,
+                        min=1,
                         max=30,
-                        value=15,
-                        step=5,
-                        marks={i: str(i) for i in [5, 15, 30]},
+                        value=5,  # Start with a smaller default
+                        step=1,
+                        marks={i: str(i) for i in [1, 5, 10, 15, 20, 30]},
                         className='mb-3'
-                    ),
+                    )
                 ], id='heatmap-settings', style={'display': 'none'}),
             ], title="Display Settings", className="sidebar-section"),
             
@@ -423,6 +528,35 @@ app.layout = html.Div([
                     className='mb-3'
                 ),
             ], title="Works", className="sidebar-section"),
+            # dbc.AccordionItem([
+            #     html.Div([
+            #         html.Div([
+            #             html.Label("Top Places by Frequency"),
+            #             dcc.Dropdown(
+            #                 id='places-limit-dropdown',
+            #                 options=[
+            #                     {'label': 'Top 100', 'value': 100},
+            #                     {'label': 'Top 250', 'value': 250},
+            #                     {'label': 'Top 500', 'value': 500},
+            #                     {'label': 'Top 1000', 'value': 1000}
+            #                 ],
+            #                 value=250,
+            #                 clearable=False,
+            #                 className='mb-2'
+            #             ),
+            #             html.Div([
+            #                 dcc.Input(
+            #                     id='place-search',
+            #                     type='text',
+            #                     placeholder='Search places...',
+            #                     className='form-control mb-2'
+            #                 ),
+            #                 html.Div(id='place-list', style={'maxHeight': '300px', 'overflowY': 'auto'})
+            #             ])
+            #         ])
+            #     ])
+            # ], title="Place Names", className="sidebar-section")
+            
         ], id="sidebar-accordion", start_collapsed=True),
         
         html.Div(id='corpus-stats', style={'padding': '15px', 'borderTop': '1px solid #eee', 'fontSize': '14px'})
@@ -481,6 +615,71 @@ app.layout = html.Div([
         'display': 'none',
         'cursor': 'auto'
     }),
+
+    html.Div([
+        html.Div([
+           # Make sure your places-header has this structure:
+
+            html.Div([
+                html.I(className="fa fa-list", style={'marginRight': '8px'}),
+                html.H4("Place Names", style={'marginBottom': '0', 'fontWeight': '400', 'flex': '1'}),
+                html.Button(
+                    html.I(className="fa fa-times"),
+                    id='close-places',
+                    style={
+                        'background': 'none',
+                        'border': 'none',
+                        'cursor': 'pointer',
+                        'fontSize': '16px'
+                    }
+                )
+            ], style={
+                'display': 'flex',
+                'justifyContent': 'space-between',
+                'alignItems': 'center',
+                'marginBottom': '10px',
+                'cursor': 'grab'  # Add this explicitly
+            }, id='places-header'),
+            html.Div([
+                dcc.Dropdown(
+                    id='places-limit-dropdown',
+                    options=[
+                        {'label': 'Top 100', 'value': 100},
+                        {'label': 'Top 250', 'value': 250},
+                        {'label': 'Top 500', 'value': 500},
+                        {'label': 'Top 1000', 'value': 1000}
+                    ],
+                    value=250,
+                    clearable=False,
+                    className='mb-2'
+                ),
+                dcc.Input(
+                    id='place-search',
+                    type='text',
+                    placeholder='Search places...',
+                    className='form-control mb-2'
+                ),
+                html.Div(id='place-list', style={'maxHeight': '300px', 'overflowY': 'auto'})
+            ])
+        ], style={
+            'padding': '15px',
+            'backgroundColor': 'white',
+            'borderRadius': '8px',
+            'boxShadow': '0 4px 15px rgba(0,0,0,0.15)',
+            'border': '1px solid rgba(0,0,0,0.05)'
+        })
+    ], id='place-names-container', style={
+        'position': 'absolute',
+        'top': '80px',
+        'right': '20px',
+        'width': '350px',
+        'maxHeight': '500px',
+        'overflowY': 'auto',
+        'zIndex': 800,
+        'display': 'none',
+        'cursor': 'auto'
+    }),
+
     html.Div(id='reset-status', style={'display': 'none'}),
     dcc.Store(id='filtered-data'),
     dcc.Store(id='selected-place'),
@@ -614,6 +813,51 @@ def update_state_and_filters(contents, max_places, sample_size, categories, titl
     print(f"Updated filters from UI: {current_filters}")
     return dash.no_update, dash.no_update, current_filters
 
+# Add this callback to toggle the info modal
+
+@app.callback(
+    Output('info-modal', 'is_open'),
+    [Input('info-button', 'n_clicks'),
+     Input('close-info-modal', 'n_clicks')],
+    [State('info-modal', 'is_open')]
+)
+def toggle_info_modal(n1, n2, is_open):
+    if n1 or n2:
+        return not is_open
+    return is_open
+
+
+@app.callback(
+    Output('place-names-container', 'style'),
+    [Input('place-names-toggle', 'n_clicks')],
+    [State('place-names-container', 'style')]
+)
+def toggle_place_names_container(n_clicks, current_style):
+    if n_clicks is None:
+        raise PreventUpdate
+    
+    new_style = dict(current_style)
+    new_style['display'] = 'block' if current_style.get('display') == 'none' else 'none'
+    return new_style
+
+# Close button callback
+app.clientside_callback(
+    """
+    function(n_clicks, currentStyle) {
+        if (!n_clicks) return dash_clientside.no_update;
+        
+        const newStyle = {...currentStyle};
+        newStyle.display = 'none';
+        return newStyle;
+    }
+    """,
+    Output('place-names-container', 'style', allow_duplicate=True),
+    [Input('close-places', 'n_clicks')],
+    [State('place-names-container', 'style')],
+    prevent_initial_call=True
+)
+
+
 @app.callback(
     Output('filtered-data', 'data'),
     [Input('current-filters', 'data'),
@@ -734,13 +978,19 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     )
     
     if cluster_enabled:
-        # Simple clustering based on zoom level (approximation)
+        # Simple clustering based on zoom level with a wider radius (approx 200km)
         zoom = 5  # Default zoom, to be updated with map-view-state if available
-        threshold = max(0.1, 0.5 / (zoom / 5))  # Adjust threshold with zoom (e.g., 0.5 at zoom 5, smaller at higher zoom)
+        
+        # Increase the base threshold for larger clusters
+        # For reference, 1 degree of latitude is roughly 111km
+        # So for a 200km radius, we want a threshold around 1.8 degrees
+        base_threshold = 1.8  # Approximately 200km radius
+        threshold = max(0.1, base_threshold / (zoom / 5))  # Adjust with zoom but keep larger base value
+        
         clustered = places_df.copy()
         clustered['cluster'] = ((clustered['latitude'] / threshold).round() * 1000 + 
                               (clustered['longitude'] / threshold).round()).astype(int)
-        
+                
         # Aggregate clustered points with unique place names
         cluster_data = clustered.groupby('cluster').agg({
             'latitude': 'mean',
@@ -753,7 +1003,7 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
         }).reset_index()
         cluster_data['count'] = clustered.groupby('cluster').size().values
         cluster_data['hover_text'] = cluster_data.apply(
-            lambda row: f"Cluster of {row['count']} places<br>Total Mentions: {int(row['frequency'])}<br>Total Books: {int(row['book_count'])}<br>Places: {row['token']}",
+            lambda row: f"""Cluster of {row['count']} places<br>Total Mentions: {int(row['frequency'])}<br>Total Books: {int(row['book_count'])}<br>Example place: {row['token'].split('<br>')[0]}""",
             axis=1
         )
         cluster_data['size'] = np.log1p(cluster_data['count']) * marker_size * 5  # Size based on cluster count
@@ -763,7 +1013,7 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
             lat=cluster_data['latitude'],
             lon=cluster_data['longitude'],
             mode='markers',
-            marker=dict(size=cluster_data['size'], color='#FF0000', opacity=0.7, sizemode='diameter'),
+            marker=dict(size=cluster_data['size'], color='#1E40AF', opacity=0.7, sizemode='diameter'),
             text=cluster_data['hover_text'],
             hoverinfo='text',
             visible=(view_type == 'map'),
@@ -801,11 +1051,13 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
                     lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap'
                 ))
             else:
+                heatmap_actual_radius = (heatmap_radius ** 0.5) * 10
+
                 fig.add_trace(go.Densitymapbox(
                     lat=y,
                     lon=x,
                     z=z,
-                    radius=heatmap_radius * 10,
+                    radius=heatmap_actual_radius,  # Use this transformed value
                     colorscale='Viridis',
                     opacity=0.8 * (heatmap_intensity / 10),
                     showscale=True,
@@ -828,6 +1080,55 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     )
     print("Returning populated figure")
     return fig
+
+@app.callback(
+    Output('place-list', 'children'),
+    [Input('filtered-data', 'data'),
+     Input('places-limit-dropdown', 'value'),
+     Input('place-search', 'value')]
+)
+def update_place_list(filtered_data_json, limit, search_term):
+    if filtered_data_json is None:
+        return html.Div("No places available")
+    
+    # Load cached data
+    places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split')
+    
+    if places_df.empty:
+        return html.Div("No places available")
+    
+    # Sort by frequency
+    places_df = places_df.sort_values(by='frequency', ascending=False)
+    
+    # Apply search filter if provided
+    if search_term and len(search_term) > 2:
+        search_term = search_term.lower()
+        places_df = places_df[
+            places_df['token'].str.lower().str.contains(search_term) | 
+            places_df['name'].str.lower().str.contains(search_term)
+        ]
+    
+    # Limit to top N places
+    places_df = places_df.head(limit)
+    
+    # Create list items
+    place_items = []
+    for i, row in places_df.iterrows():
+        place_items.append(html.Div([
+            html.Div(f"{row['token']} ({row['name']})", style={'fontWeight': 'bold'}),
+            html.Div(f"Mentions: {int(row['frequency'])} • Books: {int(row['book_count'])}", 
+                     style={'fontSize': '0.8rem', 'color': '#666'})
+        ], style={'borderBottom': '1px solid #eee', 'padding': '5px 0'}))
+    
+    if not place_items:
+        return html.Div("No matching places found")
+    
+    return html.Div([
+        html.Div(f"Showing {len(place_items)} of {len(places_df)} places", 
+                 style={'marginBottom': '8px', 'fontSize': '0.8rem', 'color': '#666'}),
+        html.Div(place_items)
+    ])
+
 
 # Callback to update place summary
 @app.callback(

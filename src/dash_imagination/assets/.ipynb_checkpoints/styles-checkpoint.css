@@ -111,6 +111,123 @@ body, html {
     -webkit-user-select: none;
 }
 
+#place-summary-container, #place-names-container {
+    /* Removed slow transition */
+}
+
+#summary-header, #places-header {
+    cursor: grab;
+}
+
+#place-summary-container.dragging, #place-names-container.dragging {
+    opacity: 0.7;
+}
+
+/* Make the map fill the entire screen */
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+/* Improve the sidebar appearance */
+#sidebar {
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+}
+
+/* Style the floating panels consistently */
+.floating-panel {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    border: 1px solid rgba(0,0,0,0.05);
+}
+
+/* Improve button styling */
+.btn-outline-primary {
+    border-color: #4285F4;
+    color: #4285F4;
+}
+
+.btn-outline-primary:hover {
+    background-color: #4285F4;
+    color: white;
+}
+
+/* Better scroll behavior for lists */
+.scrollable-list {
+    scrollbar-width: thin;
+    scrollbar-color: #d1d1d1 #f1f1f1;
+}
+
+.scrollable-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.scrollable-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+.scrollable-list::-webkit-scrollbar-thumb {
+    background: #d1d1d1;
+    border-radius: 10px;
+}
+
+.scrollable-list::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
+}
+#summary-header, #places-header {
+    cursor: grab !important;
+}
+
+#summary-header:active, #places-header:active {
+    cursor: grabbing !important;
+}
+
+#place-summary-container.dragging, #place-names-container.dragging {
+    opacity: 0.7;
+}
+
+/* Make sure the draggable panel header looks like a handle */
+#places-header, #summary-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #eee;
+    padding: 8px;
+    border-radius: 8px 8px 0 0;
+}
+
+/* Style the close button */
+#close-places, #close-summary {
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+}
+
+#close-places:hover, #close-summary:hover {
+    color: #333;
+}
+
+/* Style the place list container */
+#place-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+/* Style the place items */
+#place-list > div > div {
+    transition: background-color 0.2s;
+    padding: 8px;
+    border-radius: 4px;
+}
+
+#place-list > div > div:hover {
+    background-color: #f8f9fa;
+}
+
 /* Add subtle animation when the container appears */
 @keyframes float-in {
     from {
