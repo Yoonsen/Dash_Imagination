@@ -7,6 +7,7 @@ import numpy as np
 import dash_bootstrap_components as dbc
 import sqlite3
 import os
+from scipy.stats import gaussian_kde  # Add this import
 
 # ============== Database Connection & Queries ==============
 def get_db_connection():
@@ -60,8 +61,39 @@ def get_titles():
     return title_year_list
 
 def get_places_for_map(filters=None):
-    """Get places data filtered by user selections"""
+    """Get sampled places data from Epikk or uploaded corpus"""
     conn = get_db_connection()
+    
+    sample_size = filters.get('sample_size', 50) if filters else 50
+    
+    if filters and 'uploaded_corpus' in filters and filters['uploaded_corpus']:
+        dhlabids = filters['uploaded_corpus']
+        print(f"Using uploaded corpus with {len(dhlabids)} dhlabids")  # Debug
+        book_sample_query = f"""
+        SELECT dhlabid
+        FROM (SELECT DISTINCT dhlabid FROM book_places WHERE dhlabid IN ({','.join(['?'] * len(dhlabids))}))
+        ORDER BY RANDOM()
+        LIMIT ?
+        """
+        sampled_books = pd.read_sql_query(book_sample_query, conn, params=tuple(dhlabids) + (sample_size,))
+    else:
+        print("Falling back to Epikk sample")  # Debug
+        book_sample_query = """
+        SELECT dhlabid
+        FROM corpus
+        WHERE category = 'Diktning: Epikk'
+        ORDER BY RANDOM()
+        LIMIT ?
+        """
+        sampled_books = pd.read_sql_query(book_sample_query, conn, params=(sample_size,))
+    
+    if sampled_books.empty:
+        print("No books sampled")
+        conn.close()
+        return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+    
+    sampled_dhlabids = sampled_books['dhlabid'].tolist()
+    print(f"Sampled dhlabids: {len(sampled_dhlabids)} - {sampled_dhlabids[:5]}...")  # Debug
     
     base_query = """
     SELECT 
@@ -75,58 +107,21 @@ def get_places_for_map(filters=None):
         places p
     JOIN 
         book_places bp ON p.token = bp.token
-    JOIN 
-        corpus c ON bp.dhlabid = c.dhlabid
-    """
-    
-    where_clauses = []
-    params = []
-    
-    if filters:
-        if 'year_range' in filters and filters['year_range']:
-            where_clauses.append("c.year BETWEEN ? AND ?")
-            params.extend([filters['year_range'][0], filters['year_range'][1]])
-        
-        if 'categories' in filters and filters['categories']:
-            placeholders = ','.join(['?'] * len(filters['categories']))
-            where_clauses.append(f"c.category IN ({placeholders})")
-            params.extend(filters['categories'])
-        
-        if 'authors' in filters and filters['authors']:
-            placeholders = ','.join(['?'] * len(filters['authors']))
-            where_clauses.append(f"c.author IN ({placeholders})")
-            params.extend(filters['authors'])
-            
-        if 'titles' in filters and filters['titles']:
-            # Extract just the title part without the year
-            title_only = [t.split(' (')[0] for t in filters['titles']]
-            placeholders = ','.join(['?'] * len(title_only))
-            where_clauses.append(f"c.title IN ({placeholders})")
-            params.extend(title_only)
-    
-    # Add WHERE clause if we have any filters
-    if where_clauses:
-        base_query += " WHERE " + " AND ".join(where_clauses)
-    
-    # Add grouping and limit
-    base_query += """
+    WHERE 
+        bp.dhlabid IN ({})
     GROUP BY p.token, p.modern, p.latitude, p.longitude
     ORDER BY frequency DESC
-    LIMIT ?
-    """
-    
-    # Add the limit parameter (default to 200 if not specified)
-    max_places = filters.get('max_places', 200) if filters else 200
-    params.append(max_places)
+    LIMIT 500
+    """.format(','.join(['?'] * len(sampled_dhlabids)))
     
     try:
-        df = pdquery(conn, base_query, tuple(params))
+        df = pd.read_sql_query(base_query, conn, params=tuple(sampled_dhlabids))
+        print(f"Sampled {len(sampled_dhlabids)} books, got {len(df)} places")
         conn.close()
         return df
     except Exception as e:
         print(f"Error querying database: {e}")
         conn.close()
-        # Return empty DataFrame with correct columns
         return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
 
 def get_place_details(token):
@@ -135,7 +130,7 @@ def get_place_details(token):
     
     # Query to get books containing this place
     query = """
-    SELECT c.title, c.author, c.year, c.urn, bp.frequency
+    SELECT DISTINCT c.title, c.author, c.year, c.urn, bp.frequency
     FROM corpus c
     JOIN book_places bp ON c.dhlabid = bp.dhlabid
     WHERE bp.token = ?
@@ -151,6 +146,15 @@ def get_place_details(token):
 # ============== Initialize Dash App ==============
 # Check if running in production or local
 is_production = os.environ.get('ENVIRONMENT') == 'production'
+
+default_filters = {
+    'year_range': [1850, 1880],
+    'categories': [],
+    'authors': [],
+    'titles': [],
+    'max_places': 500,
+    'sample_size': 50
+}
 
 # Initialize the app with proper routing configuration
 if is_production:
@@ -272,15 +276,58 @@ app.layout = html.Div([
     }),
         
     # Sidebar
-    html.Div([
-        # Sidebar header
+   html.Div([
         html.Div([
             html.H3("Layers & Filters", style={'margin': '0', 'fontWeight': '400'})
-        ], style={'padding': '15px', 'borderBottom': '1px solid #eee'}),
-        
-        # Accordion sections for filters
+        ], style={'padding': '15px', 'borderBottom': '1px solid #eee', 'marginTop': '50px'}),
+        # accordion
         dbc.Accordion([
-            # Base Maps
+            dbc.AccordionItem([
+                html.Div([
+                    html.Label("Upload Custom Corpus", style={'marginBottom': '8px'}),
+                    dcc.Upload(
+                        id='upload-corpus',
+                        children=html.Div([
+                            html.I(className="fas fa-file-upload", style={'marginRight': '10px'}),
+                            'Drag and Drop or ',
+                            html.A('Select File', style={'color': '#4285F4', 'cursor': 'pointer'})
+                        ]),
+                        style={
+                            'width': '100%',
+                            'height': '60px',
+                            'lineHeight': '60px',
+                            'borderWidth': '1px',
+                            'borderStyle': 'dashed',
+                            'borderRadius': '5px',
+                            'textAlign': 'center',
+                            'margin': '0 0 15px 0',
+                            'background': 'rgba(66, 133, 244, 0.05)'
+                        },
+                        multiple=False
+                    ),
+                    html.Div(id='upload-status', style={'fontSize': '13px', 'marginBottom': '15px'}),
+                    html.Div([
+                        html.Button([
+                            html.I(className="fas fa-trash-alt", style={'marginRight': '5px'}),
+                            "Reset to Default Corpus"
+                        ], 
+                        id='reset-corpus',
+                        style={
+                            'background': 'none',
+                            'border': 'none',
+                            'color': '#555',
+                            'textDecoration': 'underline',
+                            'cursor': 'pointer',
+                            'fontSize': '13px',
+                            'padding': '0',
+                            'display': 'inline-block',
+                            'marginTop': '5px'
+                        })
+                    ], style={'textAlign': 'right'})
+                ])
+            ], title="Upload Corpus", className="sidebar-section"),
+            
+            # Base Map
             dbc.AccordionItem([
                 dbc.RadioItems(
                     id='map-style',
@@ -298,6 +345,13 @@ app.layout = html.Div([
             
             # Display Settings
             dbc.AccordionItem([
+                html.Label("Sample Size"),
+                dcc.Dropdown(
+                    id='sample-size',
+                    options=[{'label': f"{n} Books", 'value': n} for n in [10, 50, 100, 500]],
+                    value=default_filters['sample_size'],  # Single instance
+                    className='mb-3'
+                ),
                 html.Label("Marker Size"),
                 dcc.Slider(
                     id='marker-size-slider',
@@ -308,22 +362,18 @@ app.layout = html.Div([
                     marks={i: str(i) for i in range(1, 7)},
                     className='mb-4'
                 ),
-                
                 html.Label("Max Places"),
                 dcc.Slider(
                     id='max-places-slider',
                     min=50,
                     max=500,
-                    value=200,
+                    value=default_filters['max_places'],
                     step=50,
-                    marks={i: str(i) for i in [50, 200, 350, 500]},
+                    marks={i: str(i) for i in [50, 200, 350, 500, 1000]},
                     className='mb-4'
                 ),
-                
-                # Heatmap settings
                 html.Div([
                     html.H5("Heatmap Settings", className='mt-3 mb-2'),
-                    
                     html.Label("Intensity"),
                     dcc.Slider(
                         id='heatmap-intensity',
@@ -333,7 +383,6 @@ app.layout = html.Div([
                         marks={i: str(i) for i in range(1, 11, 2)},
                         className='mb-3'
                     ),
-                    
                     html.Label("Radius"),
                     dcc.Slider(
                         id='heatmap-radius',
@@ -354,33 +403,33 @@ app.layout = html.Div([
                     id='year-slider',
                     min=1814,
                     max=1905,
-                    value=[1850, 1880],
+                    value=default_filters['year_range'],
                     marks={i: str(i) for i in range(1814, 1906, 20)},
                     className='mb-4'
                 ),
-                
                 html.Label("Category"),
                 dcc.Dropdown(
                     id='category-dropdown',
                     options=[{'label': cat, 'value': cat} for cat in categories_list],
+                    value=default_filters['categories'],
                     multi=True,
                     placeholder="Select categories...",
                     className='mb-3'
                 ),
-                
                 html.Label("Author"),
                 dcc.Dropdown(
                     id='author-dropdown',
                     options=[{'label': author, 'value': author} for author in authors_list],
+                    value=default_filters['authors'],
                     multi=True,
                     placeholder="Select authors...",
                     className='mb-3'
                 ),
-                
                 html.Label("Work"),
                 dcc.Dropdown(
                     id='title-dropdown',
                     options=[{'label': title, 'value': title} for title in titles_list],
+                    value=default_filters['titles'],
                     multi=True,
                     placeholder="Select works...",
                     className='mb-3'
@@ -460,15 +509,15 @@ app.layout = html.Div([
         'display': 'none',  # Initially hidden
         'cursor': 'auto'
     }),
-
+    html.Div(id='reset-status', style={'display': 'none'}),
     # Add a hidden div to store the current position
     html.Div(id='summary-position', style={'display': 'none'}),
     
-    # Store components for maintaining state
     dcc.Store(id='filtered-data'),
     dcc.Store(id='selected-place'),
     dcc.Store(id='map-view-state'),
-    dcc.Store(id='current-filters'),
+    dcc.Store(id='current-filters', data=default_filters),
+    dcc.Store(id='upload-state', data=None),
 ])
 
 # Add custom CSS
@@ -502,6 +551,147 @@ app.index_string = '''
 
 # ============== Callbacks ==============
 
+import base64
+import io
+import pandas as pd
+import sqlite3
+from dash.exceptions import PreventUpdate
+
+# @callback(
+#     [Output('upload-status', 'children'),
+#      Output('upload-state', 'data'),
+#      Output('current-filters', 'data')],
+#     [Input('upload-corpus', 'contents')],
+#     [State('upload-corpus', 'filename'),
+#      State('upload-corpus', 'last_modified'),
+#      State('current-filters', 'data')]
+# )
+# def process_uploaded_corpus(contents, filename, date, current_filters):
+#     print("!!! process_uploaded_corpus TRIGGERED !!!")
+#     if contents is None:
+#         return html.Div("Upload a corpus file to begin"), None, default_filters
+    
+#     return html.Div(f"Uploaded {filename} successfully!"), None, default_filters  # Simplify for test
+
+
+from dash import callback_context
+
+@app.callback(
+    [Output('upload-status', 'children'),
+     Output('upload-state', 'data'),
+     Output('current-filters', 'data')],
+    [Input('upload-corpus', 'contents'),
+     Input('year-slider', 'value'),
+     Input('category-dropdown', 'value'),
+     Input('author-dropdown', 'value'),
+     Input('title-dropdown', 'value'),
+     Input('max-places-slider', 'value'),
+     Input('sample-size', 'value')],
+    [State('upload-corpus', 'filename'),
+     State('upload-corpus', 'last_modified'),
+     State('current-filters', 'data')]
+)
+def update_state_and_filters(contents, years, categories, authors, titles, max_places, sample_size, filename, date, current_filters):
+    ctx = callback_context
+    print(f"!!! Callback triggered by: {ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else 'None'} !!!")
+    
+    if not current_filters:
+        current_filters = default_filters.copy()
+    
+    if ctx.triggered and ctx.triggered[0]['prop_id'].startswith('upload-corpus'):
+        if contents is None:
+            return html.Div("Upload a corpus file to begin"), None, current_filters
+        try:
+            content_type, content_string = contents.split(',')
+            decoded = base64.b64decode(content_string)
+            if filename.endswith('.csv'):
+                uploaded_df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
+            elif filename.endswith('.xlsx'):
+                uploaded_df = pd.read_excel(io.BytesIO(decoded))
+            else:
+                return html.Div(['Unsupported file type.'], style={'color': 'red'}), None, current_filters
+            id_column = 'dhlabid' if 'dhlabid' in uploaded_df.columns else 'urn'
+            if id_column == 'urn':
+                conn = get_db_connection()
+                urns = uploaded_df['urn'].tolist()
+                urn_query = f"SELECT dhlabid, urn FROM corpus WHERE urn IN ({','.join(['?'] * len(urns))})"
+                urn_mapping = pd.read_sql_query(urn_query, conn, params=tuple(urns))
+                conn.close()
+                uploaded_df = uploaded_df.merge(urn_mapping, on='urn', how='inner')
+            dhlabids = uploaded_df['dhlabid'].tolist()
+            current_filters['uploaded_corpus'] = dhlabids
+            filtered_corpus_json = uploaded_df.to_json(date_format='iso', orient='split')
+            print(f"Uploaded {len(dhlabids)} dhlabids: {dhlabids[:5]}...")
+            return (
+                html.Div([html.I(className="fas fa-check-circle", style={'color': 'green', 'marginRight': '8px'}),
+                          f'Uploaded {filename} with {len(dhlabids)} books.']),
+                filtered_corpus_json,
+                current_filters
+            )
+        except Exception as e:
+            print(f"Upload error: {e}")
+            return html.Div(['Error processing file.'], style={'color': 'red'}), None, current_filters
+    
+    # Update from UI inputs
+    current_filters.update({
+        'year_range': years if years else current_filters['year_range'],
+        'categories': categories or [],
+        'authors': authors or [],
+        'titles': titles or [],
+        'max_places': max_places if max_places else current_filters['max_places'],
+        'sample_size': sample_size if sample_size else current_filters['sample_size']
+    })
+    print(f"Updated filters from UI: {current_filters}")
+    return dash.no_update, dash.no_update, current_filters
+
+
+@callback(
+    Output('filtered-data', 'data'),  # No allow_duplicate needed here
+    [Input('upload-state', 'data'),
+     Input('reset-corpus', 'n_clicks')],
+    [State('upload-corpus', 'filename')]
+)
+def update_data_from_upload(upload_data, reset_clicks, filename):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+        
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if trigger_id == 'upload-state' and upload_data is not None:
+        return upload_data
+    elif trigger_id == 'reset-corpus' and reset_clicks:
+        # Get default corpus
+        conn = get_db_connection()
+        default_corpus = pd.read_sql_query("SELECT * FROM corpus", conn)
+        conn.close()
+        
+        # Add Verk column
+        default_corpus['Verk'] = default_corpus.apply(
+            lambda x: f"{x['title'] or 'Uten tittel'} av {x['author'] or 'Ingen'} ({x['year'] or 'n.d.'})", 
+            axis=1
+        )
+        
+        return default_corpus.to_json(date_format='iso', orient='split')
+    
+    raise PreventUpdate
+
+@callback(
+    Output('upload-status', 'children', allow_duplicate=True),
+    [Input('reset-corpus', 'n_clicks')],
+    prevent_initial_call=True
+)
+def update_reset_status(n_clicks):
+    if n_clicks is None:
+        raise PreventUpdate
+    
+    return html.Div([
+        html.I(className="fas fa-info-circle", style={'color': 'blue', 'marginRight': '8px'}),
+        'Reset to default corpus.'
+    ])
+
+
+
 # Callback to toggle sidebar
 app.clientside_callback(
     """
@@ -534,124 +724,116 @@ def toggle_heatmap_settings(view):
     return {'display': 'none'}
 
 # Callback to update current filters
-@callback(
-    Output('current-filters', 'data'),
-    [Input('year-slider', 'value'),
-     Input('category-dropdown', 'value'),
-     Input('author-dropdown', 'value'),
-     Input('title-dropdown', 'value'),
-     Input('max-places-slider', 'value')]
-)
-def update_filters(years, categories, authors, titles, max_places):
-    return {
-        'year_range': years,
-        'categories': categories,
-        'authors': authors,
-        'titles': titles,
-        'max_places': max_places
-    }
+# @callback(
+#     Output('current-filters', 'data'),
+#     [Input('year-slider', 'value'),
+#      Input('category-dropdown', 'value'),
+#      Input('author-dropdown', 'value'),
+#      Input('title-dropdown', 'value'),
+#      Input('max-places-slider', 'value'),
+#      Input('sample-size', 'value')],  # Add this
+#     [State('current-filters', 'data')]  # Add this to preserve uploaded_corpus
+# )
+# def update_filters(years, categories, authors, titles, max_places, sample_size, current_filters):
+#     updated = current_filters.copy() if current_filters else default_filters.copy()
+#     updated.update({
+#         'year_range': years,
+#         'categories': categories or [],
+#         'authors': authors or [],
+#         'titles': titles or [],
+#         'max_places': max_places,
+#         'sample_size': sample_size
+#     })
+#     print(f"Updated filters: {updated}")  # Debug
+#     return updated
 
+    
 # Callback to update the map with filtered data
-@callback(
-    [Output('main-map', 'figure'),
-     Output('filtered-data', 'data')],
-    [Input('current-filters', 'data'),
+@app.callback(
+    Output('main-map', 'figure'),
+    [Input('filtered-data', 'data'),
+     Input('current-filters', 'data'),
      Input('map-style', 'value'),
      Input('marker-size-slider', 'value'),
      Input('view-toggle', 'value'),
      Input('heatmap-intensity', 'value'),
-     Input('heatmap-radius', 'value')]
+     Input('heatmap-radius', 'value')],
+    prevent_initial_call=False
 )
-def update_map(filters, map_style, marker_size, view_type, 
-              heatmap_intensity, heatmap_radius):
-    # Get data based on filters
-    try:
-        places_df = get_places_for_map(filters)
-    except Exception as e:
-        print(f"Error retrieving places: {e}")
-        places_df = pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+def update_map(filtered_data_json, filters, map_style, marker_size, view_type, heatmap_intensity, heatmap_radius):
+    print("!!! update_map TRIGGERED !!!")
+    if not filters:
+        filters = default_filters
     
-    # If we have no data, show an empty map
+    places_df = get_places_for_map(filters)
+    print(f"Number of places: {len(places_df)}")
+    
+    fig = go.Figure()
     if places_df.empty:
-        fig = go.Figure()
+        print("Returning empty figure (empty data)")
         fig.update_layout(
-            mapbox=dict(
-                style=map_style,
-                center=dict(lat=60.5, lon=9.0),  # Center on Norway
-                zoom=5
-            ),
+            mapbox=dict(style=map_style or 'open-street-map', center=dict(lat=60.5, lon=9.0), zoom=5),
             margin=dict(l=0, r=0, t=0, b=0),
             showlegend=False
         )
-        return fig, places_df.to_json(date_format='iso', orient='split')
+        return fig
     
-    # Set base figure properties
-    fig = go.Figure()
+    # Scatter layer (map view)
+    sizes = places_df['frequency'].fillna(1).copy()
+    min_freq, max_freq = sizes.min(), sizes.max()
+    if min_freq != max_freq:
+        sizes = 10 + (sizes - min_freq) / (max_freq - min_freq) * 50 * marker_size
+    else:
+        sizes = [30 * marker_size] * len(sizes)
     
-    # Base map configuration
+    fig.add_trace(go.Scattermapbox(
+        lat=places_df['latitude'],
+        lon=places_df['longitude'],
+        mode='markers',
+        marker=dict(size=sizes, color='#4285F4', opacity=0.7, sizemode='diameter'),
+        text=places_df.apply(lambda row: f"{row['token']} ({row['name']})<br>{int(row['frequency'] or 0)} mentions in {int(row['book_count'] or 0)} books", axis=1),
+        hoverinfo='text',
+        customdata=places_df['token'],
+        visible=(view_type == 'map'),  # Moved from clientside
+        name='Places'
+    ))
+    
+    # Heatmap layer
+    if len(places_df) > 0:
+        try:
+            x = places_df['longitude'].values
+            y = places_df['latitude'].values
+            z = places_df['frequency'].fillna(1).values
+            x_grid, y_grid = np.mgrid[x.min():x.max():50j, y.min():y.max():50j]
+            positions = np.vstack([x_grid.ravel(), y_grid.ravel()])
+            values = np.vstack([x, y])
+            kernel = gaussian_kde(values, weights=z, bw_method=heatmap_radius / 100.0)
+            density = kernel(positions).T * (heatmap_intensity / 3)
+            density = density.reshape(50, 50)
+            
+            fig.add_trace(go.Heatmap(
+                z=density,
+                x=x_grid[:, 0],
+                y=y_grid[0, :],
+                colorscale='Viridis',
+                opacity=0.8,
+                visible=(view_type == 'heatmap'),  # Moved from clientside
+                showscale=False,
+                name='Heatmap'
+            ))
+        except Exception as e:
+            print(f"Heatmap error: {e}")
+            fig.add_trace(go.Heatmap(visible=(view_type == 'heatmap'), name='Heatmap'))
+    
     fig.update_layout(
-        mapbox=dict(
-            style=map_style,
-            center=dict(lat=60.5, lon=9.0),  # Center on Norway
-            zoom=5
-        ),
+        mapbox=dict(style=map_style or 'open-street-map', center=dict(lat=60.5, lon=9.0), zoom=5),
         margin=dict(l=0, r=0, t=0, b=0),
         showlegend=False,
-        uirevision='constant'  # Preserves zoom on updates
+        uirevision='constant'
     )
+    print("Returning populated figure")
+    return fig
     
-    # Add data based on view type
-    if view_type == 'map':
-        # Calculate marker sizes based on frequency
-        sizes = places_df['frequency'].copy()
-        min_freq, max_freq = sizes.min(), sizes.max()
-        
-        # Normalize sizes to range from 5 to 20, then scale by marker_size
-        if min_freq != max_freq:
-            normalized_sizes = 5 + (sizes - min_freq) / (max_freq - min_freq) * 15
-            sizes = normalized_sizes * (marker_size / 3)
-        else:
-            sizes = [10 * (marker_size / 3)] * len(sizes)
-        
-        # Add markers
-        # Add markers
-        fig.add_trace(go.Scattermapbox(
-            lat=places_df['latitude'],
-            lon=places_df['longitude'],
-            mode='markers',
-            marker=dict(
-                size=sizes,
-                color='#4285F4',  # Google Maps blue
-                opacity=0.7,
-                sizemode='diameter'
-            ),
-            text=places_df.apply(
-                lambda row: f"{row['token']} ({row['name']})<br>{int(row['frequency'])} mentions in {int(row['book_count'])} books", 
-                axis=1
-            ),
-            hoverinfo='text',
-            customdata=places_df['token'],  # Store token for use in click callback
-            name='Places'
-        ))
-    else:  # Heatmap view
-        # Add heatmap layer
-        fig.add_trace(go.Densitymapbox(
-            lat=places_df['latitude'],
-            lon=places_df['longitude'],
-            z=places_df['frequency'],
-            radius=heatmap_radius,
-            colorscale='Viridis',
-            zmin=0,
-            zmax=places_df['frequency'].max() * (heatmap_intensity / 3),
-            opacity=0.8,
-            hoverinfo='none'
-        ))
-    
-    # Store filtered data as JSON
-    filtered_data = places_df.to_json(date_format='iso', orient='split')
-    
-    return fig, filtered_data
-
 # Callback to update corpus stats
 @callback(
     Output('corpus-stats', 'children'),
@@ -696,15 +878,16 @@ def update_corpus_stats(filtered_data_json, filters):
 # Callback to update place summary when a place is clicked
 @callback(
     [Output('place-summary-container', 'style'),
-     Output('place-summary', 'children'),
-     Output('selected-place', 'data')],
+     Output('place-summary', 'children')],
     [Input('main-map', 'clickData')],
-    [State('place-summary-container', 'style'),
-     State('filtered-data', 'data')]
+    [State('place-summary-container', 'style')]
 )
-def update_place_summary(click_data, current_style, filtered_data_json):
-    if click_data is None or not filtered_data_json:
-        return dash.no_update, dash.no_update, dash.no_update
+def update_place_summary(click_data, current_style):
+    print("Place summary callback triggered")
+    
+    if click_data is None:
+        print("No click data")
+        return dash.no_update, dash.no_update
     
     try:
         # Get the clicked point's data
@@ -713,77 +896,118 @@ def update_place_summary(click_data, current_style, filtered_data_json):
         # For scatter mapbox, we can access the custom data
         if 'customdata' in point:
             token = point['customdata']
-        else:
-            # If it's a densitymapbox (heatmap), we can't get the exact point
-            # Return a generic message
-            new_style = dict(current_style)
-            new_style['display'] = 'block'
-            return new_style, html.Div([
-                html.P("Click on individual markers in map view to see place details.")
-            ]), None
-        
-        # Get the data for the clicked place from filtered data
-        places_df = pd.read_json(filtered_data_json, orient='split')
-        place = places_df[places_df['token'] == token].iloc[0]
-        
-        # Get books related to this place
-        books_df = get_place_details(token)
-        
-        # Create the place summary
-        summary = html.Div([
-            # Place info
-            html.Div([
-                html.H5(place['token'], style={'marginBottom': '5px'}),
-                html.P(f"Modern name: {place['name']}", style={'fontSize': '14px', 'color': '#666'}),
-                html.P([
-                    f"Appears in {int(place['book_count'])} books with ",
-                    html.Strong(f"{int(place['frequency'])} total mentions")
-                ]),
-                html.Hr(style={'margin': '10px 0'})
-            ]),
             
-            # Books section
-            html.Div([
-                html.H6(f"Books mentioning this place:", style={'marginBottom': '10px'}),
+            # Get place name and frequency from the point data directly
+            text = point.get('text', '')
+            parts = text.split('<br>')
+            place_info = parts[0]
+            
+            # Get modern name in parentheses if available
+            if '(' in place_info and ')' in place_info:
+                token_part = place_info.split('(')[0].strip()
+                modern_part = place_info.split('(')[1].split(')')[0].strip()
+            else:
+                token_part = place_info
+                modern_part = ""
+            
+            # Extract frequency from text if available
+            frequency = 0
+            book_count = 0
+            if len(parts) > 1 and 'mentions in' in parts[1]:
+                mentions_part = parts[1].split('mentions in')
+                try:
+                    frequency = int(mentions_part[0].strip())
+                    book_count = int(mentions_part[1].split('books')[0].strip())
+                except ValueError:
+                    print("Could not parse frequency/book count")
+            
+            # Get books related to this place
+            try:
+                books_df = get_place_details(token)
+            except Exception as e:
+                print(f"Error getting place details: {e}")
+                books_df = pd.DataFrame(columns=['title', 'author', 'year', 'urn', 'frequency'])
+            
+            # Create the place summary
+            summary = html.Div([
+                # Place info
                 html.Div([
+                    html.H5(token_part, style={'marginBottom': '5px'}),
+                    html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
+                    html.P(f"Appears in {book_count} books with {frequency} total mentions", 
+                           style={'marginTop': '5px'}),
+                    html.Hr(style={'margin': '10px 0'})
+                ]),
+                
+                # Books section - ensure no duplicates by using unique URNs
+                html.Div([
+                    html.H6(f"Books mentioning this place:", style={'marginBottom': '10px'}),
                     html.Div([
-                        html.Div(f"{row['title']} ({row['year']})", style={'fontWeight': '500'}),
                         html.Div([
-                            html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
-                            html.Span(f" • {row['frequency']} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
-                        ], style={'display': 'flex', 'justifyContent': 'space-between'}),
-                        html.Div([
-                            html.A(
-                                "View at National Library", 
-                                href=f"https://nb.no/items/{row['urn']}?searchText=\"{token}\"",
-                                target="_blank",
-                                style={'fontSize': '13px', 'color': '#4285F4'}
-                            ) if row['urn'] else ""
-                        ])
-                    ], className='book-item')
-                    for _, row in books_df.iterrows()
+                            # Title and year
+                            html.Div(f"{row['title']} ({row['year']})", style={'fontWeight': '500'}),
+                            
+                            # Author and frequency
+                            html.Div([
+                                html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
+                                html.Span(f" • {int(row['frequency'])} mentions", 
+                                          style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                            ], style={'display': 'flex', 'justifyContent': 'space-between'}),
+                            
+                            # Link to National Library 
+                            html.Div([
+                                html.A(
+                                    "View at National Library", 
+                                    href=f"https://nb.no/items/{row['urn']}?searchText=\"{token}\"",
+                                    target="_blank",
+                                    style={'fontSize': '13px', 'color': '#4285F4'}
+                                ) if pd.notna(row['urn']) else ""
+                            ])
+                        ], style={'marginBottom': '10px', 'paddingBottom': '8px', 
+                                   'borderBottom': '1px solid #eee'})
+                        for i, row in books_df.iterrows() if pd.notna(row['title'])
+                    ]) if not books_df.empty else html.Div("No book details available")
                 ])
             ])
-        ])
+            
+        else:
+            # If it's a densitymapbox (heatmap), we can't get the exact point
+            summary = html.Div([
+                html.P("Click on individual markers in map view to see place details.")
+            ])
         
         # Update the style to make visible
         new_style = dict(current_style)
         new_style['display'] = 'block'
         
-        # Store the selected place info
-        selected_place = {
-            'token': place['token'],
-            'name': place['name'],
-            'latitude': float(place['latitude']),
-            'longitude': float(place['longitude']),
-            'frequency': int(place['frequency']),
-            'book_count': int(place['book_count'])
-        }
-        
-        return new_style, summary, selected_place
+        return new_style, summary
     except Exception as e:
         print(f"Error updating place summary: {e}")
-        return dash.no_update, dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update
+
+# @callback(
+#     [Output('sample-size', 'value'),
+#      Output('year-slider', 'value'),
+#      Output('category-dropdown', 'value'),
+#      Output('author-dropdown', 'value'),
+#      Output('title-dropdown', 'value'),
+#      Output('max-places-slider', 'value')],
+#     [Input('current-filters', 'data')],
+#     prevent_initial_call=False
+# )
+# def sync_accordion_on_load(filters):
+#     if not filters:
+#         filters = default_filters
+#     print(f"Syncing accordion with filters: {filters}")  # Debug
+#     return (
+#         filters['sample_size'],
+#         filters['year_range'],
+#         filters['categories'],
+#         filters['authors'],
+#         filters['titles'],
+#         filters['max_places']
+#     )
+
 
 # Callback for the close button on place summary
 app.clientside_callback(
@@ -804,4 +1028,4 @@ app.clientside_callback(
 
 # ============== Run Server ==============
 if __name__ == '__main__':
-    app.run_server(debug=True, host='0.0.0.0', port=8055)
+    app.run_server(debug=True, host='0.0.0.0', port=8065, dev_tools_hot_reload=False)
