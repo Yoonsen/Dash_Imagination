@@ -16,14 +16,12 @@ from dash.exceptions import PreventUpdate
 is_production = os.getenv('ENVIRONMENT', 'development') == 'production'
 app_name = os.getenv('APP_NAME', 'imagination-map')  # Default to 'imagination_map' if not set
 
-is_production = os.getenv('ENVIRONMENT', 'development') == 'production'
-
 if is_production:
-    db_path = "/app/src/dash_imagination/data/imagination.db"
+    db_path = "/app/src/dash_imagination/data/imagination.db"  # Reverted to old file name
 else:
     # Try the local path first, fall back to container path if that fails
-    local_path = "/mnt/disk1/Github/Dash_Imagination/src/dash_imagination/data/imagination.db"
-    container_path = "/app/src/dash_imagination/data/imagination.db"
+    local_path = "/mnt/disk1/Github/Dash_Imagination/src/dash_imagination/data/imagination.db"  # Reverted to old file name
+    container_path = "/app/src/dash_imagination/data/imagination.db"  # Reverted to old file name
     
     if os.path.exists(local_path):
         db_path = local_path
@@ -101,12 +99,13 @@ def get_places_for_map(filters=None, return_total=False):
     sample_size = filters.get('sample_size', 50) if filters else 50
     max_places = filters.get('max_places', 1500) if filters else 1500
 
+    dhlabids=[]
     if filters and 'uploaded_corpus' in filters and filters['uploaded_corpus']:
         dhlabids = filters['uploaded_corpus']
         print(f"Using uploaded corpus with {len(dhlabids)} dhlabids")
         book_sample_query = f"""
         SELECT dhlabid
-        FROM (SELECT DISTINCT dhlabid FROM book_places WHERE dhlabid IN ({','.join(['?'] * len(dhlabids))}))
+        FROM (SELECT DISTINCT dhlabid FROM books WHERE dhlabid IN ({','.join(['?'] * len(dhlabids))}))
         ORDER BY RANDOM()
         LIMIT ?
         """
@@ -125,7 +124,7 @@ def get_places_for_map(filters=None, return_total=False):
     if sampled_books.empty:
         print("No books sampled")
         conn.close()
-        return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+        return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'global_counts', 'book_count'])
 
     sampled_dhlabids = sampled_books['dhlabid'].tolist()
     print(f"Sampled dhlabids: {len(sampled_dhlabids)} - {sampled_dhlabids[:5]}...")
@@ -135,7 +134,7 @@ def get_places_for_map(filters=None, return_total=False):
         total_query = """
         SELECT COUNT(DISTINCT p.token) as total_places
         FROM places p
-        JOIN book_places bp ON p.token = bp.token
+        JOIN books bp ON p.token = bp.token
         WHERE bp.dhlabid IN ({})
         """.format(','.join(['?'] * len(dhlabids)))
         total_places_df = pd.read_sql_query(total_query, conn, params=tuple(dhlabids))
@@ -145,10 +144,10 @@ def get_places_for_map(filters=None, return_total=False):
 
     # Limited places query
     base_query = """
-    SELECT p.token, p.modern as name, p.latitude, p.longitude, SUM(bp.frequency) as frequency,
+    SELECT p.token, p.modern as name, p.latitude, p.longitude, SUM(bp.book_count) as frequency,
            COUNT(DISTINCT bp.dhlabid) as book_count
     FROM places p
-    JOIN book_places bp ON p.token = bp.token
+    JOIN books bp ON p.token = bp.token
     WHERE bp.dhlabid IN ({})
     GROUP BY p.token, p.modern, p.latitude, p.longitude
     ORDER BY frequency DESC
@@ -165,9 +164,9 @@ def get_places_for_map(filters=None, return_total=False):
 def get_place_details(token, filters=None):
     conn = get_db_connection()
     query = """
-    SELECT DISTINCT c.title, c.author, c.year, c.urn, bp.frequency
+    SELECT DISTINCT c.title, c.author, c.year, c.urn, bp.book_count
     FROM corpus c
-    JOIN book_places bp ON c.dhlabid = bp.dhlabid
+    JOIN books bp ON c.dhlabid = bp.dhlabid
     WHERE bp.token = ?
     """
     params = [token]
@@ -189,8 +188,8 @@ def get_place_details(token, filters=None):
     
     if conditions:
         query += " AND " + " AND ".join(conditions)
-    query += " ORDER BY bp.frequency DESC LIMIT 20"
-    
+    query += " ORDER BY bp.book_count DESC LIMIT 20"
+    print(query, params)
     books = pdquery(conn, query, tuple(params))
     conn.close()
     return books
@@ -451,7 +450,7 @@ app.layout = html.Div([
             ], title="Upload Corpus", className="sidebar-section"),
             
             dbc.AccordionItem([
-                dbc.RadioItems(
+               dbc.RadioItems(
                     id='map-style',
                     options=[
                         {'label': 'Street', 'value': 'open-street-map'},
@@ -459,7 +458,7 @@ app.layout = html.Div([
                         {'label': 'Dark', 'value': 'carto-darkmatter'},
                         {'label': 'Satellite', 'value': 'white-bg'}
                     ],
-                    value='carto-positron',
+                    value='open-street-map',  # Try changing this to a different default
                     inline=False,
                     labelStyle={'display': 'block', 'margin': '8px 0'}
                 ),
@@ -810,7 +809,7 @@ def update_state_and_filters(contents, max_places, sample_size, categories, titl
         'max_places': max_places if max_places else current_filters['max_places'],
         'sample_size': sample_size if sample_size else current_filters['sample_size']
     })
-    print(f"Updated filters from UI: {current_filters}")
+    #print(f"Updated filters from UI: {current_filters}")
     return dash.no_update, dash.no_update, current_filters
 
 # Add this callback to toggle the info modal
@@ -949,7 +948,7 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     if places_df.empty:
         print("Returning empty figure")
         fig.update_layout(
-            mapbox=dict(style=map_style or 'open-street-map', center=dict(lat=60.5, lon=9.0), zoom=5),
+            map=dict(style=map_style or 'open-street-map', center=dict(lat=60.5, lon=9.0), zoom=5),
             margin=dict(l=0, r=0, t=0, b=0),
             showlegend=False
         )
@@ -1009,7 +1008,7 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
         cluster_data['size'] = np.log1p(cluster_data['count']) * marker_size * 5  # Size based on cluster count
         
         # Add clustered markers
-        fig.add_trace(go.Scattermapbox(
+        fig.add_trace(go.Scattermap(
             lat=cluster_data['latitude'],
             lon=cluster_data['longitude'],
             mode='markers',
@@ -1021,7 +1020,7 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
         ))
     else:
         # Add individual markers
-        fig.add_trace(go.Scattermapbox(
+        fig.add_trace(go.Scattermap(
             lat=places_df['latitude'],
             lon=places_df['longitude'],
             mode='markers',
@@ -1047,13 +1046,13 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
             print(f"Cleaned heatmap data - x: {len(x)}, y: {len(y)}, z: {len(z)}")
             if len(x) < 2:
                 print("Not enough valid data for heatmap, using fallback")
-                fig.add_trace(go.Densitymapbox(
+                fig.add_trace(go.Densitymap(
                     lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap'
                 ))
             else:
                 heatmap_actual_radius = (heatmap_radius ** 0.5) * 10
 
-                fig.add_trace(go.Densitymapbox(
+                fig.add_trace(go.Densitymap(
                     lat=y,
                     lon=x,
                     z=z,
@@ -1066,14 +1065,14 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
                 ))
         except Exception as e:
             print(f"Heatmap error: {e}")
-            fig.add_trace(go.Densitymapbox(
+            fig.add_trace(go.Densitymap(
                 lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap'
             ))
     else:
-        fig.add_trace(go.Densitymapbox(visible=False, name='Heatmap'))
+        fig.add_trace(go.Densitymap(visible=False, name='Heatmap'))
     
     fig.update_layout(
-        mapbox=dict(style=map_style or 'open-street-map', center=dict(lat=60.5, lon=9.0), zoom=5),
+        map=dict(style=map_style or 'open-street-map', center=dict(lat=60.5, lon=9.0), zoom=5),
         margin=dict(l=0, r=0, t=0, b=0),
         showlegend=False,
         uirevision='constant'
@@ -1150,6 +1149,7 @@ def update_place_summary(click_data, current_style, filters):
         text = point['text']
         parts = text.split('<br>')
         place_info = parts[0]
+        #print(place_info, token)
         if '(' in place_info and ')' in place_info:
             token_part = place_info.split('(')[0].strip()
             modern_part = place_info.split('(')[1].split(')')[0].strip()
@@ -1168,6 +1168,7 @@ def update_place_summary(click_data, current_style, filters):
         
         try:
             books_df = get_place_details(token, filters)
+            print(books_df.columns)
         except Exception as e:
             print(f"Error getting place details: {e}")
             books_df = pd.DataFrame(columns=['title', 'author', 'year', 'urn', 'frequency'])
@@ -1186,10 +1187,10 @@ def update_place_summary(click_data, current_style, filters):
                         html.Div(f"{row['title']} ({row['year']})", style={'fontWeight': '500'}),
                         html.Div([
                             html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
-                            html.Span(f" • {int(row['frequency'])} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                            html.Span(f" • {int(row['book_count'])} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
                         ], style={'display': 'flex', 'justifyContent': 'space-between'}),
                         html.Div([
-                            html.A("View at National Library", href=f"https://nb.no/items/{row['urn']}?searchText=\"{token}\"",
+                            html.A("View at National Library", href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{token}\"",
                                    target="_blank", style={'fontSize': '13px', 'color': '#4285F4'})
                             if pd.notna(row['urn']) else ""
                         ])
@@ -1255,8 +1256,8 @@ def toggle_heatmap_settings(view):
 app.clientside_callback(
     """
     function(relayoutData) {
-        if (relayoutData && relayoutData['mapbox.zoom']) {
-            return {'zoom': relayoutData['mapbox.zoom']};
+        if (relayoutData && relayoutData['map.zoom']) {
+            return {'zoom': relayoutData['map.zoom']};
         }
         return dash_clientside.no_update;
     }
