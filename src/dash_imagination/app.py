@@ -233,15 +233,53 @@ app.layout = html.Div([
     html.Div([
         # Database buttons (left)
         html.Div([
-            html.Button("Corpus", id='corpus-button', className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"),
-            html.Button("Places", id='place-names-toggle', className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-2"),
+            html.Button("Corpus", id='corpus-button', style={
+                'padding': '8px 16px',
+                'backgroundColor': '#475569',  # Lighter slate
+                'color': 'white',
+                'border': 'none',
+                'borderRadius': '20px',
+                'cursor': 'pointer',
+                'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                'transition': 'background-color 0.2s'
+            }),
+            html.Button("Places", id='place-names-toggle', style={
+                'padding': '8px 16px',
+                'backgroundColor': '#475569',  # Lighter slate
+                'color': 'white',
+                'border': 'none',
+                'borderRadius': '20px',
+                'cursor': 'pointer',
+                'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                'transition': 'background-color 0.2s',
+                'marginLeft': '8px'
+            }),
         ], style={'position': 'absolute', 'left': '20px', 'top': '20px', 'pointerEvents': 'auto'}),
         # Display options (right)
         html.Div([
             html.Div([
                 html.Div([
-                    html.Button("Map", id='map-button', className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"),
-                    html.Button("Heatmap", id='heatmap-button', className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-2"),
+                    html.Button("Map", id='map-button', style={
+                        'padding': '8px 16px',
+                        'backgroundColor': '#3b82f6',  # Lighter blue
+                        'color': 'white',
+                        'border': 'none',
+                        'borderRadius': '20px',
+                        'cursor': 'pointer',
+                        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                        'transition': 'background-color 0.2s'
+                    }),
+                    html.Button("Heatmap", id='heatmap-button', style={
+                        'padding': '8px 16px',
+                        'backgroundColor': '#3b82f6',  # Lighter blue
+                        'color': 'white',
+                        'border': 'none',
+                        'borderRadius': '20px',
+                        'cursor': 'pointer',
+                        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                        'transition': 'background-color 0.2s',
+                        'marginLeft': '8px'
+                    }),
                 ], style={'display': 'flex', 'alignItems': 'flex-start'}),
                 html.Div([
                     html.Label([
@@ -492,6 +530,13 @@ app.index_string = '''
             #place-summary-container.dragging {
                 opacity: 0.7;
             }
+            /* Button hover effects */
+            #corpus-button:hover, #place-names-toggle:hover {
+                background-color: #1e293b !important;
+            }
+            #map-button:hover, #heatmap-button:hover {
+                background-color: #1d4ed8 !important;
+            }
         </style>
     </head>
     <body>
@@ -699,10 +744,11 @@ def update_category_selection(*args):
      Input('heatmap-radius', 'value'),
      Input('top-cluster-toggle', 'value')]
 )
-def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_intensity, heatmap_radius, cluster_enabled):
+def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_intensity, heatmap_radius, cluster_toggle):
     print("!!! update_map TRIGGERED !!!")
     print(f"View type: {view_type}")
     print(f"Filtered data: {filtered_data_json is not None}")
+    print(f"Cluster toggle: {cluster_toggle}")
     
     if filtered_data_json is None:
         print("No cached data available")
@@ -745,7 +791,10 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
         axis=1
     )
     
-    if cluster_enabled:
+    # Determine if clustering is enabled
+    use_clustering = cluster_toggle and 'cluster' in cluster_toggle
+    
+    if use_clustering:
         # Simple clustering based on zoom level with a wider radius (approx 200km)
         zoom = 5  # Default zoom, to be updated with map-view-state if available
         
@@ -801,7 +850,7 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
             lat=places_df['latitude'],
             lon=places_df['longitude'],
             mode='markers',
-            marker=dict(size=sizes, color='#4285F4', opacity=0.7, sizemode='diameter'),
+            marker=dict(size=sizes, color='#3b82f6', opacity=0.7, sizemode='diameter'),
             text=places_df['hover_text'],
             hoverinfo='text',
             customdata=places_df['token'],
