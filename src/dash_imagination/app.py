@@ -9,46 +9,47 @@ import os
 import base64
 import io
 from dash.exceptions import PreventUpdate
+from components.map import create_map_controls
+from components.corpus import create_corpus_controls
 
 #=== initialize
 
 # Determine environment
 is_production = os.getenv('ENVIRONMENT', 'development') == 'production'
+is_chromebook = os.getenv('ENVIRONMENT', 'development') == 'chromebook'
 app_name = os.getenv('APP_NAME', 'imagination-map')  # Default to 'imagination_map' if not set
 
 if is_production:
-    db_path = "/app/src/dash_imagination/data/imagination.db"  # Reverted to old file name
+    db_path = "/app/src/dash_imagination/data/imagination.db"
+elif is_chromebook:
+    db_path = "/home/yoonsen/Dash_Imagination/src/dash_imagination/data/imagination.db"
 else:
-    # Try the local path first, fall back to container path if that fails
-    local_path = "/mnt/disk1/Github/Dash_Imagination/src/dash_imagination/data/imagination.db"  # Reverted to old file name
-    container_path = "/app/src/dash_imagination/data/imagination.db"  # Reverted to old file name
-    
-    if os.path.exists(local_path):
-        db_path = local_path
-    else:
-        db_path = container_path
+    # Development environment - use relative path from current directory
+    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "imagination.db")
+    if not os.path.exists(db_path):
+        print(f"Warning: Database not found at {db_path}")
+        # Try alternative paths
+        alt_paths = [
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "imagination.db"),
+            "/mnt/disk1/Github/Dash_Imagination/src/dash_imagination/data/imagination.db"
+        ]
+        for path in alt_paths:
+            if os.path.exists(path):
+                db_path = path
+                print(f"Found database at alternative path: {db_path}")
+                break
 
 print(f"Using database at: {db_path}")
 
 # Initialize Dash App
-if is_production:
-    app = dash.Dash(
-        __name__,
-        routes_pathname_prefix=f'/{app_name}/',
-        requests_pathname_prefix=f"/run/{app_name}/",
-        external_stylesheets=[
-            dbc.themes.BOOTSTRAP,
-            "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
-        ]
-    )
-else:
-    app = dash.Dash(
-        __name__,
-        external_stylesheets=[
-            dbc.themes.BOOTSTRAP,
-            "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
-        ]
-    )
+app = dash.Dash(
+    __name__,
+    external_stylesheets=[
+        dbc.themes.BOOTSTRAP,
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
+    ],
+    suppress_callback_exceptions=True
+)
 
 server = app.server
 
@@ -219,122 +220,72 @@ except Exception as e:
 
 # App Layout
 app.layout = html.Div([
-    # Category Button at Top Right
-    html.Div([
-        dbc.Button(
-            "Select Categories",
-            id='category-toggle-button',
-            color="primary",
-            outline=True,
-            size="sm",
-            style={'margin': '5px'}
-        ),
-        dbc.Modal([
-            dbc.ModalHeader(dbc.ModalTitle("Select Categories")),
-            dbc.ModalBody([
-                dcc.Dropdown(
-                    id='category-dropdown',
-                    options=[{'label': cat, 'value': cat} for cat in categories_list],
-                    value=default_filters['categories'],
-                    multi=True,
-                    placeholder="Select categories..."
-                )
-            ]),
-            dbc.ModalFooter(
-                dbc.Button("Close", id="close-category-modal", className="ml-auto")
-            ),
-        ], id="category-modal", is_open=False),
-    ], style={
-        'position': 'absolute',
-        'top': '20px',
-        'left': '70px',  # Positioned next to sidebar toggle
-        'zIndex': 1001
-    }),
-    html.Div([
-        dbc.Button(
-            [
-                html.I(className="fa fa-list", style={'marginRight': '5px'}),
-                "Places"
-            ],
-            id='place-names-toggle',
-            color="primary",
-            outline=True,
-            size="sm",
-            style={'margin': '5px'}
-        )
-    ], style={
-        'position': 'absolute',
-        'top': '20px',
-        'left': '210px',  # Positioned after the Categories button
-        'zIndex': 1001
-    }),
-    
+    # Main map area (bottom layer)
     html.Div([
         dcc.Graph(
             id='main-map',
             style={'height': '100vh'},
-            config={'displayModeBar': False, 'scrollZoom': True}
-        ),
+            config={'displayModeBar': False}
+        )
+    ], style={'position': 'absolute', 'top': 0, 'left': 0, 'right': 0, 'bottom': 0}),
+    
+    # Top bar (top layer with translucent background)
+    html.Div([
+        # Database buttons (left)
+        html.Div([
+            html.Button("Corpus", id='corpus-button', className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"),
+            html.Button("Places", id='place-names-toggle', className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-2"),
+        ], style={'position': 'absolute', 'left': '20px', 'top': '20px', 'pointerEvents': 'auto'}),
+        # Display options (right)
+        html.Div([
+            html.Div([
+                html.Div([
+                    html.Button("Map", id='map-button', className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"),
+                    html.Button("Heatmap", id='heatmap-button', className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-2"),
+                ], style={'display': 'flex', 'alignItems': 'flex-start'}),
+                html.Div([
+                    html.Label([
+                        dcc.Checklist(
+                            id='top-cluster-toggle',
+                            options=[{'label': 'Cluster', 'value': 'cluster'}],
+                            value=['cluster'],
+                            style={'marginLeft': '10px', 'display': 'inline-block'}
+                        )
+                    ], style={'fontSize': '12px', 'color': '#666', 'marginTop': '4px'})
+                ])
+            ], style={'display': 'inline-block'}),
+        ], style={'position': 'absolute', 'right': '20px', 'top': '20px', 'pointerEvents': 'auto'}),
     ], style={
-        'position': 'absolute',
+        'position': 'fixed',
         'top': 0,
         'left': 0,
-        'width': '100%',
-        'height': '100vh'
+        'right': 0,
+        'height': '80px',
+        'backgroundColor': 'rgba(255, 255, 255, 0)',
+        'zIndex': 1000,
+        'pointerEvents': 'none'
     }),
     
-    html.Div([
-        dbc.RadioItems(
-            id='view-toggle',
-            options=[
-                {'label': 'Map', 'value': 'map'},
-                {'label': 'Heatmap', 'value': 'heatmap'}
-            ],
-            value='map',
-            inline=True,
-            inputClassName='btn-check',
-            labelClassName='btn btn-outline-primary rounded-pill mx-1',
-            labelCheckedClassName='active',
-        ),
-        dcc.Checklist(
-            id='cluster-toggle',
-            options=[{'label': 'Enable Clustering', 'value': 'true'}],
-            value=[],  # Default to off
-            style={'display': 'inline-block', 'marginLeft': '10px'}
-        )
-    ], style={
-        'position': 'absolute',
-        'top': '20px',
-        'right': '40px',
-        'zIndex': 1000
-    }),
-    
-    html.Div([
-        html.Button(
-            html.I(className="fa fa-bars"),
-            id='sidebar-toggle',
-            style={
-                'background': 'white',
-                'border': 'none',
-                'borderRadius': '50%',
-                'width': '40px',
-                'height': '40px',
-                'display': 'flex',
-                'alignItems': 'center',
-                'justifyContent': 'center',
-                'boxShadow': '0 2px 4px rgba(0,0,0,0.2)',
-                'cursor': 'pointer'
-            }
-        )
-    ], style={
-        'position': 'absolute',
-        'top': '20px',
-        'left': '20px',
-        'zIndex': 1000
-    }),
-    
-    # Replace the current ImagiNation text div with this button and modal:
+    # Rest of the components...
+    html.Div(id='cached-data', style={'display': 'none'}),
 
+    # Map controls in a modal
+    dbc.Modal([
+        dbc.ModalHeader(dbc.ModalTitle("Corpus Controls")),
+        dbc.ModalBody([
+            create_map_controls(),
+            html.Hr(),
+            html.Div([
+                html.H5("Corpus Information", style={'marginBottom': '10px'}),
+                html.Div(id='corpus-stats')
+            ])
+        ]),
+        dbc.ModalFooter(
+            dbc.Button("Close", id="close-corpus-modal", className="ml-auto")
+        )
+    ], id="corpus-modal", size="lg"),
+
+    # ImagiNation info button and modal
     html.Div([
         html.Button([
             html.H3("ImagiNation", style={
@@ -399,180 +350,7 @@ app.layout = html.Div([
         'width': 'auto'
     }),
     
-    html.Div([
-        html.Div([
-            html.H3("Layers & Filters", style={'margin': '0', 'fontWeight': '400'})
-        ], style={'padding': '15px', 'borderBottom': '1px solid #eee', 'marginTop': '50px'}),
-        dbc.Accordion([
-            dbc.AccordionItem([
-                html.Div([
-                    html.Label("Upload Custom Corpus", style={'marginBottom': '8px'}),
-                    dcc.Upload(
-                        id='upload-corpus',
-                        children=html.Div([
-                            html.I(className="fas fa-file-upload", style={'marginRight': '10px'}),
-                            'Drag and Drop or ',
-                            html.A('Select File', style={'color': '#4285F4', 'cursor': 'pointer'})
-                        ]),
-                        style={
-                            'width': '100%',
-                            'height': '60px',
-                            'lineHeight': '60px',
-                            'borderWidth': '1px',
-                            'borderStyle': 'dashed',
-                            'borderRadius': '5px',
-                            'textAlign': 'center',
-                            'margin': '0 0 15px 0',
-                            'background': 'rgba(66, 133, 244, 0.05)'
-                        },
-                        multiple=False
-                    ),
-                    html.Div(id='upload-status', style={'fontSize': '13px', 'marginBottom': '15px'}),
-                    html.Div([
-                        html.Button([
-                            html.I(className="fas fa-trash-alt", style={'marginRight': '5px'}),
-                            "Reset to Default Corpus"
-                        ], 
-                        id='reset-corpus',
-                        style={
-                            'background': 'none',
-                            'border': 'none',
-                            'color': '#555',
-                            'textDecoration': 'underline',
-                            'cursor': 'pointer',
-                            'fontSize': '13px',
-                            'padding': '0',
-                            'display': 'inline-block',
-                            'marginTop': '5px'
-                        })
-                    ], style={'textAlign': 'right'})
-                ])
-            ], title="Upload Corpus", className="sidebar-section"),
-            
-            dbc.AccordionItem([
-               dbc.RadioItems(
-                    id='map-style',
-                    options=[
-                        {'label': 'Street', 'value': 'open-street-map'},
-                        {'label': 'Light', 'value': 'carto-positron'},
-                        {'label': 'Dark', 'value': 'carto-darkmatter'},
-                        {'label': 'Satellite', 'value': 'white-bg'}
-                    ],
-                    value='open-street-map',  # Try changing this to a different default
-                    inline=False,
-                    labelStyle={'display': 'block', 'margin': '8px 0'}
-                ),
-            ], title="Base Map", className="sidebar-section"),
-            
-            dbc.AccordionItem([
-                html.Label("Sample Size"),
-                dcc.Dropdown(
-                    id='sample-size',
-                    options=[{'label': f"{n} Books", 'value': n} for n in [10, 50, 100, 500, 1000, 2000]],
-                    value=default_filters['sample_size'],
-                    className='mb-3'
-                ),
-                html.Label("Marker Size"),
-                dcc.Slider(
-                    id='marker-size-slider',
-                    min=2,
-                    max=6,
-                    value=3,
-                    step=1,
-                    marks={i: str(i) for i in range(2, 7)},
-                    className='mb-4'
-                ),
-                html.Label("Max Places"),
-                dcc.Slider(
-                    id='max-places-slider',
-                    min=50,
-                    max=1500,
-                    value=default_filters['max_places'],
-                    step=50,
-                    marks={i: str(i) for i in [50, 200, 350, 500, 750, 1000, 1300, 1500]},
-                    className='mb-4'
-                ),
-                html.Div([
-                    html.H5("Heatmap Settings", className='mt-3 mb-2'),
-                    html.Label("Intensity"),
-                    dcc.Slider(
-                        id='heatmap-intensity',
-                        min=1,
-                        max=10,
-                        value=3,
-                        marks={i: str(i) for i in range(1, 11, 2)},
-                        className='mb-3'
-                    ),
-                    html.Label("Radius"),
-                    dcc.Slider(
-                        id='heatmap-radius',
-                        min=1,
-                        max=30,
-                        value=5,  # Start with a smaller default
-                        step=1,
-                        marks={i: str(i) for i in [1, 5, 10, 15, 20, 30]},
-                        className='mb-3'
-                    )
-                ], id='heatmap-settings', style={'display': 'none'}),
-            ], title="Display Settings", className="sidebar-section"),
-            
-            dbc.AccordionItem([
-                html.Label("Work"),
-                dcc.Dropdown(
-                    id='title-dropdown',
-                    options=[{'label': title, 'value': title} for title in titles_list],
-                    value=default_filters['titles'],
-                    multi=True,
-                    placeholder="Select works...",
-                    className='mb-3'
-                ),
-            ], title="Works", className="sidebar-section"),
-            # dbc.AccordionItem([
-            #     html.Div([
-            #         html.Div([
-            #             html.Label("Top Places by Frequency"),
-            #             dcc.Dropdown(
-            #                 id='places-limit-dropdown',
-            #                 options=[
-            #                     {'label': 'Top 100', 'value': 100},
-            #                     {'label': 'Top 250', 'value': 250},
-            #                     {'label': 'Top 500', 'value': 500},
-            #                     {'label': 'Top 1000', 'value': 1000}
-            #                 ],
-            #                 value=250,
-            #                 clearable=False,
-            #                 className='mb-2'
-            #             ),
-            #             html.Div([
-            #                 dcc.Input(
-            #                     id='place-search',
-            #                     type='text',
-            #                     placeholder='Search places...',
-            #                     className='form-control mb-2'
-            #                 ),
-            #                 html.Div(id='place-list', style={'maxHeight': '300px', 'overflowY': 'auto'})
-            #             ])
-            #         ])
-            #     ])
-            # ], title="Place Names", className="sidebar-section")
-            
-        ], id="sidebar-accordion", start_collapsed=True),
-        
-        html.Div(id='corpus-stats', style={'padding': '15px', 'borderTop': '1px solid #eee', 'fontSize': '14px'})
-    ], id='sidebar', style={
-        'position': 'absolute',
-        'top': 0,
-        'left': 0,
-        'width': '0',
-        'height': '100vh',
-        'backgroundColor': 'white',
-        'boxShadow': '2px 0 4px rgba(0,0,0,0.2)',
-        'zIndex': 900,
-        'overflowY': 'auto',
-        'overflowX': 'hidden',
-        'transition': 'width 0.3s ease'
-    }),
-    
+    # Place summary container
     html.Div([
         html.Div([
             html.Div([
@@ -615,10 +393,9 @@ app.layout = html.Div([
         'cursor': 'auto'
     }),
 
+    # Place names container
     html.Div([
         html.Div([
-           # Make sure your places-header has this structure:
-
             html.Div([
                 html.I(className="fa fa-list", style={'marginRight': '8px'}),
                 html.H4("Place Names", style={'marginBottom': '0', 'fontWeight': '400', 'flex': '1'}),
@@ -637,7 +414,7 @@ app.layout = html.Div([
                 'justifyContent': 'space-between',
                 'alignItems': 'center',
                 'marginBottom': '10px',
-                'cursor': 'grab'  # Add this explicitly
+                'cursor': 'grab'
             }, id='places-header'),
             html.Div([
                 dcc.Dropdown(
@@ -679,6 +456,7 @@ app.layout = html.Div([
         'cursor': 'auto'
     }),
 
+    # Hidden divs and stores
     html.Div(id='reset-status', style={'display': 'none'}),
     dcc.Store(id='filtered-data'),
     dcc.Store(id='selected-place'),
@@ -686,7 +464,10 @@ app.layout = html.Div([
     dcc.Store(id='current-filters', data=default_filters),
     dcc.Store(id='upload-state', data=None),
     dcc.Store(id='category-selection', data=default_filters['categories']),
-])
+
+    # Hidden div for view type
+    html.Div(id='view-type', style={'display': 'none'}),
+], id='main-container')
 
 # Add custom CSS
 app.index_string = '''
@@ -740,7 +521,6 @@ app.index_string = '''
 </html>
 '''
 
-# Callbacks
 @app.callback(
     [Output('upload-status', 'children'),
      Output('upload-state', 'data'),
@@ -748,69 +528,44 @@ app.index_string = '''
     [Input('upload-corpus', 'contents'),
      Input('max-places-slider', 'value'),
      Input('sample-size', 'value'),
-     Input('category-selection', 'data'),
-     Input('title-dropdown', 'value'),
      Input('reset-corpus', 'n_clicks')],
     [State('upload-corpus', 'filename'),
      State('upload-corpus', 'last_modified'),
      State('current-filters', 'data')]
 )
-def update_state_and_filters(contents, max_places, sample_size, categories, titles, reset_clicks, filename, date, current_filters):
+def update_state_and_filters(contents, max_places, sample_size, reset_clicks, filename, date, current_filters):
     ctx = callback_context
-    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
-    print(f"!!! Combined callback triggered by: {triggered_id} !!!")
+    if not ctx.triggered:
+        raise PreventUpdate
     
-    if not current_filters:
-        current_filters = default_filters.copy()
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
-    if triggered_id == 'reset-corpus' and reset_clicks:
-        print("Resetting to default corpus...")
-        return html.Div([
-            html.I(className="fas fa-info-circle", style={'color': 'blue', 'marginRight': '8px'}),
-            'Reset to default corpus.'
-        ]), None, default_filters  # Reset to default
+    if trigger_id == 'reset-corpus':
+        return '', {}, default_filters
     
-    if triggered_id == 'upload-corpus':
-        print("Processing upload...")
-        if contents is None:
-            return html.Div("Upload a corpus file to begin"), None, current_filters
+    if trigger_id == 'upload-corpus' and contents:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
         try:
-            content_type, content_string = contents.split(',')
-            decoded = base64.b64decode(content_string)
-            if filename.endswith('.csv'):
-                uploaded_df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
-            elif filename.endswith('.xlsx'):
-                uploaded_df = pd.read_excel(io.BytesIO(decoded))
-            else:
-                return html.Div(['Unsupported file type.'], style={'color': 'red'}), None, current_filters
-            id_column = 'dhlabid' if 'dhlabid' in uploaded_df.columns else 'urn'
-            if id_column == 'urn':
-                conn = get_db_connection()
-                urns = uploaded_df['urn'].tolist()
-                urn_query = f"SELECT dhlabid, urn FROM corpus WHERE urn IN ({','.join(['?'] * len(urns))})"
-                urn_mapping = pd.read_sql_query(urn_query, conn, params=tuple(urns))
-                conn.close()
-                uploaded_df = uploaded_df.merge(urn_mapping, on='urn', how='inner')
-            dhlabids = uploaded_df['dhlabid'].tolist()
-            current_filters['uploaded_corpus'] = dhlabids
-            filtered_corpus_json = uploaded_df.to_json(date_format='iso', orient='split')
-            print(f"Uploaded {len(dhlabids)} dhlabids: {dhlabids[:5]}...")
-            status = html.Div([html.I(className="fas fa-check-circle", style={'color': 'green', 'marginRight': '8px'}),
-                               f'Uploaded {filename} with {len(dhlabids)} books.'])
-            print(f"Returning status: {status}")
-            return status, filtered_corpus_json, current_filters
+            df = pd.read_excel(io.BytesIO(decoded))
+            if 'dhlabid' not in df.columns:
+                return html.Div('Error: File must contain a dhlabid column', style={'color': 'red'}), {}, current_filters
+            
+            dhlabids = df['dhlabid'].tolist()
+            new_filters = current_filters.copy() if current_filters else default_filters.copy()
+            new_filters['uploaded_corpus'] = dhlabids
+            new_filters['sample_size'] = sample_size
+            new_filters['max_places'] = max_places
+            
+            return html.Div(f'Successfully loaded {len(dhlabids)} books', style={'color': 'green'}), {'uploaded': True}, new_filters
         except Exception as e:
-            print(f"Upload error: {e}")
-            return html.Div(['Error processing file.'], style={'color': 'red'}), None, current_filters
+            return html.Div(f'Error processing file: {str(e)}', style={'color': 'red'}), {}, current_filters
     
-    current_filters.update({
-        'categories': categories or [],
-        'titles': titles or [],
-        'max_places': max_places if max_places else current_filters['max_places'],
-        'sample_size': sample_size if sample_size else current_filters['sample_size']
-    })
-    #print(f"Updated filters from UI: {current_filters}")
-    return dash.no_update, dash.no_update, current_filters
+    new_filters = current_filters.copy() if current_filters else default_filters.copy()
+    new_filters['sample_size'] = sample_size
+    new_filters['max_places'] = max_places
+    
+    return html.Div('', style={'display': 'none'}), current_filters.get('upload_state', {}), new_filters
 
 # Add this callback to toggle the info modal
 
@@ -867,32 +622,44 @@ app.clientside_callback(
 )
 def update_filtered_data(filters, upload_state, reset_clicks, filename):
     print("!!! update_filtered_data TRIGGERED !!!")
+    print(f"Filters: {filters}")
+    print(f"Upload state: {upload_state}")
+    print(f"Reset clicks: {reset_clicks}")
+    
     ctx = callback_context
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
     
     if triggered_id == 'reset-corpus' and reset_clicks:
         print("Resetting to default corpus...")
-        conn = get_db_connection()
-        default_corpus = pd.read_sql_query("SELECT * FROM corpus", conn)
-        conn.close()
-        default_corpus['Verk'] = default_corpus.apply(
-            lambda x: f"{x['title'] or 'Uten tittel'} av {x['author'] or 'Ingen'} ({x['year'] or 'n.d.'})", 
-            axis=1
-        )
-        return default_corpus.to_json(date_format='iso', orient='split')
+        # Use default filters to get places data
+        places_df = get_places_for_map(default_filters)
+        print(f"Reset to default corpus, got {len(places_df)} places")
+        return places_df.to_json(date_format='iso', orient='split')
     
     if not filters:
         filters = default_filters
     
-    if triggered_id == 'upload-state' and upload_state is not None:
-        print("Using uploaded data...")
-        upload_df = pd.read_json(io.StringIO(upload_state), orient='split')
-        if 'dhlabid' in upload_df.columns:
-            filters['uploaded_corpus'] = upload_df['dhlabid'].tolist()
+    # Handle uploaded corpus data
+    if triggered_id == 'upload-state' and upload_state:
+        try:
+            if isinstance(upload_state, dict) and 'uploaded' in upload_state:
+                print("Using uploaded corpus data from state")
+                # The dhlabids are already in the filters from the upload_state callback
+                pass
+            else:
+                print("Invalid upload state format")
+                return dash.no_update
+        except Exception as e:
+            print(f"Error processing upload state: {e}")
+            return dash.no_update
     
-    places_df = get_places_for_map(filters)
-    print(f"Cached {len(places_df)} places")
-    return places_df.to_json(date_format='iso', orient='split')
+    try:
+        places_df = get_places_for_map(filters)
+        print(f"Cached {len(places_df)} places")
+        return places_df.to_json(date_format='iso', orient='split')
+    except Exception as e:
+        print(f"Error getting places data: {e}")
+        return dash.no_update
 
 @app.callback(
     [Output('category-selection', 'data')] + [
@@ -930,12 +697,13 @@ def update_category_selection(*args):
      Input('view-toggle', 'value'),
      Input('heatmap-intensity', 'value'),
      Input('heatmap-radius', 'value'),
-     Input('cluster-toggle', 'value')]
+     Input('top-cluster-toggle', 'value')]
 )
 def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_intensity, heatmap_radius, cluster_enabled):
     print("!!! update_map TRIGGERED !!!")
-    cluster_enabled = len(cluster_enabled) > 0 if cluster_enabled else False  # True if checkbox is checked
-    print(f"Clustering enabled: {cluster_enabled}")
+    print(f"View type: {view_type}")
+    print(f"Filtered data: {filtered_data_json is not None}")
+    
     if filtered_data_json is None:
         print("No cached data available")
         return go.Figure()
@@ -943,6 +711,7 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     # Load cached data
     places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split')
     print(f"Number of places from cache: {len(places_df)}")
+    print(f"Places data: {places_df.head()}")
     
     fig = go.Figure()
     if places_df.empty:
@@ -987,37 +756,45 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
         threshold = max(0.1, base_threshold / (zoom / 5))  # Adjust with zoom but keep larger base value
         
         clustered = places_df.copy()
-        clustered['cluster'] = ((clustered['latitude'] / threshold).round() * 1000 + 
-                              (clustered['longitude'] / threshold).round()).astype(int)
-                
-        # Aggregate clustered points with unique place names
-        cluster_data = clustered.groupby('cluster').agg({
-            'latitude': 'mean',
-            'longitude': 'mean',
-            'frequency': 'sum',
-            'book_count': 'sum',
-            'token': lambda x: '<br>'.join(list(dict.fromkeys(x))),  # Unique tokens
-            'name': lambda x: '<br>'.join(list(dict.fromkeys(x))),  # Unique names
-            'hover_text': 'first'  # Use first for simplicity
-        }).reset_index()
-        cluster_data['count'] = clustered.groupby('cluster').size().values
-        cluster_data['hover_text'] = cluster_data.apply(
-            lambda row: f"""Cluster of {row['count']} places<br>Total Mentions: {int(row['frequency'])}<br>Total Books: {int(row['book_count'])}<br>Example place: {row['token'].split('<br>')[0]}""",
-            axis=1
-        )
-        cluster_data['size'] = np.log1p(cluster_data['count']) * marker_size * 5  # Size based on cluster count
+        # Ensure we have valid numeric values for clustering
+        clustered['latitude'] = pd.to_numeric(clustered['latitude'], errors='coerce')
+        clustered['longitude'] = pd.to_numeric(clustered['longitude'], errors='coerce')
+        clustered = clustered.dropna(subset=['latitude', 'longitude'])
         
-        # Add clustered markers
-        fig.add_trace(go.Scattermap(
-            lat=cluster_data['latitude'],
-            lon=cluster_data['longitude'],
-            mode='markers',
-            marker=dict(size=cluster_data['size'], color='#1E40AF', opacity=0.7, sizemode='diameter'),
-            text=cluster_data['hover_text'],
-            hoverinfo='text',
-            visible=(view_type == 'map'),
-            name='Clusters'
-        ))
+        if not clustered.empty:
+            clustered['cluster'] = ((clustered['latitude'] / threshold).round() * 1000 + 
+                                  (clustered['longitude'] / threshold).round()).astype(int)
+            
+            # Aggregate clustered points with unique place names
+            cluster_data = clustered.groupby('cluster').agg({
+                'latitude': 'mean',
+                'longitude': 'mean',
+                'frequency': 'sum',
+                'book_count': 'sum',
+                'token': lambda x: '<br>'.join([str(t) for t in dict.fromkeys(x) if t is not None]),  # Handle None values
+                'name': lambda x: '<br>'.join([str(n) for n in dict.fromkeys(x) if n is not None]),  # Handle None values
+                'hover_text': 'first'  # Use first for simplicity
+            }).reset_index()
+            cluster_data['count'] = clustered.groupby('cluster').size().values
+            cluster_data['hover_text'] = cluster_data.apply(
+                lambda row: f"""Cluster of {row['count']} places<br>Total Mentions: {int(row['frequency'])}<br>Total Books: {int(row['book_count'])}<br>Example place: {row['token'].split('<br>')[0] if row['token'] else 'Unknown'}""",
+                axis=1
+            )
+            cluster_data['size'] = np.log1p(cluster_data['count']) * marker_size * 5  # Size based on cluster count
+            
+            # Add clustered markers
+            fig.add_trace(go.Scattermap(
+                lat=cluster_data['latitude'],
+                lon=cluster_data['longitude'],
+                mode='markers',
+                marker=dict(size=cluster_data['size'], color='#1E40AF', opacity=0.7, sizemode='diameter'),
+                text=cluster_data['hover_text'],
+                hoverinfo='text',
+                visible=(view_type == 'points'),
+                name='Clusters'
+            ))
+        else:
+            print("No valid data for clustering")
     else:
         # Add individual markers
         fig.add_trace(go.Scattermap(
@@ -1028,7 +805,7 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
             text=places_df['hover_text'],
             hoverinfo='text',
             customdata=places_df['token'],
-            visible=(view_type == 'map'),
+            visible=(view_type == 'points'),
             name='Places'
         ))
     
@@ -1145,60 +922,81 @@ def update_place_summary(click_data, current_style, filters):
     
     try:
         point = click_data['points'][0]
-        token = point['customdata']
-        text = point['text']
+        token = point.get('customdata')
+        text = point.get('text', '')
         parts = text.split('<br>')
-        place_info = parts[0]
-        #print(place_info, token)
-        if '(' in place_info and ')' in place_info:
-            token_part = place_info.split('(')[0].strip()
-            modern_part = place_info.split('(')[1].split(')')[0].strip()
-        else:
-            token_part = place_info
-            modern_part = ""
-        frequency = 0
-        book_count = 0
-        if len(parts) > 1 and 'Mentions' in parts[1]:
-            mentions_part = parts[1].split('Mentions: ')
-            try:
-                frequency = int(mentions_part[1].split('<br>')[0].strip())
-                book_count = int(parts[2].split('Books: ')[1].strip())
-            except (ValueError, IndexError):
-                print("Could not parse frequency/book count")
         
-        try:
-            books_df = get_place_details(token, filters)
-            print(books_df.columns)
-        except Exception as e:
-            print(f"Error getting place details: {e}")
-            books_df = pd.DataFrame(columns=['title', 'author', 'year', 'urn', 'frequency'])
-        
-        summary = html.Div([
-            html.Div([
-                html.H5(token_part, style={'marginBottom': '5px'}),
-                html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
-                html.P(f"Appears in {book_count} books with {frequency} total mentions", style={'marginTop': '5px'}),
-                html.Hr(style={'margin': '10px 0'})
-            ]),
-            html.Div([
-                html.H6(f"Books mentioning this place:", style={'marginBottom': '10px'}),
+        # Handle both individual points and clusters
+        if 'Cluster of' in text:
+            # This is a cluster
+            cluster_info = parts[0].split('Cluster of ')[1].split(' places')[0]
+            total_mentions = int(parts[1].split('Total Mentions: ')[1])
+            total_books = int(parts[2].split('Total Books: ')[1])
+            example_place = parts[3].split('Example place: ')[1]
+            
+            summary = html.Div([
                 html.Div([
-                    html.Div([
-                        html.Div(f"{row['title']} ({row['year']})", style={'fontWeight': '500'}),
-                        html.Div([
-                            html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
-                            html.Span(f" • {int(row['book_count'])} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
-                        ], style={'display': 'flex', 'justifyContent': 'space-between'}),
-                        html.Div([
-                            html.A("View at National Library", href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{token}\"",
-                                   target="_blank", style={'fontSize': '13px', 'color': '#4285F4'})
-                            if pd.notna(row['urn']) else ""
-                        ])
-                    ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
-                    for i, row in books_df.iterrows() if pd.notna(row['title'])
-                ]) if not books_df.empty else html.Div("No book details available")
+                    html.H5(f"Cluster of {cluster_info} Places", style={'marginBottom': '5px'}),
+                    html.P(f"Total Mentions: {total_mentions}", style={'fontSize': '14px', 'color': '#666'}),
+                    html.P(f"Total Books: {total_books}", style={'fontSize': '14px', 'color': '#666'}),
+                    html.P(f"Example place: {example_place}", style={'fontSize': '14px', 'color': '#666'}),
+                    html.Hr(style={'margin': '10px 0'})
+                ])
             ])
-        ])
+        else:
+            # This is an individual point
+            place_info = parts[0]
+            if '(' in place_info and ')' in place_info:
+                token_part = place_info.split('(')[0].strip()
+                modern_part = place_info.split('(')[1].split(')')[0].strip()
+            else:
+                token_part = place_info
+                modern_part = ""
+            
+            frequency = 0
+            book_count = 0
+            if len(parts) > 1 and 'Mentions' in parts[1]:
+                mentions_part = parts[1].split('Mentions: ')
+                try:
+                    frequency = int(mentions_part[1].split('<br>')[0].strip())
+                    book_count = int(parts[2].split('Books: ')[1].strip())
+                except (ValueError, IndexError):
+                    print("Could not parse frequency/book count")
+            
+            try:
+                books_df = get_place_details(token, filters)
+                print(f"Got {len(books_df)} books for place {token}")
+            except Exception as e:
+                print(f"Error getting place details: {e}")
+                books_df = pd.DataFrame(columns=['title', 'author', 'year', 'urn', 'book_count'])
+            
+            summary = html.Div([
+                html.Div([
+                    html.H5(token_part, style={'marginBottom': '5px'}),
+                    html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
+                    html.P(f"Appears in {book_count} books with {frequency} total mentions", style={'marginTop': '5px'}),
+                    html.Hr(style={'margin': '10px 0'})
+                ]),
+                html.Div([
+                    html.H6(f"Books mentioning this place:", style={'marginBottom': '10px'}),
+                    html.Div([
+                        html.Div([
+                            html.Div(f"{row['title']} ({row['year']})", style={'fontWeight': '500'}),
+                            html.Div([
+                                html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
+                                html.Span(f" • {int(row['book_count'])} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                            ], style={'display': 'flex', 'justifyContent': 'space-between'}),
+                            html.Div([
+                                html.A("View at National Library", href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{token}\"",
+                                       target="_blank", style={'fontSize': '13px', 'color': '#4285F4'})
+                                if pd.notna(row['urn']) else ""
+                            ])
+                        ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
+                        for i, row in books_df.iterrows() if pd.notna(row['title'])
+                    ]) if not books_df.empty else html.Div("No book details available")
+                ])
+            ])
+        
         new_style = dict(current_style)
         new_style['display'] = 'block'
         return new_style, summary
@@ -1220,25 +1018,6 @@ app.clientside_callback(
     Output('place-summary-container', 'style', allow_duplicate=True),
     [Input('close-summary', 'n_clicks')],
     [State('place-summary-container', 'style')],
-    prevent_initial_call=True
-)
-
-# Callback to toggle sidebar
-app.clientside_callback(
-    """
-    function(n_clicks, currentStyle) {
-        const newStyle = {...currentStyle};
-        if (newStyle.width === '0px' || newStyle.width === '0') {
-            newStyle.width = '300px';
-        } else {
-            newStyle.width = '0px';
-        }
-        return newStyle;
-    }
-    """,
-    Output('sidebar', 'style'),
-    [Input('sidebar-toggle', 'n_clicks')],
-    [State('sidebar', 'style')],
     prevent_initial_call=True
 )
 
@@ -1267,41 +1046,6 @@ app.clientside_callback(
     prevent_initial_call=True
 )
 
-
-
-# Callback to toggle category modal
-@app.callback(
-    Output('category-modal', 'is_open'),
-    [Input('category-toggle-button', 'n_clicks'),
-     Input('close-category-modal', 'n_clicks')],
-    [State('category-modal', 'is_open')]
-)
-def toggle_category_modal(n1, n2, is_open):
-    if n1 or n2:
-        return not is_open
-    return is_open
-
-# Sync category-selection with dropdown
-@app.callback(
-    Output('category-selection', 'data', allow_duplicate=True),
-    Input('category-dropdown', 'value'),
-    prevent_initial_call=True
-)
-def update_category_from_dropdown(value):
-    return value if value is not None else []
-
-# Sync dropdown with category-selection
-@app.callback(
-    Output('category-dropdown', 'value'),
-    Input('category-selection', 'data')
-)
-def sync_dropdown_with_selection(selected_categories):
-    return selected_categories if selected_categories else []
-
-
-
-# Callback to update corpus stats
-# Callback to update corpus stats
 # Callback to update corpus stats
 @app.callback(
     Output('corpus-stats', 'children'),
@@ -1380,6 +1124,37 @@ def update_corpus_stats(filters):
         html.P(f"Places shown: {total_places_shown}"),
         html.P(f"Total mentions: {total_mentions:,}"),
     ])
+
+# Add callback to toggle corpus modal
+@app.callback(
+    Output('corpus-modal', 'is_open'),
+    [Input('corpus-button', 'n_clicks'),
+     Input('close-corpus-modal', 'n_clicks')],
+    [State('corpus-modal', 'is_open')]
+)
+def toggle_corpus_modal(n1, n2, is_open):
+    if n1 or n2:
+        return not is_open
+    return is_open
+
+# Callback to handle view type from buttons
+@app.callback(
+    Output('view-toggle', 'value'),
+    [Input('map-button', 'n_clicks'),
+     Input('heatmap-button', 'n_clicks')],
+    [State('view-toggle', 'value')]
+)
+def update_view_type_from_buttons(map_clicks, heatmap_clicks, current_view):
+    ctx = callback_context
+    if not ctx.triggered:
+        return current_view
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    if button_id == 'map-button':
+        return 'points'
+    elif button_id == 'heatmap-button':
+        return 'heatmap'
+    return current_view
 
 # Run Server
 if __name__ == '__main__':
