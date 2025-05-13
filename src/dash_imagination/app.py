@@ -9,8 +9,8 @@ import os
 import base64
 import io
 from dash.exceptions import PreventUpdate
-from components.map import create_map_controls
-from components.corpus import create_corpus_controls
+from dash_imagination.components.map import create_map_controls
+from dash_imagination.components.corpus import create_corpus_controls
 
 #=== initialize
 
