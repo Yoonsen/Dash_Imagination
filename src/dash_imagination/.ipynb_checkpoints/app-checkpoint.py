@@ -17,11 +17,11 @@ is_production = os.getenv('ENVIRONMENT', 'development') == 'production'
 app_name = os.getenv('APP_NAME', 'imagination-map')  # Default to 'imagination_map' if not set
 
 if is_production:
-    db_path = "/app/src/dash_imagination/data/imagination.db"  # Reverted to old file name
+    db_path = "/app/src/dash_imagination/data/imagination.db"
 else:
     # Try the local path first, fall back to container path if that fails
-    local_path = "/mnt/disk1/Github/Dash_Imagination/src/dash_imagination/data/imagination.db"  # Reverted to old file name
-    container_path = "/app/src/dash_imagination/data/imagination.db"  # Reverted to old file name
+    local_path = "/mnt/disk1/Github/Dash_Imagination/src/dash_imagination/data/imagination.db"
+    container_path = "/app/src/dash_imagination/data/imagination.db"
     
     if os.path.exists(local_path):
         db_path = local_path
@@ -35,7 +35,7 @@ if is_production:
     app = dash.Dash(
         __name__,
         routes_pathname_prefix=f'/{app_name}/',
-        requests_pathname_prefix=f"/run/{app_name}/app/",
+        requests_pathname_prefix=f"/run/{app_name}/",
         external_stylesheets=[
             dbc.themes.BOOTSTRAP,
             "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
@@ -105,7 +105,7 @@ def get_places_for_map(filters=None, return_total=False):
         print(f"Using uploaded corpus with {len(dhlabids)} dhlabids")
         book_sample_query = f"""
         SELECT dhlabid
-        FROM (SELECT DISTINCT dhlabid FROM books WHERE dhlabid IN ({','.join(['?'] * len(dhlabids))}))
+        FROM (SELECT DISTINCT dhlabid FROM book_places WHERE dhlabid IN ({','.join(['?'] * len(dhlabids))}))
         ORDER BY RANDOM()
         LIMIT ?
         """
@@ -124,7 +124,7 @@ def get_places_for_map(filters=None, return_total=False):
     if sampled_books.empty:
         print("No books sampled")
         conn.close()
-        return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'global_counts', 'book_count'])
+        return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
 
     sampled_dhlabids = sampled_books['dhlabid'].tolist()
     print(f"Sampled dhlabids: {len(sampled_dhlabids)} - {sampled_dhlabids[:5]}...")
@@ -134,7 +134,7 @@ def get_places_for_map(filters=None, return_total=False):
         total_query = """
         SELECT COUNT(DISTINCT p.token) as total_places
         FROM places p
-        JOIN books bp ON p.token = bp.token
+        JOIN book_places bp ON p.token = bp.token
         WHERE bp.dhlabid IN ({})
         """.format(','.join(['?'] * len(dhlabids)))
         total_places_df = pd.read_sql_query(total_query, conn, params=tuple(dhlabids))
@@ -144,10 +144,10 @@ def get_places_for_map(filters=None, return_total=False):
 
     # Limited places query
     base_query = """
-    SELECT p.token, p.modern as name, p.latitude, p.longitude, SUM(bp.book_count) as frequency,
+    SELECT p.token, p.modern as name, p.latitude, p.longitude, SUM(bp.frequency) as frequency,
            COUNT(DISTINCT bp.dhlabid) as book_count
     FROM places p
-    JOIN books bp ON p.token = bp.token
+    JOIN book_places bp ON p.token = bp.token
     WHERE bp.dhlabid IN ({})
     GROUP BY p.token, p.modern, p.latitude, p.longitude
     ORDER BY frequency DESC
@@ -164,9 +164,9 @@ def get_places_for_map(filters=None, return_total=False):
 def get_place_details(token, filters=None):
     conn = get_db_connection()
     query = """
-    SELECT DISTINCT c.title, c.author, c.year, c.urn, bp.book_count
+    SELECT DISTINCT c.title, c.author, c.year, c.urn, bp.frequency
     FROM corpus c
-    JOIN books bp ON c.dhlabid = bp.dhlabid
+    JOIN book_places bp ON c.dhlabid = bp.dhlabid
     WHERE bp.token = ?
     """
     params = [token]
@@ -188,8 +188,8 @@ def get_place_details(token, filters=None):
     
     if conditions:
         query += " AND " + " AND ".join(conditions)
-    query += " ORDER BY bp.book_count DESC LIMIT 20"
-    print(query, params)
+    query += " ORDER BY bp.frequency DESC LIMIT 20"
+    
     books = pdquery(conn, query, tuple(params))
     conn.close()
     return books
@@ -1149,7 +1149,6 @@ def update_place_summary(click_data, current_style, filters):
         text = point['text']
         parts = text.split('<br>')
         place_info = parts[0]
-        #print(place_info, token)
         if '(' in place_info and ')' in place_info:
             token_part = place_info.split('(')[0].strip()
             modern_part = place_info.split('(')[1].split(')')[0].strip()
@@ -1168,7 +1167,6 @@ def update_place_summary(click_data, current_style, filters):
         
         try:
             books_df = get_place_details(token, filters)
-            print(books_df.columns)
         except Exception as e:
             print(f"Error getting place details: {e}")
             books_df = pd.DataFrame(columns=['title', 'author', 'year', 'urn', 'frequency'])
@@ -1187,7 +1185,7 @@ def update_place_summary(click_data, current_style, filters):
                         html.Div(f"{row['title']} ({row['year']})", style={'fontWeight': '500'}),
                         html.Div([
                             html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
-                            html.Span(f" • {int(row['book_count'])} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                            html.Span(f" • {int(row['frequency'])} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
                         ], style={'display': 'flex', 'justifyContent': 'space-between'}),
                         html.Div([
                             html.A("View at National Library", href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{token}\"",

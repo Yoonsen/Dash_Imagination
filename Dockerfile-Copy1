@@ -1,0 +1,29 @@
+FROM python:3.9-slim
+
+# Set working directory
+WORKDIR /app
+
+# Set Python to run in unbuffered mode and environment
+ENV PYTHONUNBUFFERED=1
+ENV ENVIRONMENT=production
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --no-deps -r requirements.txt  # Added --no-deps to avoid hash issues
+
+# Copy the application and required directories
+COPY app.py .
+COPY data/ data/
+COPY assets/ assets/
+
+# Make port available to the world outside this container
+EXPOSE 8050
+
+# Command to run the application
+CMD exec gunicorn --bind :8050 \
+    --workers 1 \
+    --threads 8 \
+    --timeout 0 \
+    --access-logfile - \
+    --error-logfile - \
+    app:server

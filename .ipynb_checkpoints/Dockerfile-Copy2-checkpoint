@@ -1,0 +1,26 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1
+ENV ENVIRONMENT=production
+
+# Copy PDM files and install dependencies
+COPY pyproject.toml pdm.lock ./
+RUN pip install --no-cache-dir pdm \
+    && pdm install --prod
+
+# Copy only the relevant application files
+COPY src/dash_imagination/app.py app.py
+COPY src/dash_imagination/data/ data/
+COPY src/dash_imagination/assets/ assets/
+
+EXPOSE 8080
+
+CMD exec gunicorn --bind :8080 \
+    --workers 1 \
+    --threads 8 \
+    --timeout 0 \
+    --access-logfile - \
+    --error-logfile - \
+    app:server
