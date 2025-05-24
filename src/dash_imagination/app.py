@@ -246,7 +246,17 @@ app.layout = html.Div([
         dcc.Graph(
             id='main-map',
             style={'height': '100vh'},
-            config={'displayModeBar': False}
+            config={
+                'displayModeBar': False,
+                'scrollZoom': True,
+                'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+                'displaylogo': False,
+                'showTips': True,
+                'showLink': False,
+                'showEditInChartStudio': False,
+                'showSendToCloud': False,
+                'responsive': True
+            }
         )
     ], style={'position': 'absolute', 'top': 0, 'left': 0, 'right': 0, 'bottom': 0}),
     
@@ -919,11 +929,12 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
                             lat=lats,
                             lon=lons,
                             mode='lines',
-                            line=dict(color='#1E40AF', width=2),
+                            line=dict(color='#1E40AF', width=3),  # Increased line width
                             fill='toself',
-                            fillcolor='rgba(30, 64, 175, 0.1)',
+                            fillcolor='rgba(30, 64, 175, 0.3)',  # Increased opacity
                             hoverinfo='skip',
-                            showlegend=False
+                            showlegend=False,
+                            visible=True  # Explicitly set visibility
                         ))
                         
                     elif len(points) >= 3:
@@ -948,11 +959,12 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
                                 lat=hull_points[:, 1],  # latitude is second column
                                 lon=hull_points[:, 0],  # longitude is first column
                                 mode='lines',
-                                line=dict(color='#1E40AF', width=2),
+                                line=dict(color='#1E40AF', width=3),  # Increased line width
                                 fill='toself',
-                                fillcolor='rgba(30, 64, 175, 0.1)',
+                                fillcolor='rgba(30, 64, 175, 0.3)',  # Increased opacity
                                 hoverinfo='skip',
-                                showlegend=False
+                                showlegend=False,
+                                visible=True  # Explicitly set visibility
                             ))
                         except Exception as e:
                             print(f"Error calculating convex hull: {e}")
@@ -967,11 +979,12 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
                                 lat=circle_lats,
                                 lon=circle_lons,
                                 mode='lines',
-                                line=dict(color='#1E40AF', width=2),
+                                line=dict(color='#1E40AF', width=3),  # Increased line width
                                 fill='toself',
-                                fillcolor='rgba(30, 64, 175, 0.1)',
+                                fillcolor='rgba(30, 64, 175, 0.3)',  # Increased opacity
                                 hoverinfo='skip',
-                                showlegend=False
+                                showlegend=False,
+                                visible=True  # Explicitly set visibility
                             ))
                     else:
                         # For single points, use a small circle
@@ -985,11 +998,12 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
                             lat=circle_lats,
                             lon=circle_lons,
                             mode='lines',
-                            line=dict(color='#1E40AF', width=2),
+                            line=dict(color='#1E40AF', width=3),  # Increased line width
                             fill='toself',
-                            fillcolor='rgba(30, 64, 175, 0.1)',
+                            fillcolor='rgba(30, 64, 175, 0.3)',  # Increased opacity
                             hoverinfo='skip',
-                            showlegend=False
+                            showlegend=False,
+                            visible=True  # Explicitly set visibility
                         ))
         else:
             print("No valid data for clustering")
@@ -1082,17 +1096,27 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     
     if not selected_place:  # Only update layout if no place is selected
         fig.update_layout(
-            map=dict(style=map_style or 'open-street-map'),
+            map=dict(
+                style=map_style or 'open-street-map',
+                center=dict(lat=60.5, lon=9.0),
+                zoom=4
+            ),
             margin=dict(l=0, r=0, t=0, b=0),
             showlegend=False,
-            uirevision='constant'
+            uirevision='constant',
+            hovermode='closest'
         )
     else:
         fig.update_layout(
-            map=dict(style=map_style or 'open-street-map'),
+            map=dict(
+                style=map_style or 'open-street-map',
+                center=dict(lat=60.5, lon=9.0),
+                zoom=4
+            ),
             margin=dict(l=0, r=0, t=0, b=0),
             showlegend=False,
-            uirevision='constant'
+            uirevision='constant',
+            hovermode='closest'
         )
     print("Returning populated figure")
     return fig
