@@ -293,7 +293,7 @@ app.layout = html.Div([
                         dcc.Checklist(
                             id='top-cluster-toggle',
                             options=[{'label': 'Cluster', 'value': 'cluster'}],
-                            value=['cluster'],
+                            value=[],
                             style={'marginLeft': '10px', 'display': 'inline-block'}
                         )
                     ], style={'fontSize': '12px', 'color': '#666', 'marginTop': '4px'})
@@ -462,18 +462,6 @@ app.layout = html.Div([
                 'cursor': 'grab'
             }, id='places-header'),
             html.Div([
-                dcc.Dropdown(
-                    id='places-limit-dropdown',
-                    options=[
-                        {'label': 'Top 100', 'value': 100},
-                        {'label': 'Top 250', 'value': 250},
-                        {'label': 'Top 500', 'value': 500},
-                        {'label': 'Top 1000', 'value': 1000}
-                    ],
-                    value=250,
-                    clearable=False,
-                    className='mb-2'
-                ),
                 dcc.Input(
                     id='place-search',
                     type='text',
@@ -504,7 +492,7 @@ app.layout = html.Div([
     # Hidden divs and stores
     html.Div(id='reset-status', style={'display': 'none'}),
     dcc.Store(id='filtered-data'),
-    dcc.Store(id='selected-place'),
+    dcc.Store(id='selected-place', data=None),
     dcc.Store(id='map-view-state'),
     dcc.Store(id='current-filters', data=default_filters),
     dcc.Store(id='upload-state', data=None),
@@ -543,6 +531,12 @@ app.index_string = '''
             }
             #map-button:hover, #heatmap-button:hover {
                 background-color: #1d4ed8 !important;
+            }
+            .place-item:hover {
+                background-color: #f8f9fa;
+            }
+            .place-item:active {
+                background-color: #e9ecef;
             }
         </style>
     </head>
@@ -750,13 +744,15 @@ def update_category_selection(*args):
      Input('view-toggle', 'value'),
      Input('heatmap-intensity', 'value'),
      Input('heatmap-radius', 'value'),
-     Input('top-cluster-toggle', 'value')]
+     Input('top-cluster-toggle', 'value'),
+     Input('selected-place', 'data')]
 )
-def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_intensity, heatmap_radius, cluster_toggle):
+def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_intensity, heatmap_radius, cluster_toggle, selected_place):
     print("!!! update_map TRIGGERED !!!")
     print(f"View type: {view_type}")
     print(f"Filtered data: {filtered_data_json is not None}")
     print(f"Cluster toggle: {cluster_toggle}")
+    print(f"Selected place: {selected_place}")
     
     if filtered_data_json is None:
         print("No cached data available")
@@ -771,9 +767,10 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     if places_df.empty:
         print("Returning empty figure")
         fig.update_layout(
-            map=dict(style=map_style or 'open-street-map', center=dict(lat=60.5, lon=9.0), zoom=5),
+            map=dict(style=map_style or 'open-street-map'),
             margin=dict(l=0, r=0, t=0, b=0),
-            showlegend=False
+            showlegend=False,
+            uirevision='constant'
         )
         return fig
     
@@ -854,17 +851,51 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
             print("No valid data for clustering")
     else:
         # Add individual markers
-        fig.add_trace(go.Scattermap(
-            lat=places_df['latitude'],
-            lon=places_df['longitude'],
-            mode='markers',
-            marker=dict(size=sizes, color='#3b82f6', opacity=0.7, sizemode='diameter'),
-            text=places_df['hover_text'],
-            hoverinfo='text',
-            customdata=places_df['token'],
-            visible=(view_type == 'points'),
-            name='Places'
-        ))
+        # Create separate traces for selected and unselected places
+        if selected_place:
+            selected_df = places_df[places_df['token'] == selected_place]
+            unselected_df = places_df[places_df['token'] != selected_place]
+            
+            # Add unselected places first
+            if not unselected_df.empty:
+                fig.add_trace(go.Scattermap(
+                    lat=unselected_df['latitude'],
+                    lon=unselected_df['longitude'],
+                    mode='markers',
+                    marker=dict(size=sizes[unselected_df.index], color='#3b82f6', opacity=0.7, sizemode='diameter'),
+                    text=unselected_df['hover_text'],
+                    hoverinfo='text',
+                    customdata=unselected_df['token'],
+                    visible=(view_type == 'points'),
+                    name='Places'
+                ))
+            
+            # Add selected place with different color
+            if not selected_df.empty:
+                fig.add_trace(go.Scattermap(
+                    lat=selected_df['latitude'],
+                    lon=selected_df['longitude'],
+                    mode='markers',
+                    marker=dict(size=sizes[selected_df.index] * 1.2, color='#dc2626', opacity=0.9, sizemode='diameter'),
+                    text=selected_df['hover_text'],
+                    hoverinfo='text',
+                    customdata=selected_df['token'],
+                    visible=(view_type == 'points'),
+                    name='Selected Place'
+                ))
+        else:
+            # No place selected, show all places normally
+            fig.add_trace(go.Scattermap(
+                lat=places_df['latitude'],
+                lon=places_df['longitude'],
+                mode='markers',
+                marker=dict(size=sizes, color='#3b82f6', opacity=0.7, sizemode='diameter'),
+                text=places_df['hover_text'],
+                hoverinfo='text',
+                customdata=places_df['token'],
+                visible=(view_type == 'points'),
+                name='Places'
+            ))
     
     heatmap_visible = view_type == 'heatmap'
     print(f"Heatmap mode: {heatmap_visible}, Places available: {len(places_df)}")
@@ -905,30 +936,39 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     else:
         fig.add_trace(go.Densitymap(visible=False, name='Heatmap'))
     
-    fig.update_layout(
-        map=dict(style=map_style or 'open-street-map', center=dict(lat=60.5, lon=9.0), zoom=5),
-        margin=dict(l=0, r=0, t=0, b=0),
-        showlegend=False,
-        uirevision='constant'
-    )
+    if not selected_place:  # Only update layout if no place is selected
+        fig.update_layout(
+            map=dict(style=map_style or 'open-street-map'),
+            margin=dict(l=0, r=0, t=0, b=0),
+            showlegend=False,
+            uirevision='constant'
+        )
+    else:
+        fig.update_layout(
+            map=dict(style=map_style or 'open-street-map'),
+            margin=dict(l=0, r=0, t=0, b=0),
+            showlegend=False,
+            uirevision='constant'
+        )
     print("Returning populated figure")
     return fig
 
 @app.callback(
-    Output('place-list', 'children'),
+    [Output('place-list', 'children'),
+     Output('selected-place', 'data')],
     [Input('filtered-data', 'data'),
-     Input('places-limit-dropdown', 'value'),
-     Input('place-search', 'value')]
+     Input('place-search', 'value')],
+    [State('selected-place', 'data')]
 )
-def update_place_list(filtered_data_json, limit, search_term):
+def update_place_list(filtered_data_json, search_term, selected_place):
     if filtered_data_json is None:
-        return html.Div("No places available")
+        return html.Div("No places available"), None
     
     # Load cached data
     places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split')
     
     if places_df.empty:
-        return html.Div("No places available")
+        return html.Div("No places available"), None
     
     # Sort by frequency
     places_df = places_df.sort_values(by='frequency', ascending=False)
@@ -941,27 +981,80 @@ def update_place_list(filtered_data_json, limit, search_term):
             places_df['name'].str.lower().str.contains(search_term)
         ]
     
-    # Limit to top N places
-    places_df = places_df.head(limit)
+    # Limit to top 5000 places
+    places_df = places_df.head(5000)
     
-    # Create list items
+    # Create list items with improved styling
     place_items = []
     for i, row in places_df.iterrows():
+        is_selected = selected_place == row['token']
         place_items.append(html.Div([
-            html.Div(f"{row['token']} ({row['name']})", style={'fontWeight': 'bold'}),
-            html.Div(f"Mentions: {int(row['frequency'])} • Books: {int(row['book_count'])}", 
-                     style={'fontSize': '0.8rem', 'color': '#666'})
-        ], style={'borderBottom': '1px solid #eee', 'padding': '5px 0'}))
+            html.Div([
+                html.Div(f"{row['token']}", style={'fontWeight': 'bold', 'fontSize': '1rem'}),
+                html.Div(f"{row['name']}", style={'color': '#666', 'fontSize': '0.9rem'})
+            ], style={'marginBottom': '4px'}),
+            html.Div([
+                html.Span(f"📚 {int(row['book_count'])} books", style={'marginRight': '12px', 'color': '#666', 'fontSize': '0.85rem'}),
+                html.Span(f"📝 {int(row['frequency'])} mentions", style={'color': '#666', 'fontSize': '0.85rem'})
+            ])
+        ], style={
+            'borderBottom': '1px solid #eee',
+            'padding': '8px 0',
+            'transition': 'background-color 0.2s',
+            'cursor': 'pointer',
+            'backgroundColor': '#ffebee' if is_selected else 'transparent'
+        }, className='place-item', id={'type': 'place-item', 'index': row['token']}))
     
     if not place_items:
-        return html.Div("No matching places found")
+        return html.Div("No matching places found"), None
     
+    # Create the scrollable container with improved styling
     return html.Div([
-        html.Div(f"Showing {len(place_items)} of {len(places_df)} places", 
-                 style={'marginBottom': '8px', 'fontSize': '0.8rem', 'color': '#666'}),
-        html.Div(place_items)
-    ])
+        html.Div([
+            html.Div(f"Showing {len(place_items)} of {len(places_df)} places", 
+                     style={'marginBottom': '8px', 'fontSize': '0.9rem', 'color': '#666'}),
+            html.Div([
+                html.Div(place_items, style={'maxHeight': 'calc(100vh - 200px)', 'overflowY': 'auto'})
+            ], style={'border': '1px solid #eee', 'borderRadius': '4px', 'padding': '8px'})
+        ], style={'padding': '12px'})
+    ], style={'backgroundColor': 'white', 'borderRadius': '8px', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'}), selected_place
 
+# Add callback for place item clicks
+@app.callback(
+    [Output('selected-place', 'data', allow_duplicate=True),
+     Output('main-map', 'clickData', allow_duplicate=True)],
+    [Input({'type': 'place-item', 'index': dash.ALL}, 'n_clicks')],
+    [State('filtered-data', 'data')],
+    prevent_initial_call=True
+)
+def handle_place_click(n_clicks, filtered_data_json):
+    if not any(n_clicks):
+        raise PreventUpdate
+    
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    
+    triggered_id = ctx.triggered[0]['prop_id']
+    if not triggered_id:
+        raise PreventUpdate
+    
+    # Extract the place token from the triggered component ID
+    place_token = eval(triggered_id.split('.')[0])['index']
+    
+    # Load cached data to get place details
+    places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split')
+    place_data = places_df[places_df['token'] == place_token].iloc[0]
+    
+    # Create click data structure
+    click_data = {
+        'points': [{
+            'customdata': place_token,
+            'text': f"{place_token} ({place_data['name']})<br>Mentions: {int(place_data['frequency'])}<br>Books: {int(place_data['book_count'])}"
+        }]
+    }
+    
+    return place_token, click_data
 
 # Callback to update place summary
 @app.callback(
