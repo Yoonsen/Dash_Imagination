@@ -271,23 +271,23 @@ app.layout = html.Div([
         html.Div([
             html.Button("Corpus", id='corpus-button', style={
                 'padding': '8px 16px',
-                'backgroundColor': '#475569',  # Lighter slate
-                'color': 'white',
+                'backgroundColor': 'white',
+                'color': '#475569',
                 'border': 'none',
                 'borderRadius': '20px',
                 'cursor': 'pointer',
                 'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                'transition': 'background-color 0.2s'
+                'transition': 'all 0.2s'
             }),
             html.Button("Places", id='place-names-toggle', style={
                 'padding': '8px 16px',
-                'backgroundColor': '#475569',  # Lighter slate
-                'color': 'white',
+                'backgroundColor': 'white',
+                'color': '#475569',
                 'border': 'none',
                 'borderRadius': '20px',
                 'cursor': 'pointer',
                 'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                'transition': 'background-color 0.2s',
+                'transition': 'all 0.2s',
                 'marginLeft': '8px'
             }),
         ], style={'position': 'absolute', 'left': '20px', 'top': '20px', 'pointerEvents': 'auto'}),
@@ -297,23 +297,23 @@ app.layout = html.Div([
                 html.Div([
                     html.Button("Map", id='map-button', style={
                         'padding': '8px 16px',
-                        'backgroundColor': '#3b82f6',  # Lighter blue
-                        'color': 'white',
+                        'backgroundColor': 'white',
+                        'color': '#475569',
                         'border': 'none',
                         'borderRadius': '20px',
                         'cursor': 'pointer',
                         'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                        'transition': 'background-color 0.2s'
+                        'transition': 'all 0.2s'
                     }),
                     html.Button("Heatmap", id='heatmap-button', style={
                         'padding': '8px 16px',
-                        'backgroundColor': '#3b82f6',  # Lighter blue
-                        'color': 'white',
+                        'backgroundColor': 'white',
+                        'color': '#475569',
                         'border': 'none',
                         'borderRadius': '20px',
                         'cursor': 'pointer',
                         'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                        'transition': 'background-color 0.2s',
+                        'transition': 'all 0.2s',
                         'marginLeft': '8px'
                     }),
                 ], style={'display': 'flex', 'alignItems': 'flex-start'}),
@@ -1538,6 +1538,91 @@ def add_edge_points(points):
         points = np.vstack([points, edge_points])
     
     return points
+
+@app.callback(
+    [Output('map-button', 'style'),
+     Output('heatmap-button', 'style')],
+    [Input('view-toggle', 'value')],
+    [State('map-button', 'style'),
+     State('heatmap-button', 'style')]
+)
+def update_map_heatmap_styles(view_type, map_style, heatmap_style):
+    # Base styles
+    base_style = {
+        'padding': '8px 16px',
+        'backgroundColor': 'white',
+        'color': '#475569',
+        'border': 'none',
+        'borderRadius': '20px',
+        'cursor': 'pointer',
+        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+        'transition': 'all 0.2s'
+    }
+    
+    active_style = {
+        'padding': '8px 16px',
+        'backgroundColor': '#3b82f6',
+        'color': 'white',
+        'border': 'none',
+        'borderRadius': '20px',
+        'cursor': 'pointer',
+        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+        'transition': 'all 0.2s'
+    }
+    
+    # Update map button style
+    map_style = active_style.copy() if view_type == 'points' else base_style.copy()
+    if 'marginLeft' in map_style:
+        map_style['marginLeft'] = '8px'
+    
+    # Update heatmap button style
+    heatmap_style = active_style.copy() if view_type == 'heatmap' else base_style.copy()
+    if 'marginLeft' in heatmap_style:
+        heatmap_style['marginLeft'] = '8px'
+    
+    return map_style, heatmap_style
+
+@app.callback(
+    [Output('corpus-button', 'style'),
+     Output('place-names-toggle', 'style')],
+    [Input('corpus-modal', 'is_open'),
+     Input('place-names-container', 'style')],
+    [State('corpus-button', 'style'),
+     State('place-names-toggle', 'style')]
+)
+def update_corpus_places_styles(corpus_modal_open, place_names_style, corpus_style, places_style):
+    # Base styles
+    base_style = {
+        'padding': '8px 16px',
+        'backgroundColor': 'white',
+        'color': '#475569',
+        'border': 'none',
+        'borderRadius': '20px',
+        'cursor': 'pointer',
+        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+        'transition': 'all 0.2s'
+    }
+    
+    active_style = {
+        'padding': '8px 16px',
+        'backgroundColor': '#475569',
+        'color': 'white',
+        'border': 'none',
+        'borderRadius': '20px',
+        'cursor': 'pointer',
+        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+        'transition': 'all 0.2s'
+    }
+    
+    # Update corpus button style
+    corpus_style = active_style.copy() if corpus_modal_open else base_style.copy()
+    
+    # Update places button style
+    places_style = active_style.copy() if place_names_style and place_names_style.get('display') == 'block' else base_style.copy()
+    if 'marginLeft' in places_style:
+        places_style['marginLeft'] = '8px'
+    
+    return corpus_style, places_style
 
 # Run Server
 if __name__ == '__main__':
