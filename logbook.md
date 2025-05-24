@@ -65,4 +65,14 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Improved polygon completeness by adding edge points and ensuring closure
 - Adjusted cluster visualization to better represent spatial distribution of places
 
+## 2024-05-16: Environment Fixes and Pre-Deployment
+
+- Removed all references to `dash_virtualized` from the codebase and requirements.
+- Ensured that the app runs locally by either:
+  - Running from the `src/` directory with `pdm run python -m dash_imagination.app`, or
+  - Running from the project root with `PYTHONPATH=src pdm run python -m dash_imagination.app`.
+- Verified that the app starts and works locally with no import errors.
+- Confirmed that `scipy` is included in requirements for convex hull calculations.
+- Ready to commit, push, and deploy this version to Cloud Run.
+
 --- 

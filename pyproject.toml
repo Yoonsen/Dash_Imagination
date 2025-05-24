@@ -23,6 +23,7 @@ license = {text = "MIT"}
 
 [tool.pdm]
 distribution = false
+package-dir = "src"
 
 [build-system]
 requires = ["pdm-backend"]
