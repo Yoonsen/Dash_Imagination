@@ -255,7 +255,12 @@ app.layout = html.Div([
                 'showLink': False,
                 'showEditInChartStudio': False,
                 'showSendToCloud': False,
-                'responsive': True
+                'responsive': True,
+                'editable': False,
+                'edits': {
+                    'shapePosition': False,
+                    'annotationPosition': False
+                }
             }
         )
     ], style={'position': 'absolute', 'top': 0, 'left': 0, 'right': 0, 'bottom': 0}),
@@ -357,7 +362,7 @@ app.layout = html.Div([
     # ImagiNation info button and modal
     html.Div([
         html.Button([
-            html.H3("ImagiNation", style={
+            html.H3("ImagiNation v1.0.1", style={
                 'margin': '0',
                 'fontWeight': '400',
                 'color': '#333',
@@ -1104,7 +1109,9 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
             margin=dict(l=0, r=0, t=0, b=0),
             showlegend=False,
             uirevision='constant',
-            hovermode='closest'
+            hovermode='closest',
+            dragmode='pan',
+            clickmode='event'
         )
     else:
         fig.update_layout(
@@ -1116,7 +1123,9 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
             margin=dict(l=0, r=0, t=0, b=0),
             showlegend=False,
             uirevision='constant',
-            hovermode='closest'
+            hovermode='closest',
+            dragmode='pan',
+            clickmode='event'
         )
     print("Returning populated figure")
     return fig
