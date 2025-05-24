@@ -36,7 +36,7 @@ gcloud run deploy $APP_NAME \
   --region $REGION \
   --allow-unauthenticated \
   --set-env-vars APP_NAME=$APP_NAME,ENVIRONMENT=production \
-  --memory 512Mi \
+  --memory 1Gi \
   --timeout 3600 \
   --cpu 1
 

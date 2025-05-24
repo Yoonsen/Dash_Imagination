@@ -4,6 +4,7 @@ WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=production
+ENV PYTHONPATH=/app/src
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
