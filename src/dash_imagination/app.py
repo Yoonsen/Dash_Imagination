@@ -95,24 +95,28 @@ def get_titles():
     conn.close()
     return title_year_list
 
+# Initialize variables before layout
+default_filters = {
+    'year_range': [1850, 1880],
+    'categories': [],
+    'authors': [],
+    'titles': [],
+    'max_places': 1500,
+    'sample_size': 50
+}
+
+# Global variable for current corpus
+current_dhlabids = []
+
 def get_places_for_map(filters=None, return_total=False):
+    global current_dhlabids
     conn = get_db_connection()
-    sample_size = filters.get('sample_size', 50) if filters else 50
     max_places = filters.get('max_places', 1500) if filters else 1500
 
-    dhlabids=[]
-    if filters and 'uploaded_corpus' in filters and filters['uploaded_corpus']:
-        dhlabids = filters['uploaded_corpus']
-        print(f"Using uploaded corpus with {len(dhlabids)} dhlabids")
-        book_sample_query = f"""
-        SELECT dhlabid
-        FROM (SELECT DISTINCT dhlabid FROM books WHERE dhlabid IN ({','.join(['?'] * len(dhlabids))}))
-        ORDER BY RANDOM()
-        LIMIT ?
-        """
-        sampled_books = pd.read_sql_query(book_sample_query, conn, params=tuple(dhlabids) + (sample_size,))
-    else:
-        print("Falling back to Epikk sample")
+    # Initialize or update current_dhlabids if needed
+    if not current_dhlabids:
+        print("Initializing current corpus from Epikk")
+        sample_size = filters.get('sample_size', 50) if filters else 50
         book_sample_query = """
         SELECT dhlabid
         FROM corpus
@@ -121,27 +125,25 @@ def get_places_for_map(filters=None, return_total=False):
         LIMIT ?
         """
         sampled_books = pd.read_sql_query(book_sample_query, conn, params=(sample_size,))
+        current_dhlabids = sampled_books['dhlabid'].tolist()
+        print(f"Initialized corpus with {len(current_dhlabids)} books")
 
-    if sampled_books.empty:
-        print("No books sampled")
+    print(f"Using current corpus with {len(current_dhlabids)} books")
+
+    if not current_dhlabids:
+        print("No books in current corpus")
         conn.close()
         return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'global_counts', 'book_count'])
 
-    sampled_dhlabids = sampled_books['dhlabid'].tolist()
-    print(f"Sampled dhlabids: {len(sampled_dhlabids)} - {sampled_dhlabids[:5]}...")
-
     # Total places query without LIMIT
-    if filters and 'uploaded_corpus' in filters:
-        total_query = """
-        SELECT COUNT(DISTINCT p.token) as total_places
-        FROM places p
-        JOIN books bp ON p.token = bp.token
-        WHERE bp.dhlabid IN ({})
-        """.format(','.join(['?'] * len(dhlabids)))
-        total_places_df = pd.read_sql_query(total_query, conn, params=tuple(dhlabids))
-        total_places = total_places_df['total_places'].iloc[0] if not total_places_df.empty else 0
-    else:
-        total_places = 0  # Default for non-uploaded corpus
+    total_query = """
+    SELECT COUNT(DISTINCT p.token) as total_places
+    FROM places p
+    JOIN books bp ON p.token = bp.token
+    WHERE bp.dhlabid IN ({})
+    """.format(','.join(['?'] * len(current_dhlabids)))
+    total_places_df = pd.read_sql_query(total_query, conn, params=tuple(current_dhlabids))
+    total_places = total_places_df['total_places'].iloc[0] if not total_places_df.empty else 0
 
     # Limited places query
     base_query = """
@@ -153,9 +155,9 @@ def get_places_for_map(filters=None, return_total=False):
     GROUP BY p.token, p.modern, p.latitude, p.longitude
     ORDER BY frequency DESC
     LIMIT ?
-    """.format(','.join(['?'] * len(sampled_dhlabids)))
-    df = pd.read_sql_query(base_query, conn, params=tuple(sampled_dhlabids) + (max_places,))
-    print(f"Sampled {len(sampled_dhlabids)} books, got {len(df)} places")
+    """.format(','.join(['?'] * len(current_dhlabids)))
+    df = pd.read_sql_query(base_query, conn, params=tuple(current_dhlabids) + (max_places,))
+    print(f"Got {len(df)} places from {len(current_dhlabids)} books")
     conn.close()
     
     if return_total:
@@ -163,48 +165,53 @@ def get_places_for_map(filters=None, return_total=False):
     return df
 
 def get_place_details(token, filters=None):
+    global current_dhlabids
     conn = get_db_connection()
-    query = """
-    SELECT DISTINCT c.title, c.author, c.year, c.urn, bp.book_count
-    FROM corpus c
-    JOIN books bp ON c.dhlabid = bp.dhlabid
-    WHERE bp.token = ?
+    
+    if not current_dhlabids:
+        print("No books in current corpus")
+        conn.close()
+        return pd.DataFrame(columns=['title', 'author', 'year', 'urn', 'mentions'])
+    
+    print(f"Getting place details for token {token} in {len(current_dhlabids)} books")
+    
+    # Split dhlabids into chunks to avoid SQLite parameter limit
+    chunk_size = 500  # SQLite's default limit is 999 parameters
+    dhlabid_chunks = [current_dhlabids[i:i + chunk_size] for i in range(0, len(current_dhlabids), chunk_size)]
+    
+    # Build the query with UNION ALL for each chunk
+    query_parts = []
+    all_params = []
+    
+    for chunk in dhlabid_chunks:
+        chunk_query = f"""
+        SELECT DISTINCT c.title, c.author, c.year, c.urn, 
+               SUM(bp.book_count) as mentions
+        FROM corpus c
+        JOIN books bp ON c.dhlabid = bp.dhlabid
+        WHERE bp.token = ?
+        AND c.dhlabid IN ({','.join(['?'] * len(chunk))})
+        GROUP BY c.title, c.author, c.year, c.urn
+        """
+        query_parts.append(chunk_query)
+        all_params.extend([token] + chunk)
+    
+    # Combine all parts with UNION ALL
+    final_query = " UNION ALL ".join(query_parts)
+    
+    # Add final grouping and ordering
+    final_query = f"""
+    WITH all_results AS ({final_query})
+    SELECT title, author, year, urn, SUM(mentions) as mentions
+    FROM all_results
+    GROUP BY title, author, year, urn
+    ORDER BY mentions DESC
+    LIMIT 20
     """
-    params = [token]
-    conditions = []
     
-    if filters:
-        if 'uploaded_corpus' in filters and filters['uploaded_corpus']:
-            dhlabids = filters['uploaded_corpus']
-            conditions.append(f"c.dhlabid IN ({','.join(['?'] * len(dhlabids))})")
-            params.extend(dhlabids)
-        if 'categories' in filters and filters['categories']:
-            categories = filters['categories']
-            conditions.append(f"c.category IN ({','.join(['?'] * len(categories))})")
-            params.extend(categories)
-        if 'titles' in filters and filters['titles']:
-            titles = [title.split(' (')[0] for title in filters['titles']]
-            conditions.append(f"c.title IN ({','.join(['?'] * len(titles))})")
-            params.extend(titles)
-    
-    if conditions:
-        query += " AND " + " AND ".join(conditions)
-    query += " ORDER BY bp.book_count DESC LIMIT 20"
-    print(query, params)
-    books = pdquery(conn, query, tuple(params))
+    books = pdquery(conn, final_query, tuple(all_params))
     conn.close()
     return books
-
-
-# Initialize variables before layout
-default_filters = {
-    'year_range': [1850, 1880],
-    'categories': [],
-    'authors': [],
-    'titles': [],
-    'max_places': 1500,
-    'sample_size': 50
-}
 
 # Initialize lists with defaults
 authors_list = ["Ibsen", "Bjørnson", "Collett", "Lie", "Kielland"]
@@ -579,6 +586,7 @@ app.index_string = '''
      State('current-filters', 'data')]
 )
 def update_state_and_filters(contents, max_places, sample_size, reset_clicks, filename, date, current_filters):
+    global current_dhlabids
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
@@ -586,6 +594,7 @@ def update_state_and_filters(contents, max_places, sample_size, reset_clicks, fi
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
     if trigger_id == 'reset-corpus':
+        current_dhlabids = []  # Reset the global corpus
         return '', {}, default_filters
     
     if trigger_id == 'upload-corpus' and contents:
@@ -596,13 +605,12 @@ def update_state_and_filters(contents, max_places, sample_size, reset_clicks, fi
             if 'dhlabid' not in df.columns:
                 return html.Div('Error: File must contain a dhlabid column', style={'color': 'red'}), {}, current_filters
             
-            dhlabids = df['dhlabid'].tolist()
+            current_dhlabids = df['dhlabid'].tolist()  # Update the global corpus
             new_filters = current_filters.copy() if current_filters else default_filters.copy()
-            new_filters['uploaded_corpus'] = dhlabids
             new_filters['sample_size'] = sample_size
             new_filters['max_places'] = max_places
             
-            return html.Div(f'Successfully loaded {len(dhlabids)} books', style={'color': 'green'}), {'uploaded': True}, new_filters
+            return html.Div(f'Successfully loaded {len(current_dhlabids)} books', style={'color': 'green'}), {'uploaded': True}, new_filters
         except Exception as e:
             return html.Div(f'Error processing file: {str(e)}', style={'color': 'red'}), {}, current_filters
     
@@ -1033,7 +1041,7 @@ def update_place_summary(click_data, current_style, filters):
                             html.Div(f"{row['title']} ({row['year']})", style={'fontWeight': '500'}),
                             html.Div([
                                 html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
-                                html.Span(f" • {int(row['book_count'])} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                                html.Span(f" • {int(row['mentions'])} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
                             ], style={'display': 'flex', 'justifyContent': 'space-between'}),
                             html.Div([
                                 html.A("View at National Library", href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{token}\"",
@@ -1107,9 +1115,9 @@ def update_corpus_stats(filters):
     
     # Determine the corpus source
     conn = get_db_connection()
-    if filters.get('uploaded_corpus'):
-        dhlabids = filters['uploaded_corpus']
-        print(f"Using uploaded corpus with {len(dhlabids)} dhlabids")
+    if filters.get('current_corpus'):
+        dhlabids = filters['current_corpus']
+        print(f"Using current corpus with {len(dhlabids)} dhlabids")
         num_books = len(dhlabids)
         book_query = f"""
         SELECT dhlabid, year
@@ -1163,7 +1171,7 @@ def update_corpus_stats(filters):
     conn.close()
     
     # Customize description based on corpus source
-    corpus_source = "Uploaded corpus" if filters.get('uploaded_corpus') else "Category-based corpus" if filters.get('categories') else "Default Epikk sample"
+    corpus_source = "Current corpus" if filters.get('current_corpus') else "Category-based corpus" if filters.get('categories') else "Default Epikk sample"
     return html.Div([
         html.P(f"Corpus source: {corpus_source}"),
         html.P(f"Number of books: {num_books}"),
