@@ -57,4 +57,12 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Include both technical and user-facing changes
 - Document any challenges and their solutions
 
+## 2024-03-19: Improved Cluster Visualization
+- Added polygon visualization for clusters when clicked
+- Implemented convex hull for clusters with 3+ points
+- Added oval visualization for 2-point clusters
+- Fixed polygon edge handling for clusters spanning map boundaries
+- Improved polygon completeness by adding edge points and ensuring closure
+- Adjusted cluster visualization to better represent spatial distribution of places
+
 --- 

@@ -11,6 +11,8 @@ import io
 from dash.exceptions import PreventUpdate
 from dash_imagination.components.map import create_map_controls
 from dash_imagination.components.corpus import create_corpus_controls
+from scipy.spatial import ConvexHull
+import math
 
 #=== initialize
 
@@ -757,14 +759,16 @@ def update_category_selection(*args):
      Input('heatmap-intensity', 'value'),
      Input('heatmap-radius', 'value'),
      Input('top-cluster-toggle', 'value'),
-     Input('selected-place', 'data')]
+     Input('selected-place', 'data'),
+     Input('main-map', 'clickData')]
 )
-def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_intensity, heatmap_radius, cluster_toggle, selected_place):
+def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_intensity, heatmap_radius, cluster_toggle, selected_place, click_data):
     print("!!! update_map TRIGGERED !!!")
     print(f"View type: {view_type}")
     print(f"Filtered data: {filtered_data_json is not None}")
     print(f"Cluster toggle: {cluster_toggle}")
     print(f"Selected place: {selected_place}")
+    print(f"Click data: {click_data}")
     
     if filtered_data_json is None:
         print("No cached data available")
@@ -831,6 +835,14 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
             clustered['cluster'] = ((clustered['latitude'] / threshold).round() * 1000 + 
                                   (clustered['longitude'] / threshold).round()).astype(int)
             
+            # Store original points for each cluster for polygon creation
+            cluster_points = {}
+            for _, row in clustered.iterrows():
+                cluster_id = row['cluster']
+                if cluster_id not in cluster_points:
+                    cluster_points[cluster_id] = []
+                cluster_points[cluster_id].append((row['longitude'], row['latitude']))
+            
             # Aggregate clustered points with unique place names
             cluster_data = clustered.groupby('cluster').agg({
                 'latitude': 'mean',
@@ -859,6 +871,126 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
                 visible=(view_type == 'points'),
                 name='Clusters'
             ))
+            
+            # If a cluster is clicked, add a polygon showing its coverage area
+            if click_data and 'points' in click_data:
+                point = click_data['points'][0]
+                if 'Cluster of' in point.get('text', ''):
+                    # Find the clicked cluster
+                    clicked_lat = point['lat']
+                    clicked_lon = point['lon']
+                    
+                    # Find the cluster ID that matches these coordinates
+                    clicked_cluster = cluster_data[
+                        (cluster_data['latitude'] == clicked_lat) & 
+                        (cluster_data['longitude'] == clicked_lon)
+                    ]['cluster'].iloc[0]
+                    
+                    # Get the points for this cluster
+                    points = cluster_points[clicked_cluster]
+                    
+                    if len(points) == 2:
+                        # For two points, create an oval aligned with the points
+                        p1_lon, p1_lat = points[0]
+                        p2_lon, p2_lat = points[1]
+                        
+                        # Calculate center point
+                        center_lat = (p1_lat + p2_lat) / 2
+                        center_lon = (p1_lon + p2_lon) / 2
+                        
+                        # Calculate distance between points
+                        lat_diff = p2_lat - p1_lat
+                        lon_diff = p2_lon - p1_lon
+                        distance_km = math.sqrt(lat_diff**2 + lon_diff**2) * 111.32
+                        
+                        # Calculate bearing between points
+                        bearing = calculate_bearing(p1_lat, p1_lon, p2_lat, p2_lon)
+                        
+                        # Create rotated ellipse
+                        # Use distance/2 as radius and make it slightly wider perpendicular to the line
+                        lats, lons = create_rotated_ellipse(
+                            center_lat, center_lon,
+                            distance_km/2,  # Half the distance between points
+                            bearing,
+                            points=100
+                        )
+                        
+                        fig.add_trace(go.Scattermap(
+                            lat=lats,
+                            lon=lons,
+                            mode='lines',
+                            line=dict(color='#1E40AF', width=2),
+                            fill='toself',
+                            fillcolor='rgba(30, 64, 175, 0.1)',
+                            hoverinfo='skip',
+                            showlegend=False
+                        ))
+                        
+                    elif len(points) >= 3:
+                        # For three or more points, use convex hull
+                        points_array = np.array(points)
+                        
+                        try:
+                            # Add edge points if needed
+                            points_array = add_edge_points(points_array)
+                            
+                            # Calculate convex hull
+                            hull = ConvexHull(points_array)
+                            
+                            # Get the hull vertices
+                            hull_points = points_array[hull.vertices]
+                            
+                            # Ensure the polygon is closed by adding the first point at the end
+                            hull_points = np.vstack([hull_points, hull_points[0]])
+                            
+                            # Add the polygon
+                            fig.add_trace(go.Scattermap(
+                                lat=hull_points[:, 1],  # latitude is second column
+                                lon=hull_points[:, 0],  # longitude is first column
+                                mode='lines',
+                                line=dict(color='#1E40AF', width=2),
+                                fill='toself',
+                                fillcolor='rgba(30, 64, 175, 0.1)',
+                                hoverinfo='skip',
+                                showlegend=False
+                            ))
+                        except Exception as e:
+                            print(f"Error calculating convex hull: {e}")
+                            # Fallback to circle if convex hull fails
+                            radius_km = 200
+                            radius_deg = radius_km / 111.32
+                            angles = np.linspace(0, 2*np.pi, 100)
+                            circle_lats = clicked_lat + radius_deg * np.cos(angles)
+                            circle_lons = clicked_lon + radius_deg * np.sin(angles)
+                            
+                            fig.add_trace(go.Scattermap(
+                                lat=circle_lats,
+                                lon=circle_lons,
+                                mode='lines',
+                                line=dict(color='#1E40AF', width=2),
+                                fill='toself',
+                                fillcolor='rgba(30, 64, 175, 0.1)',
+                                hoverinfo='skip',
+                                showlegend=False
+                            ))
+                    else:
+                        # For single points, use a small circle
+                        radius_km = 50  # Smaller radius for small clusters
+                        radius_deg = radius_km / 111.32
+                        angles = np.linspace(0, 2*np.pi, 100)
+                        circle_lats = clicked_lat + radius_deg * np.cos(angles)
+                        circle_lons = clicked_lon + radius_deg * np.sin(angles)
+                        
+                        fig.add_trace(go.Scattermap(
+                            lat=circle_lats,
+                            lon=circle_lons,
+                            mode='lines',
+                            line=dict(color='#1E40AF', width=2),
+                            fill='toself',
+                            fillcolor='rgba(30, 64, 175, 0.1)',
+                            hoverinfo='skip',
+                            showlegend=False
+                        ))
         else:
             print("No valid data for clustering")
     else:
@@ -996,11 +1128,9 @@ def update_place_list(filtered_data_json, search_term, selected_place):
     # Limit to top 5000 places
     places_df = places_df.head(5000)
     
-    # Create list items with improved styling
-    place_items = []
-    for i, row in places_df.iterrows():
+    def create_place_item(row):
         is_selected = selected_place == row['token']
-        place_items.append(html.Div([
+        return html.Div([
             html.Div([
                 html.Div(f"{row['token']}", style={'fontWeight': 'bold', 'fontSize': '1rem'}),
                 html.Div(f"{row['name']}", style={'color': '#666', 'fontSize': '0.9rem'})
@@ -1015,18 +1145,19 @@ def update_place_list(filtered_data_json, search_term, selected_place):
             'transition': 'background-color 0.2s',
             'cursor': 'pointer',
             'backgroundColor': '#ffebee' if is_selected else 'transparent'
-        }, className='place-item', id={'type': 'place-item', 'index': row['token']}))
+        }, className='place-item', id={'type': 'place-item', 'index': row['token']})
     
-    if not place_items:
+    if places_df.empty:
         return html.Div("No matching places found"), None
     
-    # Create the scrollable container with improved styling
+    # Create the list container with improved performance
     return html.Div([
         html.Div([
-            html.Div(f"Showing {len(place_items)} of {len(places_df)} places", 
+            html.Div(f"Showing {len(places_df)} places", 
                      style={'marginBottom': '8px', 'fontSize': '0.9rem', 'color': '#666'}),
             html.Div([
-                html.Div(place_items, style={'maxHeight': 'calc(100vh - 200px)', 'overflowY': 'auto'})
+                html.Div([create_place_item(row) for _, row in places_df.iterrows()], 
+                        style={'maxHeight': '400px', 'overflowY': 'auto'})
             ], style={'border': '1px solid #eee', 'borderRadius': '4px', 'padding': '8px'})
         ], style={'padding': '12px'})
     ], style={'backgroundColor': 'white', 'borderRadius': '8px', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'}), selected_place
@@ -1317,6 +1448,63 @@ def update_view_type_from_buttons(map_clicks, heatmap_clicks, current_view):
     elif button_id == 'heatmap-button':
         return 'heatmap'
     return current_view
+
+def calculate_bearing(lat1, lon1, lat2, lon2):
+    """Calculate the bearing between two points in degrees."""
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    dlon = lon2 - lon1
+    y = math.sin(dlon) * math.cos(lat2)
+    x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+    bearing = math.degrees(math.atan2(y, x))
+    return (bearing + 360) % 360
+
+def create_rotated_ellipse(center_lat, center_lon, radius_km, bearing, points=100):
+    """Create an ellipse rotated by the given bearing."""
+    radius_deg = radius_km / 111.32  # Convert km to degrees
+    angles = np.linspace(0, 2*np.pi, points)
+    
+    # Create points for a circle
+    x = radius_deg * np.cos(angles)
+    y = radius_deg * np.sin(angles)
+    
+    # Rotate the points (subtract 90 degrees to align with the line)
+    bearing_rad = math.radians(bearing - 90)  # Subtract 90 degrees to align with the line
+    x_rot = x * np.cos(bearing_rad) - y * np.sin(bearing_rad)
+    y_rot = x * np.sin(bearing_rad) + y * np.cos(bearing_rad)
+    
+    # Translate to center point
+    lats = center_lat + y_rot
+    lons = center_lon + x_rot
+    
+    return lats, lons
+
+def add_edge_points(points):
+    """Add points at map edges to ensure complete polygon."""
+    # Convert to numpy array for easier manipulation
+    points = np.array(points)
+    
+    # Get bounds
+    min_lon, max_lon = points[:, 0].min(), points[:, 0].max()
+    min_lat, max_lat = points[:, 1].min(), points[:, 1].max()
+    
+    # If points span more than 180 degrees, we need to handle the wrap-around
+    if max_lon - min_lon > 180:
+        # Add points at the edges
+        edge_points = []
+        for lat in np.linspace(min_lat, max_lat, 20):  # Increased number of points
+            edge_points.append([-180, lat])  # Left edge
+            edge_points.append([180, lat])   # Right edge
+        
+        # Add points at the corners
+        edge_points.extend([
+            [-180, min_lat], [-180, max_lat],
+            [180, min_lat], [180, max_lat]
+        ])
+        
+        # Combine with original points
+        points = np.vstack([points, edge_points])
+    
+    return points
 
 # Run Server
 if __name__ == '__main__':
