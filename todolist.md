@@ -34,6 +34,11 @@ Target completion: June 2024
 - [ ] Implement export options
 - [ ] Add corpus comparison feature
 - [ ] Create corpus metadata display
+- [ ] Implement concordance-based place selection:
+  - [ ] Add concordance search interface
+  - [ ] Create place extraction from concordance results
+  - [ ] Implement place filtering based on context
+  - [ ] Add place frequency analysis
 
 ## 3. Heatmap Controls
 **Target: June 1-15**
@@ -52,6 +57,11 @@ Target completion: June 2024
 - [ ] Implement heatmap presets
 - [ ] Add heatmap export functionality
 - [ ] Create heatmap comparison view
+- [ ] Implement cluster radius controls:
+  - [ ] Add dynamic radius adjustment
+  - [ ] Create radius presets for different zoom levels
+  - [ ] Implement radius-based clustering algorithm
+  - [ ] Add visual feedback for radius changes
 
 ## Testing and Refinement
 **Target: June 16-30**
