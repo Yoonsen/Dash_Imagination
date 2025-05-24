@@ -42,14 +42,26 @@ else:
 print(f"Using database at: {db_path}")
 
 # Initialize Dash App
-app = dash.Dash(
-    __name__,
-    external_stylesheets=[
-        dbc.themes.BOOTSTRAP,
-        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
-    ],
-    suppress_callback_exceptions=True
-)
+if is_production:
+    app = dash.Dash(
+        __name__,
+        routes_pathname_prefix=f'/{app_name}/',
+        requests_pathname_prefix=f"/run/{app_name}/app/",
+        external_stylesheets=[
+            dbc.themes.BOOTSTRAP,
+            "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
+        ],
+        suppress_callback_exceptions=True
+    )
+else:
+    app = dash.Dash(
+        __name__,
+        external_stylesheets=[
+            dbc.themes.BOOTSTRAP,
+            "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
+        ],
+        suppress_callback_exceptions=True
+    )
 
 server = app.server
 
