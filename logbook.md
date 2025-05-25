@@ -141,4 +141,18 @@ Attempted to modify the app to start with an empty map and build corpus from pla
 - Improve error handling for empty corpus state
 - Revisit place similarity integration with empty corpus
 
+## March 2024
+
+### March 19, 2024
+- Implemented place dialogue with similarity search
+- Added filtering results based on place names
+- Added "Add All" button to construct corpus from place list
+- Fixed button spacing and layout in the UI
+- Modified app to start with empty corpus (no default data)
+- Added filename display as corpus source when uploading
+- Improved user flow: map starts empty and can be populated through corpus selection
+
+### March 18, 2024
+// ... existing code ...
+
 --- 

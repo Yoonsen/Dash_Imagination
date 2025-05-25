@@ -14,6 +14,7 @@ from dash_imagination.components.corpus import create_corpus_controls
 from scipy.spatial import ConvexHull
 import math
 from dash_imagination.components.places.place_similarity import create_place_similarity_controls
+from dash_imagination.utils.db import get_db_connection
 
 #=== initialize
 
@@ -27,20 +28,10 @@ if is_production:
 elif is_chromebook:
     db_path = "/home/yoonsen/Dash_Imagination/src/dash_imagination/data/imagination.db"
 else:
-    # Development environment - use relative path from current directory
-    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "imagination.db")
+    # Development environment - use the correct path directly
+    db_path = "/mnt/disk1/Github/Dash_Imagination/src/dash_imagination/data/imagination.db"
     if not os.path.exists(db_path):
         print(f"Warning: Database not found at {db_path}")
-        # Try alternative paths
-        alt_paths = [
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "imagination.db"),
-            "/mnt/disk1/Github/Dash_Imagination/src/dash_imagination/data/imagination.db"
-        ]
-        for path in alt_paths:
-            if os.path.exists(path):
-                db_path = path
-                print(f"Found database at alternative path: {db_path}")
-                break
 
 print(f"Using database at: {db_path}")
 
@@ -69,17 +60,6 @@ else:
 server = app.server
 
 # Database Connection & Queries
-def get_db_connection():
-    print(f"Connecting to database at: {db_path}")
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
-    except Exception as e:
-        print(f"Database connection error: {e}")
-        # You could return a dummy connection or raise the error
-        raise
-
 def pdquery(conn, query, params=()):
     return pd.read_sql_query(query, conn, params=params)
 
@@ -128,26 +108,13 @@ def get_places_for_map(filters=None, return_total=False):
     conn = get_db_connection()
     max_places = filters.get('max_places', 1500) if filters else 1500
 
-    # Initialize or update current_dhlabids if needed
-    if not current_dhlabids:
-        print("Initializing current corpus from Epikk")
-        sample_size = filters.get('sample_size', 50) if filters else 50
-        book_sample_query = """
-        SELECT dhlabid
-        FROM corpus
-        WHERE category = 'Diktning: Epikk'
-        ORDER BY RANDOM()
-        LIMIT ?
-        """
-        sampled_books = pd.read_sql_query(book_sample_query, conn, params=(sample_size,))
-        current_dhlabids = sampled_books['dhlabid'].tolist()
-        print(f"Initialized corpus with {len(current_dhlabids)} books")
-
     print(f"Using current corpus with {len(current_dhlabids)} books")
 
     if not current_dhlabids:
         print("No books in current corpus")
         conn.close()
+        if return_total:
+            return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'global_counts', 'book_count']), 0
         return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'global_counts', 'book_count'])
 
     # Total places query without LIMIT
@@ -295,40 +262,38 @@ app.layout = html.Div([
         # Display options (right)
         html.Div([
             html.Div([
-                html.Div([
-                    html.Button("Map", id='map-button', style={
-                        'padding': '8px 16px',
-                        'backgroundColor': 'white',
-                        'color': '#475569',
-                        'border': 'none',
-                        'borderRadius': '20px',
-                        'cursor': 'pointer',
-                        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                        'transition': 'all 0.2s'
-                    }),
-                    html.Button("Heatmap", id='heatmap-button', style={
-                        'padding': '8px 16px',
-                        'backgroundColor': 'white',
-                        'color': '#475569',
-                        'border': 'none',
-                        'borderRadius': '20px',
-                        'cursor': 'pointer',
-                        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                        'transition': 'all 0.2s',
-                        'marginLeft': '8px'
-                    }),
-                ], style={'display': 'flex', 'alignItems': 'flex-start'}),
-                html.Div([
-                    html.Label([
-                        dcc.Checklist(
-                            id='top-cluster-toggle',
-                            options=[{'label': 'Cluster', 'value': 'cluster'}],
-                            value=[],
-                            style={'marginLeft': '10px', 'display': 'inline-block'}
-                        )
-                    ], style={'fontSize': '12px', 'color': '#666', 'marginTop': '4px'})
-                ])
-            ], style={'display': 'inline-block'}),
+                html.Button("Map", id='map-button', style={
+                    'padding': '8px 16px',
+                    'backgroundColor': 'white',
+                    'color': '#475569',
+                    'border': 'none',
+                    'borderRadius': '20px',
+                    'cursor': 'pointer',
+                    'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                    'transition': 'all 0.2s'
+                }),
+                html.Button("Heatmap", id='heatmap-button', style={
+                    'padding': '8px 16px',
+                    'backgroundColor': 'white',
+                    'color': '#475569',
+                    'border': 'none',
+                    'borderRadius': '20px',
+                    'cursor': 'pointer',
+                    'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                    'transition': 'all 0.2s',
+                    'marginLeft': '8px'
+                }),
+            ], style={'display': 'flex', 'alignItems': 'flex-start'}),
+            html.Div([
+                html.Label([
+                    dcc.Checklist(
+                        id='top-cluster-toggle',
+                        options=[{'label': 'Cluster', 'value': 'cluster'}],
+                        value=[],
+                        style={'marginLeft': '10px', 'display': 'inline-block'}
+                    )
+                ], style={'fontSize': '12px', 'color': '#666', 'marginTop': '4px'})
+            ])
         ], style={'position': 'absolute', 'right': '20px', 'top': '20px', 'pointerEvents': 'auto'}),
     ], style={
         'position': 'fixed',
@@ -635,8 +600,9 @@ def update_state_and_filters(contents, max_places, sample_size, reset_clicks, fi
             new_filters = current_filters.copy() if current_filters else default_filters.copy()
             new_filters['sample_size'] = sample_size
             new_filters['max_places'] = max_places
+            new_filters['corpus_source'] = filename  # Store the filename as corpus source
             
-            return html.Div(f'Successfully loaded {len(current_dhlabids)} books', style={'color': 'green'}), {'uploaded': True}, new_filters
+            return html.Div(f'Successfully loaded {len(current_dhlabids)} books from {filename}', style={'color': 'green'}), {'uploaded': True, 'filename': filename}, new_filters
         except Exception as e:
             return html.Div(f'Error processing file: {str(e)}', style={'color': 'red'}), {}, current_filters
     
@@ -788,20 +754,45 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     print(f"Selected place: {selected_place}")
     print(f"Click data: {click_data}")
     
+    # Create base figure with default view of Norway
+    fig = go.Figure()
+    
+    # Add a dummy trace to ensure the map displays
+    fig.add_trace(go.Scattermap(
+        lat=[60.5],
+        lon=[9.0],
+        mode='markers',
+        marker=dict(size=1, color='rgba(0,0,0,0)'),
+        showlegend=False
+    ))
+    
     if filtered_data_json is None:
         print("No cached data available")
-        return go.Figure()
+        fig.update_layout(
+            map=dict(
+                style=map_style or 'open-street-map',
+                center=dict(lat=60.5, lon=9.0),  # Center on Norway
+                zoom=4
+            ),
+            margin=dict(l=0, r=0, t=0, b=0),
+            showlegend=False,
+            uirevision='constant'
+        )
+        return fig
     
     # Load cached data
     places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split')
     print(f"Number of places from cache: {len(places_df)}")
     print(f"Places data: {places_df.head()}")
     
-    fig = go.Figure()
     if places_df.empty:
         print("Returning empty figure")
         fig.update_layout(
-            map=dict(style=map_style or 'open-street-map'),
+            map=dict(
+                style=map_style or 'open-street-map',
+                center=dict(lat=60.5, lon=9.0),  # Center on Norway
+                zoom=4
+            ),
             margin=dict(l=0, r=0, t=0, b=0),
             showlegend=False,
             uirevision='constant'
@@ -1410,16 +1401,9 @@ def update_corpus_stats(filters):
         books_df = pd.read_sql_query(book_query, conn, params=tuple(categories))
         num_books = len(books_df)
     else:
-        print("Falling back to default Epikk sample")
-        book_query = """
-        SELECT dhlabid, year
-        FROM corpus
-        WHERE category = 'Diktning: Epikk'
-        AND year IS NOT NULL
-        LIMIT 50
-        """
-        books_df = pd.read_sql_query(book_query, conn)
-        num_books = len(books_df)
+        print("No corpus selected")
+        books_df = pd.DataFrame()
+        num_books = 0
     
     # Get the period from metadata
     if not books_df.empty:
@@ -1427,7 +1411,7 @@ def update_corpus_stats(filters):
         max_year = int(books_df['year'].max())
         year_range = f"{min_year}–{max_year}"
     else:
-        year_range = "Unknown period"
+        year_range = "No period data"
     
     # Get total places and filtered places
     places_df, total_places = get_places_for_map(filters, return_total=True)
@@ -1443,11 +1427,11 @@ def update_corpus_stats(filters):
     conn.close()
     
     # Customize description based on corpus source
-    corpus_source = "Current corpus" if filters.get('current_corpus') else "Category-based corpus" if filters.get('categories') else "Default Epikk sample"
+    corpus_source = filters.get('corpus_source', 'No corpus selected')
     return html.Div([
         html.P(f"Corpus source: {corpus_source}"),
         html.P(f"Number of books: {num_books}"),
-        html.P(f"Total places in corpus: {total_places}"),  # Added back
+        html.P(f"Total places in corpus: {total_places}"),
         html.P(f"Period: {year_range}"),
         html.P(f"Filters: {category_count} categories, {title_count} works"),
         html.P(f"Places shown: {total_places_shown}"),
@@ -1575,13 +1559,10 @@ def update_map_heatmap_styles(view_type, map_style, heatmap_style):
     
     # Update map button style
     map_style = active_style.copy() if view_type == 'points' else base_style.copy()
-    if 'marginLeft' in map_style:
-        map_style['marginLeft'] = '8px'
     
     # Update heatmap button style
     heatmap_style = active_style.copy() if view_type == 'heatmap' else base_style.copy()
-    if 'marginLeft' in heatmap_style:
-        heatmap_style['marginLeft'] = '8px'
+    heatmap_style['marginLeft'] = '8px'  # Always maintain the margin
     
     return map_style, heatmap_style
 
@@ -1622,8 +1603,7 @@ def update_corpus_places_styles(corpus_modal_open, place_names_style, corpus_sty
     
     # Update places button style
     places_style = active_style.copy() if place_names_style and place_names_style.get('display') == 'block' else base_style.copy()
-    if 'marginLeft' in places_style:
-        places_style['marginLeft'] = '8px'
+    places_style['marginLeft'] = '8px'  # Always maintain the margin
     
     return corpus_style, places_style
 
