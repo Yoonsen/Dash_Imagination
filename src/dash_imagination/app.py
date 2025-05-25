@@ -13,6 +13,7 @@ from dash_imagination.components.map import create_map_controls
 from dash_imagination.components.corpus import create_corpus_controls
 from scipy.spatial import ConvexHull
 import math
+from dash_imagination.components.places.place_similarity import create_place_similarity_controls
 
 #=== initialize
 
@@ -491,6 +492,8 @@ app.layout = html.Div([
                 'cursor': 'grab'
             }, id='places-header'),
             html.Div([
+                create_place_similarity_controls(),
+                html.Hr(),
                 dcc.Input(
                     id='place-search',
                     type='text',

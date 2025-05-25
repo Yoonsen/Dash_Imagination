@@ -75,4 +75,39 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Confirmed that `scipy` is included in requirements for convex hull calculations.
 - Ready to commit, push, and deploy this version to Cloud Run.
 
+## 2024-03-19: Place Similarity Feature Implementation
+
+### Overview
+Added a new feature to find similar places within the current corpus using the NB API's word similarity endpoint.
+
+### Changes Made
+1. Created new components:
+   - `place_similarity.py`: Handles the UI and logic for similar place search
+   - `word_similarity.py`: API client for the NB word similarity endpoint
+
+2. Features implemented:
+   - Search box for entering words to find similar places
+   - Similarity threshold slider (0.5 to 1.0)
+   - Results list showing similar places with scores
+   - "Add to List" functionality to add places to main list
+   - Return key support for search
+   - Integration with existing corpus and place list
+
+3. Technical details:
+   - Uses the `/dhlab/similarity/sim_words` endpoint
+   - Filters similar words against current corpus places
+   - Proper DataFrame handling for filtered data
+   - Pattern matching callbacks for dynamic place buttons
+
+### Testing Notes
+- Feature works with the existing corpus selection
+- Similar places are filtered to only show those in current corpus
+- Places can be added to the main list with one click
+- Return key triggers search in addition to search button
+
+### Next Steps
+- Consider adding more advanced filtering options
+- Potentially add batch selection of similar places
+- Consider caching similar word results for better performance
+
 --- 

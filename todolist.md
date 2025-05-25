@@ -39,6 +39,17 @@ Target completion: June 2024
   - [ ] Create place extraction from concordance results
   - [ ] Implement place filtering based on context
   - [ ] Add place frequency analysis
+- [ ] Implement contextual place selection:
+  - [ ] Add word context search (e.g., war, sickness)
+  - [ ] Create interface for selecting context words
+  - [ ] Implement place filtering based on word proximity
+  - [ ] Add visualization of context relationships
+- [ ] Implement place similarity search:
+  - [ ] Integrate with Qdrant instance for 19th century words
+  - [ ] Create similarity search interface
+  - [ ] Add place name similarity matching
+  - [ ] Implement similarity score visualization
+  - [ ] Add filtering by similarity threshold
 
 ## 3. Heatmap Controls
 **Target: June 1-15**
