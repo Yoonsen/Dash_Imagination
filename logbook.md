@@ -110,36 +110,33 @@ Added a new feature to find similar places within the current corpus using the N
 - Potentially add batch selection of similar places
 - Consider caching similar word results for better performance
 
-## 2024-05-16: Empty Map and Corpus from Places Experiment
+## 2024-05-16: Empty Map Implementation and Initial Display Fix
 
 ### Overview
-Attempted to modify the app to start with an empty map and build corpus from places.
+Successfully implemented the empty map approach and fixed initial display issues.
 
-### Changes Attempted
-1. Modified app initialization:
-   - Started with empty map instead of default corpus
-   - Removed automatic corpus loading
-   - Set `current_dhlabids` to empty list initially
+### Changes Made
+1. Modified `get_places_for_map` function:
+   - Added early return of empty DataFrame when no filters or selected tokens
+   - Ensured map starts completely empty on initial load
+   - Places only appear after explicit user interaction
 
-2. Added place selection features:
-   - Added "Add All" button to place similarity panel
-   - Modified place similarity to work with empty corpus
-   - Attempted to build corpus from selected places
+2. Benefits of the new approach:
+   - Clean initial state with no data overload
+   - Reduced initial load time
+   - Clear user interaction path
+   - Better user experience with progressive disclosure
 
-3. Technical challenges encountered:
-   - Issues with empty corpus handling in map updates
-   - Callback conflicts with empty corpus state
-   - Problems with place similarity without initial corpus
-
-### Lessons Learned
-- Empty map approach requires significant restructuring of callbacks
-- Need better handling of empty corpus state
-- Place similarity needs modification to work without initial corpus
+### Technical Details
+- Added condition to check for both filters and selected tokens
+- Returns empty DataFrame with correct column structure
+- Maintains proper handling of return_total parameter
+- Preserves existing functionality for when data is requested
 
 ### Next Steps
-- Consider alternative approach: start with minimal corpus
-- Improve error handling for empty corpus state
-- Revisit place similarity integration with empty corpus
+- Address aggregation issues with dhlabids
+- Optimize data handling for large corpora
+- Consider implementing loading states for better UX
 
 ## March 2024
 

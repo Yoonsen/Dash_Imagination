@@ -32,6 +32,11 @@ else:
     db_path = "/mnt/disk1/Github/Dash_Imagination/src/dash_imagination/data/imagination.db"
     if not os.path.exists(db_path):
         print(f"Warning: Database not found at {db_path}")
+        # Try alternative path
+        alt_path = "/mnt/disk1/Github/Dash_Imagination/src/data/imagination.db"
+        if os.path.exists(alt_path):
+            print(f"Found database at alternative path: {alt_path}")
+            db_path = alt_path
 
 print(f"Using database at: {db_path}")
 
@@ -103,97 +108,155 @@ default_filters = {
 # Global variable for current corpus
 current_dhlabids = []
 
-def get_places_for_map(filters=None, return_total=False):
+def update_current_dhlabids(new_dhlabids):
     global current_dhlabids
-    conn = get_db_connection()
-    max_places = filters.get('max_places', 1500) if filters else 1500
+    current_dhlabids = new_dhlabids
+    return current_dhlabids
 
-    print(f"Using current corpus with {len(current_dhlabids)} books")
+def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
+    global current_dhlabids
+    conn = None
+    try:
+        conn = get_db_connection()
+        
+        # Return empty DataFrame if no filters or selected tokens
+        if not filters and not selected_tokens:
+            if return_total:
+                return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']), 0
+            return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
 
-    if not current_dhlabids:
-        print("No books in current corpus")
-        conn.close()
+        max_places = filters.get('max_places', 1500) if filters else 1500
+
+        if not current_dhlabids:
+            if return_total:
+                return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']), 0
+            return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+
+        # If selected_tokens is provided, we want to show all matching places
+        if selected_tokens:
+            # Build query to get all places that match the selected tokens
+            query = f"""
+            SELECT p.token, p.modern as name, p.latitude, p.longitude,
+                   SUM(bp.book_count) as frequency,
+                   COUNT(DISTINCT bp.dhlabid) as book_count
+            FROM places p
+            JOIN books bp ON p.token = bp.token
+            WHERE p.token IN ({','.join(['?'] * len(selected_tokens))})
+            AND bp.dhlabid IN ({','.join(['?'] * len(current_dhlabids))})
+            GROUP BY p.token, p.modern, p.latitude, p.longitude
+            """
+            
+            df = pd.read_sql_query(query, conn, params=tuple(selected_tokens + current_dhlabids))
+            
+            # Ensure we have valid numeric values
+            df['frequency'] = pd.to_numeric(df['frequency'], errors='coerce')
+            df['book_count'] = pd.to_numeric(df['book_count'], errors='coerce')
+            df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
+            df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+            
+            # Remove any rows with invalid coordinates
+            df = df.dropna(subset=['latitude', 'longitude'])
+            
+            if return_total:
+                return df, len(df)
+            return df
+        
+        # For non-selected tokens case, use the chunked approach
+        chunk_size = 500
+        dhlabid_chunks = [current_dhlabids[i:i + chunk_size] for i in range(0, len(current_dhlabids), chunk_size)]
+        
+        query_parts = []
+        all_params = []
+        
+        for chunk in dhlabid_chunks:
+            chunk_query = f"""
+            SELECT p.token, p.modern as name, p.latitude, p.longitude, 
+                   SUM(bp.book_count) as frequency,
+                   COUNT(DISTINCT bp.dhlabid) as book_count
+            FROM places p
+            JOIN books bp ON p.token = bp.token
+            WHERE bp.dhlabid IN ({','.join(['?'] * len(chunk))})
+            GROUP BY p.token, p.modern, p.latitude, p.longitude
+            """
+            query_parts.append(chunk_query)
+            all_params.extend(chunk)
+        
+        base_query = " UNION ALL ".join(query_parts)
+        
+        final_query = f"""
+        WITH all_results AS ({base_query})
+        SELECT token, name, latitude, longitude, 
+               SUM(frequency) as frequency,
+               SUM(book_count) as book_count
+        FROM all_results
+        GROUP BY token, name, latitude, longitude
+        ORDER BY frequency DESC
+        LIMIT ?
+        """
+        
+        df = pd.read_sql_query(final_query, conn, params=tuple(all_params) + (max_places,))
+        
+        # Ensure we have valid numeric values
+        df['frequency'] = pd.to_numeric(df['frequency'], errors='coerce')
+        df['book_count'] = pd.to_numeric(df['book_count'], errors='coerce')
+        df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
+        df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+        
+        # Remove any rows with invalid coordinates
+        df = df.dropna(subset=['latitude', 'longitude'])
+        
         if return_total:
-            return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'global_counts', 'book_count']), 0
-        return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'global_counts', 'book_count'])
+            return df, len(df)
+        return df
+        
+    finally:
+        if conn:
+            conn.close()
 
-    # Total places query without LIMIT
-    total_query = """
-    SELECT COUNT(DISTINCT p.token) as total_places
-    FROM places p
-    JOIN books bp ON p.token = bp.token
-    WHERE bp.dhlabid IN ({})
-    """.format(','.join(['?'] * len(current_dhlabids)))
-    total_places_df = pd.read_sql_query(total_query, conn, params=tuple(current_dhlabids))
-    total_places = total_places_df['total_places'].iloc[0] if not total_places_df.empty else 0
-
-    # Limited places query
-    base_query = """
-    SELECT p.token, p.modern as name, p.latitude, p.longitude, SUM(bp.book_count) as frequency,
-           COUNT(DISTINCT bp.dhlabid) as book_count
-    FROM places p
-    JOIN books bp ON p.token = bp.token
-    WHERE bp.dhlabid IN ({})
-    GROUP BY p.token, p.modern, p.latitude, p.longitude
-    ORDER BY frequency DESC
-    LIMIT ?
-    """.format(','.join(['?'] * len(current_dhlabids)))
-    df = pd.read_sql_query(base_query, conn, params=tuple(current_dhlabids) + (max_places,))
-    print(f"Got {len(df)} places from {len(current_dhlabids)} books")
-    conn.close()
-    
-    if return_total:
-        return df, total_places
-    return df
-
-def get_place_details(token, filters=None):
+def get_place_details(token, filters=None, page=1, page_size=100):
     global current_dhlabids
-    conn = get_db_connection()
-    
-    if not current_dhlabids:
-        print("No books in current corpus")
-        conn.close()
-        return pd.DataFrame(columns=['title', 'author', 'year', 'urn', 'mentions'])
-    
-    print(f"Getting place details for token {token} in {len(current_dhlabids)} books")
-    
-    # Split dhlabids into chunks to avoid SQLite parameter limit
-    chunk_size = 500  # SQLite's default limit is 999 parameters
-    dhlabid_chunks = [current_dhlabids[i:i + chunk_size] for i in range(0, len(current_dhlabids), chunk_size)]
-    
-    # Build the query with UNION ALL for each chunk
-    query_parts = []
-    all_params = []
-    
-    for chunk in dhlabid_chunks:
-        chunk_query = f"""
-        SELECT DISTINCT c.title, c.author, c.year, c.urn, 
+    conn = None
+    try:
+        conn = get_db_connection()
+        
+        if not current_dhlabids:
+            return pd.DataFrame(columns=['title', 'author', 'year', 'urn', 'mentions']), 0
+        
+        # Build query to get book details with proper aggregation
+        query = f"""
+        SELECT c.title, c.author, c.year, c.urn,
                SUM(bp.book_count) as mentions
         FROM corpus c
         JOIN books bp ON c.dhlabid = bp.dhlabid
         WHERE bp.token = ?
-        AND c.dhlabid IN ({','.join(['?'] * len(chunk))})
+        AND c.dhlabid IN ({','.join(['?'] * len(current_dhlabids))})
         GROUP BY c.title, c.author, c.year, c.urn
+        ORDER BY mentions DESC
+        LIMIT ? OFFSET ?
         """
-        query_parts.append(chunk_query)
-        all_params.extend([token] + chunk)
-    
-    # Combine all parts with UNION ALL
-    final_query = " UNION ALL ".join(query_parts)
-    
-    # Add final grouping and ordering
-    final_query = f"""
-    WITH all_results AS ({final_query})
-    SELECT title, author, year, urn, SUM(mentions) as mentions
-    FROM all_results
-    GROUP BY title, author, year, urn
-    ORDER BY mentions DESC
-    LIMIT 20
-    """
-    
-    books = pdquery(conn, final_query, tuple(all_params))
-    conn.close()
-    return books
+        
+        # Calculate offset
+        offset = (page - 1) * page_size
+        
+        # Add pagination parameters
+        params = [token] + current_dhlabids + [page_size, offset]
+        
+        books = pd.read_sql_query(query, conn, params=tuple(params))
+        
+        # Get total count for pagination
+        count_query = f"""
+        SELECT COUNT(DISTINCT c.dhlabid) as total
+        FROM corpus c
+        JOIN books bp ON c.dhlabid = bp.dhlabid
+        WHERE bp.token = ?
+        AND c.dhlabid IN ({','.join(['?'] * len(current_dhlabids))})
+        """
+        total_count = pd.read_sql_query(count_query, conn, params=tuple([token] + current_dhlabids))['total'].iloc[0]
+        
+        return books, total_count
+    finally:
+        if conn:
+            conn.close()
 
 # Initialize lists with defaults
 authors_list = ["Ibsen", "Bjørnson", "Collett", "Lie", "Kielland"]
@@ -666,19 +729,13 @@ app.clientside_callback(
     prevent_initial_call=False
 )
 def update_filtered_data(filters, upload_state, reset_clicks, filename):
-    print("!!! update_filtered_data TRIGGERED !!!")
-    print(f"Filters: {filters}")
-    print(f"Upload state: {upload_state}")
-    print(f"Reset clicks: {reset_clicks}")
-    
     ctx = callback_context
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
     
     if triggered_id == 'reset-corpus' and reset_clicks:
-        print("Resetting to default corpus...")
+        update_current_dhlabids([])
         # Use default filters to get places data
         places_df = get_places_for_map(default_filters)
-        print(f"Reset to default corpus, got {len(places_df)} places")
         return places_df.to_json(date_format='iso', orient='split')
     
     if not filters:
@@ -688,22 +745,48 @@ def update_filtered_data(filters, upload_state, reset_clicks, filename):
     if triggered_id == 'upload-state' and upload_state:
         try:
             if isinstance(upload_state, dict) and 'uploaded' in upload_state:
-                print("Using uploaded corpus data from state")
-                # The dhlabids are already in the filters from the upload_state callback
                 pass
             else:
-                print("Invalid upload state format")
                 return dash.no_update
         except Exception as e:
-            print(f"Error processing upload state: {e}")
             return dash.no_update
     
     try:
-        places_df = get_places_for_map(filters)
-        print(f"Cached {len(places_df)} places")
+        # Get selected tokens from filters if they exist
+        selected_tokens = filters.get('selected_tokens')
+        if selected_tokens:
+            # Get dhlabids for selected tokens
+            conn = get_db_connection()
+            try:
+                # Split tokens into chunks to avoid SQLite parameter limit
+                chunk_size = 500
+                token_chunks = [selected_tokens[i:i + chunk_size] for i in range(0, len(selected_tokens), chunk_size)]
+                
+                # Build query with UNION ALL for each chunk
+                query_parts = []
+                all_params = []
+                
+                for chunk in token_chunks:
+                    chunk_query = f"""
+                    SELECT DISTINCT dhlabid
+                    FROM books
+                    WHERE token IN ({','.join(['?'] * len(chunk))})
+                    """
+                    query_parts.append(chunk_query)
+                    all_params.extend(chunk)
+                
+                # Combine all parts with UNION ALL
+                final_query = " UNION ALL ".join(query_parts)
+                
+                # Get unique dhlabids and ensure uniqueness with set
+                dhlabids = list(set(pd.read_sql_query(final_query, conn, params=tuple(all_params))['dhlabid'].tolist()))
+                update_current_dhlabids(dhlabids)
+            finally:
+                conn.close()
+        
+        places_df = get_places_for_map(filters, selected_tokens=selected_tokens)
         return places_df.to_json(date_format='iso', orient='split')
     except Exception as e:
-        print(f"Error getting places data: {e}")
         return dash.no_update
 
 @app.callback(
@@ -747,13 +830,6 @@ def update_category_selection(*args):
      Input('main-map', 'clickData')]
 )
 def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_intensity, heatmap_radius, cluster_toggle, selected_place, click_data):
-    print("!!! update_map TRIGGERED !!!")
-    print(f"View type: {view_type}")
-    print(f"Filtered data: {filtered_data_json is not None}")
-    print(f"Cluster toggle: {cluster_toggle}")
-    print(f"Selected place: {selected_place}")
-    print(f"Click data: {click_data}")
-    
     # Create base figure with default view of Norway
     fig = go.Figure()
     
@@ -767,7 +843,6 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     ))
     
     if filtered_data_json is None:
-        print("No cached data available")
         fig.update_layout(
             map=dict(
                 style=map_style or 'open-street-map',
@@ -782,11 +857,8 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     
     # Load cached data
     places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split')
-    print(f"Number of places from cache: {len(places_df)}")
-    print(f"Places data: {places_df.head()}")
     
     if places_df.empty:
-        print("Returning empty figure")
         fig.update_layout(
             map=dict(
                 style=map_style or 'open-street-map',
@@ -801,7 +873,6 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     
     # Clean data
     places_df = places_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', 'frequency'])
-    print(f"Places after cleaning: {len(places_df)}")
     
     # Logarithmic scale for marker sizes with constrained relative scaling
     sizes = places_df['frequency'].fillna(1).copy()
@@ -813,7 +884,6 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
         sizes = base_size + (sizes - min_size) / (max_size - min_size) * size_range
     else:
         sizes = [base_size] * len(sizes)
-    print(f"Marker sizes (log scale, constrained) - min: {sizes.min()}, max: {sizes.max()}")
     
     # Aggregate data for tooltips
     places_df['hover_text'] = places_df.apply(
@@ -1235,9 +1305,7 @@ def handle_place_click(n_clicks, filtered_data_json):
      State('current-filters', 'data')]
 )
 def update_place_summary(click_data, current_style, filters):
-    print("Place summary callback triggered")
     if click_data is None:
-        print("No click data")
         return dash.no_update, dash.no_update
     
     try:
@@ -1257,8 +1325,8 @@ def update_place_summary(click_data, current_style, filters):
             summary = html.Div([
                 html.Div([
                     html.H5(f"Cluster of {cluster_info} Places", style={'marginBottom': '5px'}),
-                    html.P(f"Total Mentions: {total_mentions}", style={'fontSize': '14px', 'color': '#666'}),
-                    html.P(f"Total Books: {total_books}", style={'fontSize': '14px', 'color': '#666'}),
+                    html.P(f"Total Mentions: {total_mentions:,}", style={'fontSize': '14px', 'color': '#666'}),
+                    html.P(f"Total Books: {total_books:,}", style={'fontSize': '14px', 'color': '#666'}),
                     html.P(f"Example place: {example_place}", style={'fontSize': '14px', 'color': '#666'}),
                     html.Hr(style={'margin': '10px 0'})
                 ])
@@ -1284,27 +1352,28 @@ def update_place_summary(click_data, current_style, filters):
                     print("Could not parse frequency/book count")
             
             try:
-                books_df = get_place_details(token, filters)
+                books_df, total_books = get_place_details(token, filters)
                 print(f"Got {len(books_df)} books for place {token}")
             except Exception as e:
                 print(f"Error getting place details: {e}")
-                books_df = pd.DataFrame(columns=['title', 'author', 'year', 'urn', 'book_count'])
+                books_df = pd.DataFrame(columns=['title', 'author', 'year', 'urn', 'mentions'])
+                total_books = 0
             
             summary = html.Div([
                 html.Div([
                     html.H5(token_part, style={'marginBottom': '5px'}),
                     html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
-                    html.P(f"Appears in {book_count} books with {frequency} total mentions", style={'marginTop': '5px'}),
+                    html.P(f"Appears in {book_count:,} books with {frequency:,} total mentions", style={'marginTop': '5px'}),
                     html.Hr(style={'margin': '10px 0'})
                 ]),
                 html.Div([
-                    html.H6(f"Books mentioning this place:", style={'marginBottom': '10px'}),
+                    html.H6(f"Books mentioning this place ({total_books:,} total):", style={'marginBottom': '10px'}),
                     html.Div([
                         html.Div([
                             html.Div(f"{row['title']} ({row['year']})", style={'fontWeight': '500'}),
                             html.Div([
                                 html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
-                                html.Span(f" • {int(row['mentions'])} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                                html.Span(f" • {int(row['mentions']):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
                             ], style={'display': 'flex', 'justifyContent': 'space-between'}),
                             html.Div([
                                 html.A("View at National Library", href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{token}\"",
@@ -1372,7 +1441,6 @@ app.clientside_callback(
     [Input('current-filters', 'data')]
 )
 def update_corpus_stats(filters):
-    print("!!! update_corpus_stats TRIGGERED !!!")
     if not filters:
         return "No filters available"
     
@@ -1380,7 +1448,6 @@ def update_corpus_stats(filters):
     conn = get_db_connection()
     if filters.get('current_corpus'):
         dhlabids = filters['current_corpus']
-        print(f"Using current corpus with {len(dhlabids)} dhlabids")
         num_books = len(dhlabids)
         book_query = f"""
         SELECT dhlabid, year
@@ -1391,7 +1458,6 @@ def update_corpus_stats(filters):
         books_df = pd.read_sql_query(book_query, conn, params=tuple(dhlabids))
     elif filters.get('categories') and filters['categories']:
         categories = filters['categories']
-        print(f"Using category-based corpus with categories: {categories}")
         book_query = f"""
         SELECT dhlabid, year
         FROM corpus
@@ -1401,7 +1467,6 @@ def update_corpus_stats(filters):
         books_df = pd.read_sql_query(book_query, conn, params=tuple(categories))
         num_books = len(books_df)
     else:
-        print("No corpus selected")
         books_df = pd.DataFrame()
         num_books = 0
     
@@ -1426,17 +1491,32 @@ def update_corpus_stats(filters):
     
     conn.close()
     
-    # Customize description based on corpus source
-    corpus_source = filters.get('corpus_source', 'No corpus selected')
-    return html.Div([
-        html.P(f"Corpus source: {corpus_source}"),
+    # Build the stats display
+    stats = [
+        html.P(f"Corpus source: {filters.get('corpus_source', 'No corpus selected')}"),
         html.P(f"Number of books: {num_books}"),
         html.P(f"Total places in corpus: {total_places}"),
         html.P(f"Period: {year_range}"),
         html.P(f"Filters: {category_count} categories, {title_count} works"),
         html.P(f"Places shown: {total_places_shown}"),
-        html.P(f"Total mentions: {total_mentions:,}"),
-    ])
+        html.P(f"Total mentions: {total_mentions:,}")
+    ]
+    
+    # Add selected places information if available
+    if filters.get('selected_tokens'):
+        selected_places = filters['selected_tokens']
+        stats.extend([
+            html.Hr(),
+            html.H5("Selected Places", className="mt-3"),
+            html.P(f"Number of selected places: {len(selected_places)}"),
+            html.P("Selected places:", style={'marginBottom': '5px'}),
+            html.Div([
+                html.Span(place, style={'marginRight': '10px', 'marginBottom': '5px'})
+                for place in selected_places
+            ], style={'display': 'flex', 'flexWrap': 'wrap', 'gap': '5px'})
+        ])
+    
+    return html.Div(stats)
 
 # Add callback to toggle corpus modal
 @app.callback(
