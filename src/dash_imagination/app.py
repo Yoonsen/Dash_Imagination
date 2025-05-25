@@ -1629,4 +1629,4 @@ def update_corpus_places_styles(corpus_modal_open, place_names_style, corpus_sty
 
 # Run Server
 if __name__ == '__main__':
-    app.run_server(debug=True, host='0.0.0.0', port=8065, dev_tools_hot_reload=False)
+    app.run_server(debug=True, host='0.0.0.0', port=8050, dev_tools_hot_reload=False)

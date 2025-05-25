@@ -110,4 +110,35 @@ Added a new feature to find similar places within the current corpus using the N
 - Potentially add batch selection of similar places
 - Consider caching similar word results for better performance
 
+## 2024-05-16: Empty Map and Corpus from Places Experiment
+
+### Overview
+Attempted to modify the app to start with an empty map and build corpus from places.
+
+### Changes Attempted
+1. Modified app initialization:
+   - Started with empty map instead of default corpus
+   - Removed automatic corpus loading
+   - Set `current_dhlabids` to empty list initially
+
+2. Added place selection features:
+   - Added "Add All" button to place similarity panel
+   - Modified place similarity to work with empty corpus
+   - Attempted to build corpus from selected places
+
+3. Technical challenges encountered:
+   - Issues with empty corpus handling in map updates
+   - Callback conflicts with empty corpus state
+   - Problems with place similarity without initial corpus
+
+### Lessons Learned
+- Empty map approach requires significant restructuring of callbacks
+- Need better handling of empty corpus state
+- Place similarity needs modification to work without initial corpus
+
+### Next Steps
+- Consider alternative approach: start with minimal corpus
+- Improve error handling for empty corpus state
+- Revisit place similarity integration with empty corpus
+
 --- 
