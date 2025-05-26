@@ -98,12 +98,11 @@ def get_titles():
 
 # Initialize variables before layout
 default_filters = {
-    'year_range': [1850, 1880],
     'categories': [],
-    'authors': [],
     'titles': [],
-    'max_places': 2000,
-    'sample_size': 2000
+    'sample_size': 0,
+    'max_places': 0,
+    'year_range': [1814, 1905]
 }
 
 # Global variable for current corpus
@@ -115,105 +114,74 @@ def update_current_dhlabids(new_dhlabids):
     return current_dhlabids
 
 def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
-    global current_dhlabids
-    conn = None
+    """Get places data for the map visualization."""
+    if filters is None:
+        filters = {}
+    
+    conn = get_db_connection()
     try:
-        conn = get_db_connection()
-        
-        # Return empty DataFrame if no filters or selected tokens
-        if not filters and not selected_tokens:
-            if return_total:
-                return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']), 0
-            return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
-
-        # Return empty DataFrame if no current_dhlabids
-        if not current_dhlabids:
-            if return_total:
-                return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']), 0
-            return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
-
-        max_places = filters.get('max_places', 1500) if filters else 1500
-
-        # If selected_tokens is provided, we want to show all matching places
-        if selected_tokens:
-            # Build query to get all places that match the selected tokens
-            query = f"""
-            SELECT p.token, p.modern as name, p.latitude, p.longitude,
-                   SUM(bp.book_count) as frequency,
-                   COUNT(DISTINCT bp.dhlabid) as book_count
-            FROM places p
-            JOIN books bp ON p.token = bp.token
-            WHERE p.token IN ({','.join(['?'] * len(selected_tokens))})
-            AND bp.dhlabid IN ({','.join(['?'] * len(current_dhlabids))})
-            GROUP BY p.token, p.modern, p.latitude, p.longitude
-            """
-            
-            df = pd.read_sql_query(query, conn, params=tuple(selected_tokens + current_dhlabids))
-            
-            # Ensure we have valid numeric values
-            df['frequency'] = pd.to_numeric(df['frequency'], errors='coerce')
-            df['book_count'] = pd.to_numeric(df['book_count'], errors='coerce')
-            df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
-            df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
-            
-            # Remove any rows with invalid coordinates
-            df = df.dropna(subset=['latitude', 'longitude'])
-            
-            if return_total:
-                return df, len(df)
-            return df
-        
-        # For non-selected tokens case, use the chunked approach
-        chunk_size = 500
-        dhlabid_chunks = [current_dhlabids[i:i + chunk_size] for i in range(0, len(current_dhlabids), chunk_size)]
-        
-        query_parts = []
-        all_params = []
-        
-        for chunk in dhlabid_chunks:
-            chunk_query = f"""
-            SELECT p.token, p.modern as name, p.latitude, p.longitude, 
-                   SUM(bp.book_count) as frequency,
-                   COUNT(DISTINCT bp.dhlabid) as book_count
-            FROM places p
-            JOIN books bp ON p.token = bp.token
-            WHERE bp.dhlabid IN ({','.join(['?'] * len(chunk))})
-            GROUP BY p.token, p.modern, p.latitude, p.longitude
-            """
-            query_parts.append(chunk_query)
-            all_params.extend(chunk)
-        
-        base_query = " UNION ALL ".join(query_parts)
-        
-        final_query = f"""
-        WITH all_results AS ({base_query})
-        SELECT token, name, latitude, longitude, 
-               SUM(frequency) as frequency,
-               SUM(book_count) as book_count
-        FROM all_results
-        GROUP BY token, name, latitude, longitude
-        ORDER BY frequency DESC
-        LIMIT ?
+        # Base query to get places with their frequencies
+        query = """
+        WITH filtered_books AS (
+            SELECT DISTINCT b.dhlabid
+            FROM books b
+            JOIN corpus c ON b.dhlabid = c.dhlabid
+            WHERE 1=1
         """
         
-        df = pd.read_sql_query(final_query, conn, params=tuple(all_params) + (max_places,))
+        params = []
         
-        # Ensure we have valid numeric values
-        df['frequency'] = pd.to_numeric(df['frequency'], errors='coerce')
-        df['book_count'] = pd.to_numeric(df['book_count'], errors='coerce')
-        df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
-        df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+        # Add year range filter if specified
+        if filters.get('year_range'):
+            min_year, max_year = filters['year_range']
+            query += " AND c.year BETWEEN ? AND ?"
+            params.extend([min_year, max_year])
         
-        # Remove any rows with invalid coordinates
-        df = df.dropna(subset=['latitude', 'longitude'])
+        # Add category filter if specified
+        if filters.get('categories') and filters['categories']:
+            query += " AND c.category IN ({})".format(','.join(['?'] * len(filters['categories'])))
+            params.extend(filters['categories'])
         
-        if return_total:
-            return df, len(df)
-        return df
+        # Add title filter if specified
+        if filters.get('titles') and filters['titles']:
+            query += " AND c.title IN ({})".format(','.join(['?'] * len(filters['titles'])))
+            params.extend(filters['titles'])
         
+        query += """
+        )
+        SELECT 
+            b.token,
+            p.modern as name,
+            p.latitude,
+            p.longitude,
+            COUNT(DISTINCT b.dhlabid) as frequency,
+            COUNT(DISTINCT b.dhlabid) as book_count
+        FROM books b
+        JOIN places p ON b.token = p.token
+        JOIN filtered_books fb ON b.dhlabid = fb.dhlabid
+        WHERE p.latitude IS NOT NULL 
+        AND p.longitude IS NOT NULL
+        AND p.latitude != '0'
+        AND p.longitude != '0'
+        GROUP BY b.token, p.modern, p.latitude, p.longitude
+        ORDER BY frequency DESC
+        """
+        
+        # Add limit if max_places is specified and greater than 0
+        if filters.get('max_places', 0) > 0:
+            query += " LIMIT ?"
+            params.append(filters['max_places'])
+        
+        # Execute query
+        places_df = pd.read_sql_query(query, conn, params=tuple(params))
+        
+        # Convert latitude and longitude to numeric
+        places_df['latitude'] = pd.to_numeric(places_df['latitude'], errors='coerce')
+        places_df['longitude'] = pd.to_numeric(places_df['longitude'], errors='coerce')
+        
+        return places_df
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def get_place_details(token, filters=None, page=1, page_size=100):
     global current_dhlabids
@@ -569,9 +537,9 @@ app.layout = html.Div([
     dcc.Store(id='filtered-data'),
     dcc.Store(id='selected-place', data=None),
     dcc.Store(id='map-view-state'),
-    dcc.Store(id='current-filters', data=default_filters),
+    dcc.Store(id='current-filters', data={}),  # Initialize with empty dict
     dcc.Store(id='upload-state', data=None),
-    dcc.Store(id='category-selection', data=default_filters['categories']),
+    dcc.Store(id='category-selection', data=[]),  # Initialize with empty list
 
     # Change view-type from Div to Store
     dcc.Store(id='view-type', data='points'),
@@ -802,12 +770,10 @@ def update_filtered_data(filters, upload_state, reset_clicks, filename):
     
     if triggered_id == 'popup-reset-corpus' and reset_clicks:  # Updated ID here too
         update_current_dhlabids([])
-        # Use default filters to get places data
-        places_df = get_places_for_map(default_filters)
-        return places_df.to_json(date_format='iso', orient='split')
+        return pd.DataFrame().to_json(date_format='iso', orient='split')
     
     if not filters:
-        filters = default_filters
+        return pd.DataFrame().to_json(date_format='iso', orient='split')
     
     # Handle uploaded corpus data
     if triggered_id == 'upload-state' and upload_state:
@@ -901,7 +867,8 @@ def update_category_selection(*args):
      Input('cluster-size-slider', 'value'),
      Input('cluster-radius-slider', 'value'),
      Input('view-tabs', 'active_tab')],
-    [State('view-type', 'data')]
+    [State('view-type', 'data')],
+    prevent_initial_call=True
 )
 def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity, heatmap_radius, heatmap_colorscale, cluster_toggle, selected_place, click_data, marker_size, cluster_size, cluster_radius, active_tab, current_view_type):
     ctx = callback_context
@@ -1699,61 +1666,27 @@ def update_button_styles(corpus_style, places_style, viz_style, corpus_btn_style
      State('title-dropdown', 'value'),
      State('popup-sample-size', 'value'),
      State('popup-max-places-slider', 'value'),
+     State('year-range-slider', 'value'),
      State('current-filters', 'data')],
     prevent_initial_call=True
 )
-def update_corpus_from_selections(n_clicks, selected_categories, selected_titles, sample_size, max_places, current_filters):
+def update_corpus_from_selections(n_clicks, selected_categories, selected_titles, sample_size, max_places, year_range, current_filters):
     if not n_clicks:
         raise PreventUpdate
-        
-    if not current_filters:
-        current_filters = default_filters.copy()
+    
+    if current_filters is None:
+        current_filters = {}
     
     # Update filters with new selections
-    new_filters = current_filters.copy()
-    new_filters['categories'] = selected_categories if selected_categories else []
-    new_filters['titles'] = selected_titles if selected_titles else []
-    new_filters['sample_size'] = sample_size if sample_size is not None else default_filters['sample_size']
-    new_filters['max_places'] = max_places if max_places is not None else default_filters['max_places']
+    new_filters = {
+        'categories': selected_categories or [],
+        'titles': selected_titles or [],
+        'sample_size': sample_size or 0,
+        'max_places': max_places or 0,
+        'year_range': year_range or [1814, 1905]  # Default to full range if not set
+    }
     
-    # If no filters are selected, return empty DataFrame
-    if not selected_categories and not selected_titles:
-        update_current_dhlabids([])
-        empty_df = pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
-        return new_filters, empty_df.to_json(date_format='iso', orient='split')
-    
-    # Get dhlabids for the selected filters
-    conn = get_db_connection()
-    try:
-        query_parts = []
-        params = []
-        
-        if selected_categories:
-            query_parts.append("category IN ({})".format(','.join(['?'] * len(selected_categories))))
-            params.extend(selected_categories)
-        
-        if selected_titles:
-            query_parts.append("title IN ({})".format(','.join(['?'] * len(selected_titles))))
-            params.extend(selected_titles)
-        
-        if query_parts:
-            where_clause = " AND ".join(query_parts)
-            query = f"SELECT DISTINCT dhlabid FROM corpus WHERE {where_clause}"
-            dhlabids_df = pd.read_sql_query(query, conn, params=tuple(params))
-            current_dhlabids = dhlabids_df['dhlabid'].tolist()
-            
-            # Apply sampling if needed
-            if sample_size and len(current_dhlabids) > sample_size:
-                current_dhlabids = np.random.choice(current_dhlabids, size=sample_size, replace=False).tolist()
-            
-            # Update the global current_dhlabids
-            update_current_dhlabids(current_dhlabids)
-        else:
-            update_current_dhlabids([])
-    finally:
-        conn.close()
-    
-    # Get places data with new filters
+    # Get filtered data
     places_df = get_places_for_map(new_filters)
     
     return new_filters, places_df.to_json(date_format='iso', orient='split')
