@@ -5,12 +5,16 @@ This logbook tracks the development progress, decisions, and challenges of the I
 
 ## Current Sprint
 **Period**: May 15-20, 2024
-**Focus**: Place Search and Highlight Feature
+**Focus**: Place Search, Highlight Feature, and Place Intersectionality
 
 ## Active Tasks
 - [x] Place Search implementation
 - [x] Map centering functionality
 - [x] Corpus management improvements
+- [ ] Place intersectionality implementation
+  - Intersect corpus and places on both place and book levels
+  - Improve corpus building with place-based filtering
+  - Add bidirectional filtering between places and books
 
 ## Recent Decisions
 - Implemented global `current_dhlabids` list as single source of truth for corpus management
@@ -23,6 +27,37 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Improved SQLite query handling for large corpora
 
 ## Development Log
+
+### May 20, 2024
+**Progress**:
+- Implemented custom download functionality for map visualization
+- Added support for multiple formats and resolutions
+- Created server-side download endpoint
+
+**Key Changes**:
+1. Added new download UI components:
+   - Format selection (PNG, PDF, SVG)
+   - Resolution options (Standard, High, Publication)
+   - Download button with status feedback
+2. Implemented server-side download endpoint:
+   - Added `/download-map` route for handling downloads
+   - Support for multiple image formats
+   - Configurable resolution settings
+3. Created client-side download trigger:
+   - JavaScript-based download initiation
+   - Status feedback for users
+   - Error handling for failed downloads
+
+**Technical Challenges**:
+- Download trigger not working as expected
+- Need to debug client-side JavaScript execution
+- Server-side image generation needs testing
+
+**Next Steps**:
+- Debug and fix download trigger functionality
+- Test image generation with different formats
+- Add proper error handling and user feedback
+- Consider alternative download approaches if needed
 
 ### May 17, 2024 (2)
 **Progress**:
@@ -108,87 +143,4 @@ This logbook tracks the development progress, decisions, and challenges of the I
 
 - Removed all references to `dash_virtualized` from the codebase and requirements.
 - Ensured that the app runs locally by either:
-  - Running from the `src/` directory with `pdm run python -m dash_imagination.app`, or
-  - Running from the project root with `PYTHONPATH=src pdm run python -m dash_imagination.app`.
-- Verified that the app starts and works locally with no import errors.
-- Confirmed that `scipy` is included in requirements for convex hull calculations.
-- Ready to commit, push, and deploy this version to Cloud Run.
-
-## 2024-03-19: Place Similarity Feature Implementation
-
-### Overview
-Added a new feature to find similar places within the current corpus using the NB API's word similarity endpoint.
-
-### Changes Made
-1. Created new components:
-   - `place_similarity.py`: Handles the UI and logic for similar place search
-   - `word_similarity.py`: API client for the NB word similarity endpoint
-
-2. Features implemented:
-   - Search box for entering words to find similar places
-   - Similarity threshold slider (0.5 to 1.0)
-   - Results list showing similar places with scores
-   - "Add to List" functionality to add places to main list
-   - Return key support for search
-   - Integration with existing corpus and place list
-
-3. Technical details:
-   - Uses the `/dhlab/similarity/sim_words` endpoint
-   - Filters similar words against current corpus places
-   - Proper DataFrame handling for filtered data
-   - Pattern matching callbacks for dynamic place buttons
-
-### Testing Notes
-- Feature works with the existing corpus selection
-- Similar places are filtered to only show those in current corpus
-- Places can be added to the main list with one click
-- Return key triggers search in addition to search button
-
-### Next Steps
-- Consider adding more advanced filtering options
-- Potentially add batch selection of similar places
-- Consider caching similar word results for better performance
-
-## 2024-05-16: Empty Map Implementation and Initial Display Fix
-
-### Overview
-Successfully implemented the empty map approach and fixed initial display issues.
-
-### Changes Made
-1. Modified `get_places_for_map` function:
-   - Added early return of empty DataFrame when no filters or selected tokens
-   - Ensured map starts completely empty on initial load
-   - Places only appear after explicit user interaction
-
-2. Benefits of the new approach:
-   - Clean initial state with no data overload
-   - Reduced initial load time
-   - Clear user interaction path
-   - Better user experience with progressive disclosure
-
-### Technical Details
-- Added condition to check for both filters and selected tokens
-- Returns empty DataFrame with correct column structure
-- Maintains proper handling of return_total parameter
-- Preserves existing functionality for when data is requested
-
-### Next Steps
-- Address aggregation issues with dhlabids
-- Optimize data handling for large corpora
-- Consider implementing loading states for better UX
-
-## March 2024
-
-### March 19, 2024
-- Implemented place dialogue with similarity search
-- Added filtering results based on place names
-- Added "Add All" button to construct corpus from place list
-- Fixed button spacing and layout in the UI
-- Modified app to start with empty corpus (no default data)
-- Added filename display as corpus source when uploading
-- Improved user flow: map starts empty and can be populated through corpus selection
-
-### March 18, 2024
-// ... existing code ...
-
---- 
+  - Running from the `src/` directory with `
