@@ -16,6 +16,8 @@ import math
 from dash_imagination.components.places.place_similarity import create_place_similarity_controls
 from dash_imagination.utils.db import get_db_connection
 import plotly.express as px
+import json
+from flask import request, send_file
 
 #=== initialize
 
@@ -258,7 +260,7 @@ app.layout = html.Div([
             id='main-map',
             style={'height': '100vh'},
             config={
-                'displayModeBar': False,
+                'displayModeBar': False,  # Hide the mode bar
                 'scrollZoom': True,
                 'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
                 'displaylogo': False,
@@ -1877,6 +1879,108 @@ def update_loading_state(apply_clicks, map_figure, current_style):
         return new_style
     
     return current_style
+
+# Add download endpoint
+@app.server.route('/download-map', methods=['GET'])
+def download_map():
+    try:
+        # Get data from query parameters
+        data_str = request.args.get('data')
+        if not data_str:
+            return 'No data provided', 400
+            
+        data = json.loads(data_str)
+        figure = data.get('figure')
+        format = data.get('format', 'png')
+        width = data.get('width', 3840)
+        height = data.get('height', 2160)
+        scale = data.get('scale', 2)
+        
+        # Create figure from JSON
+        fig = go.Figure(figure)
+        
+        # Update layout for download
+        fig.update_layout(
+            width=width,
+            height=height,
+            margin=dict(l=0, r=0, t=0, b=0),
+            showlegend=False
+        )
+        
+        # Generate image
+        if format == 'png':
+            img_bytes = fig.to_image(format='png', scale=scale)
+            mimetype = 'image/png'
+            filename = 'imagination_map.png'
+        elif format == 'pdf':
+            img_bytes = fig.to_image(format='pdf', scale=scale)
+            mimetype = 'application/pdf'
+            filename = 'imagination_map.pdf'
+        elif format == 'svg':
+            img_bytes = fig.to_image(format='svg', scale=scale)
+            mimetype = 'image/svg+xml'
+            filename = 'imagination_map.svg'
+        else:
+            return 'Invalid format', 400
+        
+        return send_file(
+            io.BytesIO(img_bytes),
+            mimetype=mimetype,
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        print(f"Error generating download: {e}")
+        return str(e), 500
+
+# Add download callback
+@app.callback(
+    Output('download-status', 'children'),
+    [Input('download-map', 'n_clicks')],
+    [State('download-format', 'value'),
+     State('download-resolution', 'value'),
+     State('main-map', 'figure')],
+    prevent_initial_call=True
+)
+def trigger_download(n_clicks, format, resolution, figure):
+    if not n_clicks:
+        raise PreventUpdate
+    
+    # Set resolution based on selection
+    resolution_map = {
+        'standard': {'width': 1920, 'height': 1080},
+        'high': {'width': 3840, 'height': 2160},
+        'publication': {'width': 6000, 'height': 4000}
+    }
+    
+    # Get the selected resolution
+    dimensions = resolution_map.get(resolution, resolution_map['standard'])
+    
+    # Prepare download data
+    download_data = {
+        'figure': figure,
+        'format': format,
+        'width': dimensions['width'],
+        'height': dimensions['height'],
+        'scale': 2 if resolution in ['high', 'publication'] else 1
+    }
+    
+    # Create download URL
+    download_url = f'/download-map?data={json.dumps(download_data)}'
+    
+    # Return a link that will be clicked by JavaScript
+    return html.Div([
+        html.A(
+            "Download Map",
+            href=download_url,
+            id="download-link",
+            style={'display': 'none'}
+        ),
+        html.Script("""
+            document.getElementById('download-link').click();
+        """),
+        html.Div("Download started...", style={'color': 'green', 'marginTop': '10px'})
+    ])
 
 # Run Server
 if __name__ == '__main__':

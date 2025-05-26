@@ -321,7 +321,60 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
                         )
                     ], className="mb-4")
                 ], label="Heatmap View", tab_id="heatmap")
-            ], id="view-tabs", active_tab="points")
+            ], id="view-tabs", active_tab="points"),
+
+            # Download Section
+            html.Div([
+                html.Hr(className="my-3"),
+                html.H5("Download Map", className="mb-3"),
+                html.Div([
+                    # Format selection
+                    html.Div([
+                        html.Label("Format", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                        dcc.Dropdown(
+                            id='download-format',
+                            options=[
+                                {'label': 'PNG Image', 'value': 'png'},
+                                {'label': 'PDF Document', 'value': 'pdf'},
+                                {'label': 'SVG Vector', 'value': 'svg'}
+                            ],
+                            value='png',
+                            clearable=False,
+                            className="mb-3"
+                        )
+                    ]),
+                    
+                    # Resolution selection
+                    html.Div([
+                        html.Label("Resolution", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                        dcc.Dropdown(
+                            id='download-resolution',
+                            options=[
+                                {'label': 'Standard (1920x1080)', 'value': 'standard'},
+                                {'label': 'High (3840x2160)', 'value': 'high'},
+                                {'label': 'Publication (6000x4000)', 'value': 'publication'}
+                            ],
+                            value='high',
+                            clearable=False,
+                            className="mb-3"
+                        )
+                    ]),
+                    
+                    # Download button
+                    dbc.Button(
+                        [
+                            html.I(className="fas fa-download mr-2"),
+                            "Download Map"
+                        ],
+                        id='download-map',
+                        color="primary",
+                        className="w-100"
+                    ),
+                    
+                    # Status message
+                    html.Div(id='download-status', className="mt-2")
+                ])
+            ], className="mt-4")
         ], style={
             'padding': '15px',
             'backgroundColor': 'white',
