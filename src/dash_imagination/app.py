@@ -126,12 +126,13 @@ def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
                 return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']), 0
             return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
 
-        max_places = filters.get('max_places', 1500) if filters else 1500
-
+        # Return empty DataFrame if no current_dhlabids
         if not current_dhlabids:
             if return_total:
                 return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']), 0
             return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+
+        max_places = filters.get('max_places', 1500) if filters else 1500
 
         # If selected_tokens is provided, we want to show all matching places
         if selected_tokens:
