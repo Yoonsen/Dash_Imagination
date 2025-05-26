@@ -263,7 +263,29 @@ app.layout = html.Div([
                     'annotationPosition': False
                 }
             }
-        )
+        ),
+        # Loading overlay
+        html.Div([
+            html.Div([
+                html.I(className="fas fa-spinner fa-spin", style={'fontSize': '24px', 'marginRight': '10px'}),
+                html.Span("Preparing places...", style={'fontSize': '16px'})
+            ], style={
+                'backgroundColor': 'rgba(255, 255, 255, 0.9)',
+                'padding': '15px 25px',
+                'borderRadius': '8px',
+                'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
+                'display': 'flex',
+                'alignItems': 'center',
+                'justifyContent': 'center'
+            })
+        ], id='loading-overlay', style={
+            'position': 'absolute',
+            'top': '50%',
+            'left': '50%',
+            'transform': 'translate(-50%, -50%)',
+            'zIndex': 1000,
+            'display': 'none'
+        })
     ], style={'position': 'absolute', 'top': 0, 'left': 0, 'right': 0, 'bottom': 0}),
     
     # Top bar (top layer with translucent background)
@@ -821,6 +843,7 @@ def update_filtered_data(filters, upload_state, reset_clicks, filename):
         places_df = get_places_for_map(filters, selected_tokens=selected_tokens)
         return places_df.to_json(date_format='iso', orient='split')
     except Exception as e:
+        print(f"Error in update_filtered_data: {e}")
         return dash.no_update
 
 @app.callback(
@@ -871,363 +894,376 @@ def update_category_selection(*args):
     prevent_initial_call=True
 )
 def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity, heatmap_radius, heatmap_colorscale, cluster_toggle, selected_place, click_data, marker_size, cluster_size, cluster_radius, active_tab, current_view_type):
-    ctx = callback_context
-    if not ctx.triggered:
-        view_type = 'points'  # Default view
-    else:
-        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        if trigger_id == 'view-tabs':
-            view_type = active_tab
-        elif trigger_id == 'heatmap-button':
-            view_type = 'heatmap'
-        elif trigger_id == 'map-button':
-            view_type = 'points'
+    try:
+        ctx = callback_context
+        if not ctx.triggered:
+            view_type = 'points'  # Default view
         else:
-            view_type = current_view_type or 'points'  # Use current view type or default to points
+            trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            if trigger_id == 'view-tabs':
+                view_type = active_tab
+            elif trigger_id == 'heatmap-button':
+                view_type = 'heatmap'
+            elif trigger_id == 'map-button':
+                view_type = 'points'
+            else:
+                view_type = current_view_type or 'points'  # Use current view type or default to points
 
-    # Create base figure with default view of Norway
-    fig = go.Figure()
-    
-    # Add a dummy trace to ensure the map displays
-    fig.add_trace(go.Scattermap(
-        lat=[60.5],
-        lon=[9.0],
-        mode='markers',
-        marker=dict(size=1, color='rgba(0,0,0,0)'),
-        showlegend=False
-    ))
-    
-    if filtered_data_json is None:
-        fig.update_layout(
-            map=dict(
-                style='open-street-map',
-                center=dict(lat=60.5, lon=9.0),
-                zoom=4
-            ),
-            margin=dict(l=0, r=0, t=0, b=0),
-            showlegend=False,
-            uirevision='constant'
-        )
-        return fig, view_type
-    
-    # Load cached data
-    places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split')
-    
-    if places_df.empty:
-        fig.update_layout(
-            map=dict(
-                style='open-street-map',
-                center=dict(lat=60.5, lon=9.0),
-                zoom=4
-            ),
-            margin=dict(l=0, r=0, t=0, b=0),
-            showlegend=False,
-            uirevision='constant'
-        )
-        return fig, view_type
-    
-    # Clean data
-    places_df = places_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', 'frequency'])
-    
-    # Logarithmic scale for marker sizes with constrained relative scaling
-    sizes = places_df['frequency'].fillna(1).copy()
-    sizes = np.log1p(sizes)  # Logarithmic transformation (log(1 + x))
-    min_size, max_size = sizes.min(), sizes.max()
-    base_size = marker_size if marker_size is not None else 8  # Use slider value as base size
-    size_range = 15  # Reduced range for more relative consistency
-    if min_size != max_size:
-        sizes = base_size + (sizes - min_size) / (max_size - min_size) * size_range
-    else:
-        sizes = [base_size] * len(sizes)
-    
-    # Aggregate data for tooltips
-    places_df['hover_text'] = places_df.apply(
-        lambda row: f"{row['token']} ({row['name']})<br>Mentions: {int(row['frequency'])}<br>Books: {int(row['book_count'])}",
-        axis=1
-    )
-    
-    # Determine if clustering is enabled
-    use_clustering = cluster_toggle and 'cluster' in cluster_toggle
-    
-    if use_clustering:
-        # Convert cluster radius from km to degrees (approximate)
-        radius_km = cluster_radius if cluster_radius is not None else 50
-        radius_deg = radius_km / 111.32  # Convert km to degrees (approximate)
+        # Create base figure with default view of Norway
+        fig = go.Figure()
         
-        clustered = places_df.copy()
-        # Ensure we have valid numeric values for clustering
-        clustered['latitude'] = pd.to_numeric(clustered['latitude'], errors='coerce')
-        clustered['longitude'] = pd.to_numeric(clustered['longitude'], errors='coerce')
-        clustered = clustered.dropna(subset=['latitude', 'longitude'])
+        # Add a dummy trace to ensure the map displays
+        fig.add_trace(go.Scattermap(
+            lat=[60.5],
+            lon=[9.0],
+            mode='markers',
+            marker=dict(size=1, color='rgba(0,0,0,0)'),
+            showlegend=False
+        ))
         
-        if not clustered.empty:
-            clustered['cluster'] = ((clustered['latitude'] / radius_deg).round() * 1000 + 
-                                  (clustered['longitude'] / radius_deg).round()).astype(int)
-            
-            # Store original points for each cluster for polygon creation
-            cluster_points = {}
-            for _, row in clustered.iterrows():
-                cluster_id = row['cluster']
-                if cluster_id not in cluster_points:
-                    cluster_points[cluster_id] = []
-                cluster_points[cluster_id].append((row['longitude'], row['latitude']))
-            
-            # Aggregate clustered points with unique place names
-            cluster_data = clustered.groupby('cluster').agg({
-                'latitude': 'mean',
-                'longitude': 'mean',
-                'frequency': 'sum',
-                'book_count': 'sum',
-                'token': lambda x: '<br>'.join([str(t) for t in dict.fromkeys(x) if t is not None]),
-                'name': lambda x: '<br>'.join([str(n) for n in dict.fromkeys(x) if n is not None]),
-                'hover_text': 'first'
-            }).reset_index()
-            cluster_data['count'] = clustered.groupby('cluster').size().values
-            cluster_data['hover_text'] = cluster_data.apply(
-                lambda row: f"""Cluster of {row['count']} places<br>Total Mentions: {int(row['frequency'])}<br>Total Books: {int(row['book_count'])}<br>Example place: {row['token'].split('<br>')[0] if row['token'] else 'Unknown'}""",
-                axis=1
+        if filtered_data_json is None:
+            fig.update_layout(
+                map=dict(
+                    style='open-street-map',
+                    center=dict(lat=60.5, lon=9.0),
+                    zoom=4
+                ),
+                margin=dict(l=0, r=0, t=0, b=0),
+                showlegend=False,
+                uirevision='constant'
             )
-            
-            # Use cluster_size slider to control cluster marker size
-            base_cluster_size = cluster_size if cluster_size is not None else 3
-            cluster_data['size'] = np.log1p(cluster_data['count']) * base_cluster_size * 2  # Reduced multiplier for more reasonable sizes
-            
-            # Add clustered markers
-            fig.add_trace(go.Scattermap(
-                lat=cluster_data['latitude'],
-                lon=cluster_data['longitude'],
-                mode='markers',
-                marker=dict(size=cluster_data['size'], color='#1E40AF', opacity=0.7, sizemode='diameter'),
-                text=cluster_data['hover_text'],
-                hoverinfo='text',
-                visible=(view_type == 'points'),
-                name='Clusters'
-            ))
-            
-            # If a cluster is clicked, add a polygon showing its coverage area
-            if click_data and 'points' in click_data:
-                point = click_data['points'][0]
-                if 'Cluster of' in point.get('text', ''):
-                    # Find the clicked cluster
-                    clicked_lat = point['lat']
-                    clicked_lon = point['lon']
-                    
-                    # Find the cluster ID that matches these coordinates
-                    clicked_cluster = cluster_data[
-                        (cluster_data['latitude'] == clicked_lat) & 
-                        (cluster_data['longitude'] == clicked_lon)
-                    ]['cluster'].iloc[0]
-                    
-                    # Get the points for this cluster
-                    points = cluster_points[clicked_cluster]
-                    
-                    if len(points) == 2:
-                        # For two points, create an oval aligned with the points
-                        p1_lon, p1_lat = points[0]
-                        p2_lon, p2_lat = points[1]
-                        
-                        # Calculate center point
-                        center_lat = (p1_lat + p2_lat) / 2
-                        center_lon = (p1_lon + p2_lon) / 2
-                        
-                        # Calculate distance between points
-                        lat_diff = p2_lat - p1_lat
-                        lon_diff = p2_lon - p1_lon
-                        distance_km = math.sqrt(lat_diff**2 + lon_diff**2) * 111.32
-                        
-                        # Calculate bearing between points
-                        bearing = calculate_bearing(p1_lat, p1_lon, p2_lat, p2_lon)
-                        
-                        # Create rotated ellipse
-                        lats, lons = create_rotated_ellipse(
-                            center_lat, center_lon,
-                            distance_km/2,
-                            bearing,
-                            points=100
-                        )
-                        
-                        fig.add_trace(go.Scattermap(
-                            lat=lats,
-                            lon=lons,
-                            mode='lines',
-                            line=dict(color='#1E40AF', width=3),
-                            fill='toself',
-                            fillcolor='rgba(30, 64, 175, 0.3)',
-                            hoverinfo='skip',
-                            showlegend=False,
-                            visible=True
-                        ))
-                        
-                    elif len(points) >= 3:
-                        # For three or more points, use convex hull
-                        points_array = np.array(points)
-                        
-                        try:
-                            # Calculate convex hull
-                            hull = ConvexHull(points_array)
-                            
-                            # Get the hull vertices
-                            hull_points = points_array[hull.vertices]
-                            
-                            # Add some padding to make the hull slightly larger
-                            center = np.mean(hull_points, axis=0)
-                            padding = 0.05  # 5% padding
-                            padded_points = center + (1 + padding) * (hull_points - center)
-                            
-                            # Ensure the polygon is closed by adding the first point at the end
-                            padded_points = np.vstack([padded_points, padded_points[0]])
-                            
-                            # Add the polygon
-                            fig.add_trace(go.Scattermap(
-                                lat=padded_points[:, 1],
-                                lon=padded_points[:, 0],
-                                mode='lines',
-                                line=dict(color='#1E40AF', width=3),
-                                fill='toself',
-                                fillcolor='rgba(30, 64, 175, 0.3)',
-                                hoverinfo='skip',
-                                showlegend=False,
-                                visible=True
-                            ))
-                        except Exception as e:
-                            print(f"Error calculating convex hull: {e}")
-                            # Fallback to circle if convex hull fails
-                            radius_km = radius_km  # Use the cluster radius
-                            radius_deg = radius_km / 111.32
-                            angles = np.linspace(0, 2*np.pi, 100)
-                            circle_lats = clicked_lat + radius_deg * np.cos(angles)
-                            circle_lons = clicked_lon + radius_deg * np.sin(angles)
-                            
-                            fig.add_trace(go.Scattermap(
-                                lat=circle_lats,
-                                lon=circle_lons,
-                                mode='lines',
-                                line=dict(color='#1E40AF', width=3),
-                                fill='toself',
-                                fillcolor='rgba(30, 64, 175, 0.3)',
-                                hoverinfo='skip',
-                                showlegend=False,
-                                visible=True
-                            ))
-                    else:
-                        # For single points, use a small circle
-                        radius_km = radius_km  # Use the cluster radius
-                        radius_deg = radius_km / 111.32
-                        angles = np.linspace(0, 2*np.pi, 100)
-                        circle_lats = clicked_lat + radius_deg * np.cos(angles)
-                        circle_lons = clicked_lon + radius_deg * np.sin(angles)
-                        
-                        fig.add_trace(go.Scattermap(
-                            lat=circle_lats,
-                            lon=circle_lons,
-                            mode='lines',
-                            line=dict(color='#1E40AF', width=3),
-                            fill='toself',
-                            fillcolor='rgba(30, 64, 175, 0.3)',
-                            hoverinfo='skip',
-                            showlegend=False,
-                            visible=True
-                        ))
+            return fig, view_type
+        
+        # Load cached data
+        places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split')
+        
+        if places_df.empty:
+            fig.update_layout(
+                map=dict(
+                    style='open-street-map',
+                    center=dict(lat=60.5, lon=9.0),
+                    zoom=4
+                ),
+                margin=dict(l=0, r=0, t=0, b=0),
+                showlegend=False,
+                uirevision='constant'
+            )
+            return fig, view_type
+        
+        # Clean data
+        places_df = places_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', 'frequency'])
+        
+        # Logarithmic scale for marker sizes with constrained relative scaling
+        sizes = places_df['frequency'].fillna(1).copy()
+        sizes = np.log1p(sizes)  # Logarithmic transformation (log(1 + x))
+        min_size, max_size = sizes.min(), sizes.max()
+        base_size = marker_size if marker_size is not None else 8  # Use slider value as base size
+        size_range = 15  # Reduced range for more relative consistency
+        if min_size != max_size:
+            sizes = base_size + (sizes - min_size) / (max_size - min_size) * size_range
         else:
-            print("No valid data for clustering")
-    else:
-        # Add individual markers
-        if selected_place:
-            selected_df = places_df[places_df['token'] == selected_place]
-            unselected_df = places_df[places_df['token'] != selected_place]
+            sizes = [base_size] * len(sizes)
+        
+        # Aggregate data for tooltips
+        places_df['hover_text'] = places_df.apply(
+            lambda row: f"{row['token']} ({row['name']})<br>Mentions: {int(row['frequency'])}<br>Books: {int(row['book_count'])}",
+            axis=1
+        )
+        
+        # Determine if clustering is enabled
+        use_clustering = cluster_toggle and 'cluster' in cluster_toggle
+        
+        if use_clustering:
+            # Convert cluster radius from km to degrees (approximate)
+            radius_km = cluster_radius if cluster_radius is not None else 50
+            radius_deg = radius_km / 111.32  # Convert km to degrees (approximate)
             
-            # Add unselected places first
-            if not unselected_df.empty:
+            clustered = places_df.copy()
+            # Ensure we have valid numeric values for clustering
+            clustered['latitude'] = pd.to_numeric(clustered['latitude'], errors='coerce')
+            clustered['longitude'] = pd.to_numeric(clustered['longitude'], errors='coerce')
+            clustered = clustered.dropna(subset=['latitude', 'longitude'])
+            
+            if not clustered.empty:
+                clustered['cluster'] = ((clustered['latitude'] / radius_deg).round() * 1000 + 
+                                      (clustered['longitude'] / radius_deg).round()).astype(int)
+                
+                # Store original points for each cluster for polygon creation
+                cluster_points = {}
+                for _, row in clustered.iterrows():
+                    cluster_id = row['cluster']
+                    if cluster_id not in cluster_points:
+                        cluster_points[cluster_id] = []
+                    cluster_points[cluster_id].append((row['longitude'], row['latitude']))
+                
+                # Aggregate clustered points with unique place names
+                cluster_data = clustered.groupby('cluster').agg({
+                    'latitude': 'mean',
+                    'longitude': 'mean',
+                    'frequency': 'sum',
+                    'book_count': 'sum',
+                    'token': lambda x: '<br>'.join([str(t) for t in dict.fromkeys(x) if t is not None]),
+                    'name': lambda x: '<br>'.join([str(n) for n in dict.fromkeys(x) if n is not None]),
+                    'hover_text': 'first'
+                }).reset_index()
+                cluster_data['count'] = clustered.groupby('cluster').size().values
+                cluster_data['hover_text'] = cluster_data.apply(
+                    lambda row: f"""Cluster of {row['count']} places<br>Total Mentions: {int(row['frequency'])}<br>Total Books: {int(row['book_count'])}<br>Example place: {row['token'].split('<br>')[0] if row['token'] else 'Unknown'}""",
+                    axis=1
+                )
+                
+                # Use cluster_size slider to control cluster marker size
+                base_cluster_size = cluster_size if cluster_size is not None else 3
+                cluster_data['size'] = np.log1p(cluster_data['count']) * base_cluster_size * 2  # Reduced multiplier for more reasonable sizes
+                
+                # Add clustered markers
                 fig.add_trace(go.Scattermap(
-                    lat=unselected_df['latitude'],
-                    lon=unselected_df['longitude'],
+                    lat=cluster_data['latitude'],
+                    lon=cluster_data['longitude'],
                     mode='markers',
-                    marker=dict(size=sizes[unselected_df.index], color='#3b82f6', opacity=0.7, sizemode='diameter'),
-                    text=unselected_df['hover_text'],
+                    marker=dict(size=cluster_data['size'], color='#1E40AF', opacity=0.7, sizemode='diameter'),
+                    text=cluster_data['hover_text'],
                     hoverinfo='text',
-                    customdata=unselected_df['token'],
+                    visible=(view_type == 'points'),
+                    name='Clusters'
+                ))
+                
+                # If a cluster is clicked, add a polygon showing its coverage area
+                if click_data and 'points' in click_data:
+                    point = click_data['points'][0]
+                    if 'Cluster of' in point.get('text', ''):
+                        try:
+                            # Find the clicked cluster
+                            clicked_lat = point['lat']
+                            clicked_lon = point['lon']
+                            
+                            # Find the cluster ID that matches these coordinates
+                            matching_clusters = cluster_data[
+                                (cluster_data['latitude'] == clicked_lat) & 
+                                (cluster_data['longitude'] == clicked_lon)
+                            ]
+                            
+                            if not matching_clusters.empty:
+                                clicked_cluster = matching_clusters['cluster'].iloc[0]
+                                
+                                # Get the points for this cluster
+                                points = cluster_points[clicked_cluster]
+                                
+                                if len(points) == 2:
+                                    # For two points, create an oval aligned with the points
+                                    p1_lon, p1_lat = points[0]
+                                    p2_lon, p2_lat = points[1]
+                                    
+                                    # Calculate center point
+                                    center_lat = (p1_lat + p2_lat) / 2
+                                    center_lon = (p1_lon + p2_lon) / 2
+                                    
+                                    # Calculate distance between points
+                                    lat_diff = p2_lat - p1_lat
+                                    lon_diff = p2_lon - p1_lon
+                                    distance_km = math.sqrt(lat_diff**2 + lon_diff**2) * 111.32
+                                    
+                                    # Calculate bearing between points
+                                    bearing = calculate_bearing(p1_lat, p1_lon, p2_lat, p2_lon)
+                                    
+                                    # Create rotated ellipse
+                                    lats, lons = create_rotated_ellipse(
+                                        center_lat, center_lon,
+                                        distance_km/2,
+                                        bearing,
+                                        points=100
+                                    )
+                                    
+                                    fig.add_trace(go.Scattermap(
+                                        lat=lats,
+                                        lon=lons,
+                                        mode='lines',
+                                        line=dict(color='#1E40AF', width=3),
+                                        fill='toself',
+                                        fillcolor='rgba(30, 64, 175, 0.3)',
+                                        hoverinfo='skip',
+                                        showlegend=False,
+                                        visible=True
+                                    ))
+                                    
+                                elif len(points) >= 3:
+                                    # For three or more points, use convex hull
+                                    points_array = np.array(points)
+                                    
+                                    try:
+                                        # Calculate convex hull
+                                        hull = ConvexHull(points_array)
+                                        
+                                        # Get the hull vertices
+                                        hull_points = points_array[hull.vertices]
+                                        
+                                        # Add some padding to make the hull slightly larger
+                                        center = np.mean(hull_points, axis=0)
+                                        padding = 0.05  # 5% padding
+                                        padded_points = center + (1 + padding) * (hull_points - center)
+                                        
+                                        # Ensure the polygon is closed by adding the first point at the end
+                                        padded_points = np.vstack([padded_points, padded_points[0]])
+                                        
+                                        # Add the polygon
+                                        fig.add_trace(go.Scattermap(
+                                            lat=padded_points[:, 1],
+                                            lon=padded_points[:, 0],
+                                            mode='lines',
+                                            line=dict(color='#1E40AF', width=3),
+                                            fill='toself',
+                                            fillcolor='rgba(30, 64, 175, 0.3)',
+                                            hoverinfo='skip',
+                                            showlegend=False,
+                                            visible=True
+                                        ))
+                                    except Exception as e:
+                                        print(f"Error calculating convex hull: {e}")
+                                        # Fallback to circle if convex hull fails
+                                        radius_km = radius_km  # Use the cluster radius
+                                        radius_deg = radius_km / 111.32
+                                        angles = np.linspace(0, 2*np.pi, 100)
+                                        circle_lats = clicked_lat + radius_deg * np.cos(angles)
+                                        circle_lons = clicked_lon + radius_deg * np.sin(angles)
+                                        
+                                        fig.add_trace(go.Scattermap(
+                                            lat=circle_lats,
+                                            lon=circle_lons,
+                                            mode='lines',
+                                            line=dict(color='#1E40AF', width=3),
+                                            fill='toself',
+                                            fillcolor='rgba(30, 64, 175, 0.3)',
+                                            hoverinfo='skip',
+                                            showlegend=False,
+                                            visible=True
+                                        ))
+                                else:
+                                    # For single points, use a small circle
+                                    radius_km = radius_km  # Use the cluster radius
+                                    radius_deg = radius_km / 111.32
+                                    angles = np.linspace(0, 2*np.pi, 100)
+                                    circle_lats = clicked_lat + radius_deg * np.cos(angles)
+                                    circle_lons = clicked_lon + radius_deg * np.sin(angles)
+                                    
+                                    fig.add_trace(go.Scattermap(
+                                        lat=circle_lats,
+                                        lon=circle_lons,
+                                        mode='lines',
+                                        line=dict(color='#1E40AF', width=3),
+                                        fill='toself',
+                                        fillcolor='rgba(30, 64, 175, 0.3)',
+                                        hoverinfo='skip',
+                                        showlegend=False,
+                                        visible=True
+                                    ))
+                        except Exception as e:
+                            print(f"Error handling cluster click: {e}")
+                            # Continue without showing the cluster polygon
+                            pass
+            else:
+                print("No valid data for clustering")
+        
+        # Add individual markers if not clustering or if clustering failed
+        if not use_clustering or clustered.empty:
+            if selected_place:
+                selected_df = places_df[places_df['token'] == selected_place]
+                unselected_df = places_df[places_df['token'] != selected_place]
+                
+                # Add unselected places first
+                if not unselected_df.empty:
+                    fig.add_trace(go.Scattermap(
+                        lat=unselected_df['latitude'],
+                        lon=unselected_df['longitude'],
+                        mode='markers',
+                        marker=dict(size=sizes[unselected_df.index], color='#3b82f6', opacity=0.7, sizemode='diameter'),
+                        text=unselected_df['hover_text'],
+                        hoverinfo='text',
+                        customdata=unselected_df['token'],
+                        visible=(view_type == 'points'),
+                        name='Places'
+                    ))
+                
+                # Add selected place with different color
+                if not selected_df.empty:
+                    fig.add_trace(go.Scattermap(
+                        lat=selected_df['latitude'],
+                        lon=selected_df['longitude'],
+                        mode='markers',
+                        marker=dict(size=sizes[selected_df.index] * 1.2, color='#dc2626', opacity=0.9, sizemode='diameter'),
+                        text=selected_df['hover_text'],
+                        hoverinfo='text',
+                        customdata=selected_df['token'],
+                        visible=(view_type == 'points'),
+                        name='Selected Place'
+                    ))
+            else:
+                # No place selected, show all places normally
+                fig.add_trace(go.Scattermap(
+                    lat=places_df['latitude'],
+                    lon=places_df['longitude'],
+                    mode='markers',
+                    marker=dict(size=sizes, color='#3b82f6', opacity=0.7, sizemode='diameter'),
+                    text=places_df['hover_text'],
+                    hoverinfo='text',
+                    customdata=places_df['token'],
                     visible=(view_type == 'points'),
                     name='Places'
                 ))
-            
-            # Add selected place with different color
-            if not selected_df.empty:
-                fig.add_trace(go.Scattermap(
-                    lat=selected_df['latitude'],
-                    lon=selected_df['longitude'],
-                    mode='markers',
-                    marker=dict(size=sizes[selected_df.index] * 1.2, color='#dc2626', opacity=0.9, sizemode='diameter'),
-                    text=selected_df['hover_text'],
-                    hoverinfo='text',
-                    customdata=selected_df['token'],
-                    visible=(view_type == 'points'),
-                    name='Selected Place'
-                ))
-        else:
-            # No place selected, show all places normally
-            fig.add_trace(go.Scattermap(
-                lat=places_df['latitude'],
-                lon=places_df['longitude'],
-                mode='markers',
-                marker=dict(size=sizes, color='#3b82f6', opacity=0.7, sizemode='diameter'),
-                text=places_df['hover_text'],
-                hoverinfo='text',
-                customdata=places_df['token'],
-                visible=(view_type == 'points'),
-                name='Places'
-            ))
-    
-    heatmap_visible = view_type == 'heatmap'
-    if len(places_df) > 0 and heatmap_visible:
-        try:
-            x = places_df['longitude'].values
-            y = places_df['latitude'].values
-            z = places_df['frequency'].fillna(1).values
-            z = np.log1p(z)
-            mask = (~np.isnan(x)) & (~np.isnan(y)) & (~np.isnan(z)) & (~np.isinf(x)) & (~np.isinf(y)) & (~np.isinf(z))
-            x, y, z = x[mask], y[mask], z[mask]
-            
-            if len(x) < 2:
+        
+        heatmap_visible = view_type == 'heatmap'
+        if len(places_df) > 0 and heatmap_visible:
+            try:
+                x = places_df['longitude'].values
+                y = places_df['latitude'].values
+                z = places_df['frequency'].fillna(1).values
+                z = np.log1p(z)
+                mask = (~np.isnan(x)) & (~np.isnan(y)) & (~np.isnan(z)) & (~np.isinf(x)) & (~np.isinf(y)) & (~np.isinf(z))
+                x, y, z = x[mask], y[mask], z[mask]
+                
+                if len(x) < 2:
+                    fig.add_trace(go.Densitymap(
+                        lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap'
+                    ))
+                else:
+                    heatmap_actual_radius = (heatmap_radius ** 0.5) * 10
+                    fig.add_trace(go.Densitymap(
+                        lat=y,
+                        lon=x,
+                        z=z,
+                        radius=heatmap_actual_radius,
+                        colorscale=heatmap_colorscale,
+                        opacity=0.8 * (heatmap_intensity / 10),
+                        showscale=True,
+                        visible=True,
+                        name='Heatmap'
+                    ))
+            except Exception as e:
+                print(f"Heatmap error: {e}")
                 fig.add_trace(go.Densitymap(
                     lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap'
                 ))
-            else:
-                heatmap_actual_radius = (heatmap_radius ** 0.5) * 10
-                fig.add_trace(go.Densitymap(
-                    lat=y,
-                    lon=x,
-                    z=z,
-                    radius=heatmap_actual_radius,
-                    colorscale=heatmap_colorscale,
-                    opacity=0.8 * (heatmap_intensity / 10),
-                    showscale=True,
-                    visible=True,
-                    name='Heatmap'
-                ))
-        except Exception as e:
-            print(f"Heatmap error: {e}")
-            fig.add_trace(go.Densitymap(
-                lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap'
-            ))
-    else:
-        fig.add_trace(go.Densitymap(visible=False, name='Heatmap'))
-    
-    # Update layout
-    fig.update_layout(
-        map=dict(
-            style='open-street-map',
-            center=dict(lat=60.5, lon=9.0),
-            zoom=4
-        ),
-        margin=dict(l=0, r=0, t=0, b=0),
-        showlegend=False,
-        uirevision='constant',
-        hovermode='closest',
-        dragmode='pan',
-        clickmode='event'
-    )
-    
-    return fig, view_type
+        else:
+            fig.add_trace(go.Densitymap(visible=False, name='Heatmap'))
+        
+        # Update layout
+        fig.update_layout(
+            map=dict(
+                style='open-street-map',
+                center=dict(lat=60.5, lon=9.0),
+                zoom=4
+            ),
+            margin=dict(l=0, r=0, t=0, b=0),
+            showlegend=False,
+            uirevision='constant',
+            hovermode='closest',
+            dragmode='pan',
+            clickmode='event'
+        )
+        
+        return fig, view_type
+    except Exception as e:
+        print(f"Error in update_map: {e}")
+        return dash.no_update, dash.no_update
 
 @app.callback(
     [Output('place-list', 'children'),
@@ -1686,10 +1722,13 @@ def update_corpus_from_selections(n_clicks, selected_categories, selected_titles
         'year_range': year_range or [1814, 1905]  # Default to full range if not set
     }
     
-    # Get filtered data
-    places_df = get_places_for_map(new_filters)
-    
-    return new_filters, places_df.to_json(date_format='iso', orient='split')
+    try:
+        # Get filtered data
+        places_df = get_places_for_map(new_filters)
+        return new_filters, places_df.to_json(date_format='iso', orient='split')
+    except Exception as e:
+        print(f"Error in update_corpus_from_selections: {e}")
+        return dash.no_update, dash.no_update
 
 # Add callback for corpus info
 @app.callback(
@@ -1800,6 +1839,34 @@ def create_rotated_ellipse(center_lat, center_lon, radius_km, bearing, points=10
     lons = center_lon + x_rot
     
     return lats, lons
+
+# Add callback for loading state
+@app.callback(
+    Output('loading-overlay', 'style'),
+    [Input('apply-filters', 'n_clicks'),
+     Input('main-map', 'figure')],
+    [State('loading-overlay', 'style')]
+)
+def update_loading_state(apply_clicks, map_figure, current_style):
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # Show loading when apply button is clicked
+    if trigger_id == 'apply-filters' and apply_clicks:
+        new_style = dict(current_style)
+        new_style['display'] = 'block'
+        return new_style
+    
+    # Hide loading when map is updated
+    if trigger_id == 'main-map' and map_figure:
+        new_style = dict(current_style)
+        new_style['display'] = 'none'
+        return new_style
+    
+    return current_style
 
 # Run Server
 if __name__ == '__main__':
