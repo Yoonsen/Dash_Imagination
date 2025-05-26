@@ -60,29 +60,39 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
             # Sample Size
             html.Div([
                 html.Label("Number of Books", className="block text-sm font-medium text-gray-700"),
-                dcc.Input(
-                    id='popup-sample-size',
-                    type='number',
-                    value=0,
-                    min=0,
-                    max=10000,
-                    step=100,
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                )
+                html.Div([
+                    dcc.Input(
+                        id='popup-sample-size',
+                        type='number',
+                        value=0,
+                        min=0,
+                        max=20000,
+                        step=100,
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    ),
+                    html.Div("0 means no limit - all books will be included", className="text-sm text-gray-500 mt-1")
+                ])
             ], className="mb-4"),
             
             # Max Places
             html.Div([
                 html.Label("Number of Places", className="block text-sm font-medium text-gray-700"),
-                dcc.Slider(
-                    id='popup-max-places-slider',
-                    min=0,
-                    max=1600,
-                    step=100,
-                    value=0,
-                    marks={i: str(i) for i in range(0, 1601, 300)},
-                    className="mt-1"
-                )
+                html.Div([
+                    dcc.Slider(
+                        id='popup-max-places-slider',
+                        min=0,
+                        max=2000,
+                        step=100,
+                        value=0,
+                        marks={i: str(i) for i in range(0, 2001, 500)},
+                        className="mt-1"
+                    ),
+                    html.Div([
+                        html.Span("0 means no limit (up to 2000 places for performance)", className="text-sm text-gray-500"),
+                        html.Br(),
+                        html.Span("Higher values may affect map performance", className="text-sm text-gray-500")
+                    ], className="mt-1")
+                ])
             ], className="mb-4"),
             
             # Year Range

@@ -118,6 +118,9 @@ def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
     if filters is None:
         filters = {}
     
+    # Enforce maximum limit on places for performance
+    MAX_PLACES = 2000  # Hard limit for map performance
+    
     conn = get_db_connection()
     try:
         # Base query to get places with their frequencies
@@ -147,6 +150,11 @@ def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
             query += " AND c.title IN ({})".format(','.join(['?'] * len(filters['titles'])))
             params.extend(filters['titles'])
         
+        # Add sample size limit if specified and greater than 0
+        if filters.get('sample_size', 0) > 0:
+            query += " ORDER BY RANDOM() LIMIT ?"
+            params.append(filters['sample_size'])
+        
         query += """
         )
         SELECT 
@@ -167,10 +175,12 @@ def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
         ORDER BY frequency DESC
         """
         
-        # Add limit if max_places is specified and greater than 0
-        if filters.get('max_places', 0) > 0:
-            query += " LIMIT ?"
-            params.append(filters['max_places'])
+        # Always apply a limit to protect performance
+        # Use the smaller of user-specified max_places or MAX_PLACES
+        user_max = filters.get('max_places', 0)
+        effective_max = min(user_max if user_max > 0 else MAX_PLACES, MAX_PLACES)
+        query += " LIMIT ?"
+        params.append(effective_max)
         
         # Execute query
         places_df = pd.read_sql_query(query, conn, params=tuple(params))
