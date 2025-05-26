@@ -24,6 +24,30 @@ This logbook tracks the development progress, decisions, and challenges of the I
 
 ## Development Log
 
+### May 17, 2024
+**Progress**:
+- Fixed initial map data load and grid view issues
+- Improved app initialization behavior
+
+**Key Changes**:
+1. Modified `default_filters` initialization:
+   - Set empty initial values for all filter parameters
+   - Ensured consistent empty state across components
+2. Added `prevent_initial_call=True` to all relevant callbacks:
+   - Map update callback
+   - Filtered data callback
+   - Corpus controls callbacks
+   - Visualization controls callbacks
+3. Improved app startup behavior:
+   - Map now starts completely empty
+   - No data is loaded until explicit user interaction
+   - Grid view is bypassed on startup
+
+**Next Steps**:
+- Monitor performance with the new initialization approach
+- Consider adding loading states for better UX
+- Plan for additional user interaction improvements
+
 ### May 15, 2024
 **Progress**:
 - Implemented global corpus management system
