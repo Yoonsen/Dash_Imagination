@@ -24,6 +24,21 @@ This logbook tracks the development progress, decisions, and challenges of the I
 
 ## Development Log
 
+### May 17, 2024 (2)
+**Progress**:
+- Fixed syntax error in map update function
+- Improved error handling in map visualization
+
+**Key Changes**:
+1. Restructured try-except block in `update_map` function for better error handling
+2. Fixed indentation issues in the map update logic
+3. Ensured proper error catching and reporting for map visualization
+
+**Next Steps**:
+- Monitor error handling in production
+- Consider adding more detailed error logging
+- Plan for additional error recovery mechanisms
+
 ### May 17, 2024
 **Progress**:
 - Fixed initial map data load and grid view issues
