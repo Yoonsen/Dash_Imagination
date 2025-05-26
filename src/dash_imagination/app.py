@@ -383,17 +383,7 @@ app.layout = html.Div([
                     'fontWeight': '500',
                     'lineHeight': '1.5'
                 }),
-            ], style={'display': 'flex', 'alignItems': 'flex-start'}),
-            html.Div([
-                html.Label([
-                    dcc.Checklist(
-                        id='top-cluster-toggle',
-                        options=[{'label': 'Cluster', 'value': 'cluster'}],
-                        value=[],
-                        style={'marginLeft': '10px', 'display': 'inline-block'}
-                    )
-                ], style={'fontSize': '12px', 'color': '#666', 'marginTop': '4px'})
-            ])
+            ], style={'display': 'flex', 'alignItems': 'flex-start'})
         ], style={'position': 'absolute', 'right': '20px', 'top': '20px', 'pointerEvents': 'auto'}),
     ], style={
         'position': 'fixed',
@@ -896,31 +886,37 @@ def update_category_selection(*args):
     return [selected_categories] + button_colors
 
 @app.callback(
-    Output('main-map', 'figure'),
+    [Output('main-map', 'figure'),
+     Output('view-type', 'data')],
     [Input('filtered-data', 'data'),
      Input('map-button', 'n_clicks'),
      Input('heatmap-button', 'n_clicks'),
      Input('heatmap-intensity', 'value'),
      Input('heatmap-radius', 'value'),
+     Input('heatmap-colorscale', 'value'),
      Input('top-cluster-toggle', 'value'),
      Input('selected-place', 'data'),
      Input('main-map', 'clickData'),
      Input('marker-size-slider', 'value'),
-     Input('cluster-size-slider', 'value')],
+     Input('cluster-size-slider', 'value'),
+     Input('cluster-radius-slider', 'value'),
+     Input('view-tabs', 'active_tab')],
     [State('view-type', 'data')]
 )
-def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity, heatmap_radius, cluster_toggle, selected_place, click_data, marker_size, cluster_size, view_type):
+def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity, heatmap_radius, heatmap_colorscale, cluster_toggle, selected_place, click_data, marker_size, cluster_size, cluster_radius, active_tab, current_view_type):
     ctx = callback_context
     if not ctx.triggered:
         view_type = 'points'  # Default view
     else:
         trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        if trigger_id == 'heatmap-button':
+        if trigger_id == 'view-tabs':
+            view_type = active_tab
+        elif trigger_id == 'heatmap-button':
             view_type = 'heatmap'
         elif trigger_id == 'map-button':
             view_type = 'points'
         else:
-            view_type = 'points'  # Default view
+            view_type = current_view_type or 'points'  # Use current view type or default to points
 
     # Create base figure with default view of Norway
     fig = go.Figure()
@@ -945,7 +941,7 @@ def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity
             showlegend=False,
             uirevision='constant'
         )
-        return fig
+        return fig, view_type
     
     # Load cached data
     places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split')
@@ -961,7 +957,7 @@ def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity
             showlegend=False,
             uirevision='constant'
         )
-        return fig
+        return fig, view_type
     
     # Clean data
     places_df = places_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', 'frequency'])
@@ -987,12 +983,9 @@ def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity
     use_clustering = cluster_toggle and 'cluster' in cluster_toggle
     
     if use_clustering:
-        # Simple clustering based on zoom level with a wider radius (approx 200km)
-        zoom = 5  # Default zoom, to be updated with map-view-state if available
-        
-        # Increase the base threshold for larger clusters
-        base_threshold = 1.8  # Approximately 200km radius
-        threshold = max(0.1, base_threshold / (zoom / 5))  # Adjust with zoom but keep larger base value
+        # Convert cluster radius from km to degrees (approximate)
+        radius_km = cluster_radius if cluster_radius is not None else 50
+        radius_deg = radius_km / 111.32  # Convert km to degrees (approximate)
         
         clustered = places_df.copy()
         # Ensure we have valid numeric values for clustering
@@ -1001,8 +994,8 @@ def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity
         clustered = clustered.dropna(subset=['latitude', 'longitude'])
         
         if not clustered.empty:
-            clustered['cluster'] = ((clustered['latitude'] / threshold).round() * 1000 + 
-                                  (clustered['longitude'] / threshold).round()).astype(int)
+            clustered['cluster'] = ((clustered['latitude'] / radius_deg).round() * 1000 + 
+                                  (clustered['longitude'] / radius_deg).round()).astype(int)
             
             # Store original points for each cluster for polygon creation
             cluster_points = {}
@@ -1132,7 +1125,7 @@ def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity
                         except Exception as e:
                             print(f"Error calculating convex hull: {e}")
                             # Fallback to circle if convex hull fails
-                            radius_km = 200
+                            radius_km = radius_km  # Use the cluster radius
                             radius_deg = radius_km / 111.32
                             angles = np.linspace(0, 2*np.pi, 100)
                             circle_lats = clicked_lat + radius_deg * np.cos(angles)
@@ -1151,7 +1144,7 @@ def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity
                             ))
                     else:
                         # For single points, use a small circle
-                        radius_km = 50
+                        radius_km = radius_km  # Use the cluster radius
                         radius_deg = radius_km / 111.32
                         angles = np.linspace(0, 2*np.pi, 100)
                         circle_lats = clicked_lat + radius_deg * np.cos(angles)
@@ -1238,7 +1231,7 @@ def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity
                     lon=x,
                     z=z,
                     radius=heatmap_actual_radius,
-                    colorscale='Viridis',
+                    colorscale=heatmap_colorscale,
                     opacity=0.8 * (heatmap_intensity / 10),
                     showscale=True,
                     visible=True,
@@ -1267,7 +1260,7 @@ def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity
         clickmode='event'
     )
     
-    return fig
+    return fig, view_type
 
 @app.callback(
     [Output('place-list', 'children'),

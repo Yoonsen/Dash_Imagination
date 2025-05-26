@@ -190,73 +190,114 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
                 'cursor': 'move'
             }, id='visualization-header'),
             
-            # View type selection
-            html.Div([
-                html.Label("View Type", style={'fontWeight': '500', 'marginBottom': '5px'}),
-                dcc.RadioItems(
-                    id='view-toggle',
-                    options=[
-                        {'label': 'Points', 'value': 'points'},
-                        {'label': 'Heatmap', 'value': 'heatmap'}
-                    ],
-                    value='points',
-                    labelStyle={'display': 'inline-block', 'marginRight': '10px'}
-                )
-            ], className="mb-4"),
-            
-            # Marker size control
-            html.Div([
-                html.Label("Marker Size", style={'fontWeight': '500', 'marginBottom': '5px'}),
-                dcc.Slider(
-                    id='marker-size-slider',
-                    min=1,
-                    max=20,
-                    step=1,
-                    value=8,  # Reduced default size
-                    marks={i: str(i) for i in range(1, 21, 2)},
-                    tooltip={"placement": "bottom", "always_visible": True}
-                ),
-                html.Div(style={'height': '10px'}),  # Add some spacing
-                
-                # Cluster marker size control
-                html.Label("Cluster Size", style={'fontWeight': '500', 'marginBottom': '5px'}),
-                dcc.Slider(
-                    id='cluster-size-slider',
-                    min=1,
-                    max=10,
-                    step=1,
-                    value=3,  # Smaller default size for clusters
-                    marks={i: str(i) for i in range(1, 11)},
-                    tooltip={"placement": "bottom", "always_visible": True}
-                ),
-                html.Div(style={'height': '10px'}),  # Add some spacing
-                
-                # Heatmap controls
-                html.Div([
-                    html.Label("Heatmap Intensity", style={'fontWeight': '500', 'marginBottom': '5px'}),
-                    dcc.Slider(
-                        id='heatmap-intensity',
-                        min=1,
-                        max=10,
-                        step=1,
-                        value=5,
-                        marks={i: str(i) for i in range(1, 11)},
-                        tooltip={"placement": "bottom", "always_visible": True}
-                    ),
-                    html.Div(style={'height': '10px'}),
+            # Tabs for Map and Heatmap views
+            dbc.Tabs([
+                # Map View Tab
+                dbc.Tab([
+                    # Clustering toggle
+                    html.Div([
+                        html.Label("Clustering", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                        dcc.Checklist(
+                            id='top-cluster-toggle',
+                            options=[{'label': 'Enable Clustering', 'value': 'cluster'}],
+                            value=[],
+                            className="mt-1"
+                        )
+                    ], className="mb-4"),
                     
-                    html.Label("Heatmap Radius", style={'fontWeight': '500', 'marginBottom': '5px'}),
-                    dcc.Slider(
-                        id='heatmap-radius',
-                        min=1,
-                        max=10,
-                        step=1,
-                        value=5,
-                        marks={i: str(i) for i in range(1, 11)},
-                        tooltip={"placement": "bottom", "always_visible": True}
-                    )
-                ], id='heatmap-settings', style={'display': 'none'})
-            ])
+                    # Marker size slider
+                    html.Div([
+                        html.Label("Place Marker Size", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                        dcc.Slider(
+                            id='marker-size-slider',
+                            min=1,
+                            max=20,
+                            step=1,
+                            value=8,
+                            marks={i: str(i) for i in range(1, 21, 2)},
+                            className="mt-1"
+                        )
+                    ], className="mb-4"),
+                    
+                    # Cluster size slider
+                    html.Div([
+                        html.Label("Cluster Marker Size", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                        dcc.Slider(
+                            id='cluster-size-slider',
+                            min=1,
+                            max=10,
+                            step=1,
+                            value=3,
+                            marks={i: str(i) for i in range(1, 11, 1)},
+                            className="mt-1"
+                        )
+                    ], className="mb-4"),
+                    
+                    # Cluster radius slider
+                    html.Div([
+                        html.Label("Cluster Radius (km)", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                        dcc.Slider(
+                            id='cluster-radius-slider',
+                            min=10,
+                            max=200,
+                            step=10,
+                            value=50,
+                            marks={i: f"{i}km" for i in range(10, 201, 50)},
+                            className="mt-1"
+                        )
+                    ], className="mb-4"),
+                ], label="Map View", tab_id="points"),
+                
+                # Heatmap View Tab
+                dbc.Tab([
+                    # Heatmap settings
+                    html.Div([
+                        html.Label("Color Scheme", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                        dcc.Dropdown(
+                            id='heatmap-colorscale',
+                            options=[
+                                {'label': 'Viridis', 'value': 'Viridis'},
+                                {'label': 'Plasma', 'value': 'Plasma'},
+                                {'label': 'Inferno', 'value': 'Inferno'},
+                                {'label': 'Magma', 'value': 'Magma'},
+                                {'label': 'Blues', 'value': 'Blues'},
+                                {'label': 'Reds', 'value': 'Reds'},
+                                {'label': 'Greens', 'value': 'Greens'},
+                                {'label': 'Purples', 'value': 'Purples'},
+                                {'label': 'Oranges', 'value': 'Oranges'},
+                                {'label': 'Greys', 'value': 'Greys'}
+                            ],
+                            value='Viridis',
+                            clearable=False,
+                            className="mb-4"
+                        )
+                    ], className="mb-4"),
+                    html.Div([
+                        html.Label("Intensity", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                        dcc.Slider(
+                            id='heatmap-intensity',
+                            min=1,
+                            max=10,
+                            step=1,
+                            value=5,
+                            marks={i: str(i) for i in range(1, 11, 1)},
+                            className="mt-1"
+                        )
+                    ], className="mb-4"),
+                    html.Div([
+                        html.Label("Radius", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                        dcc.Slider(
+                            id='heatmap-radius',
+                            min=1,
+                            max=10,
+                            step=1,
+                            value=5,
+                            marks={i: str(i) for i in range(1, 11, 1)},
+                            className="mt-1"
+                        )
+                    ], className="mb-4")
+                ], label="Heatmap View", tab_id="heatmap")
+            ], id="view-tabs", active_tab="points")
         ], style={
             'padding': '15px',
             'backgroundColor': 'white',
@@ -269,6 +310,9 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
         'top': '80px',
         'left': '20px',
         'width': '350px',
+        'maxHeight': '500px',
+        'overflowY': 'auto',
         'zIndex': 800,
-        'display': 'none'
+        'display': 'none',
+        'cursor': 'auto'
     }) 
