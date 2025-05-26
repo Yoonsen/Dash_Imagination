@@ -102,8 +102,8 @@ default_filters = {
     'categories': [],
     'authors': [],
     'titles': [],
-    'max_places': 1500,
-    'sample_size': 50
+    'max_places': 2000,
+    'sample_size': 2000
 }
 
 # Global variable for current corpus
@@ -804,7 +804,7 @@ app.clientside_callback(
      Input('upload-state', 'data'),
      Input('popup-reset-corpus', 'n_clicks')],  # Changed from reset-corpus to popup-reset-corpus
     [State('popup-upload-corpus', 'filename')],
-    prevent_initial_call=False
+    prevent_initial_call=True
 )
 def update_filtered_data(filters, upload_state, reset_clicks, filename):
     ctx = callback_context
@@ -1722,6 +1722,12 @@ def update_corpus_from_selections(n_clicks, selected_categories, selected_titles
     new_filters['titles'] = selected_titles if selected_titles else []
     new_filters['sample_size'] = sample_size if sample_size is not None else default_filters['sample_size']
     new_filters['max_places'] = max_places if max_places is not None else default_filters['max_places']
+    
+    # If no filters are selected, return empty DataFrame
+    if not selected_categories and not selected_titles:
+        update_current_dhlabids([])
+        empty_df = pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+        return new_filters, empty_df.to_json(date_format='iso', orient='split')
     
     # Get dhlabids for the selected filters
     conn = get_db_connection()
