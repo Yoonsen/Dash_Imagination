@@ -3,6 +3,7 @@ import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 
 def create_corpus_controls(categories_list=None, titles_list=None, default_filters=None):
+    """Create the corpus controls as a popup dialogue."""
     if categories_list is None:
         categories_list = []
     if titles_list is None:
@@ -10,9 +11,29 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
     if default_filters is None:
         default_filters = {'categories': [], 'titles': []}
 
-    return dbc.Modal([
-        dbc.ModalHeader(dbc.ModalTitle("Corpus Controls")),
-        dbc.ModalBody([
+    return html.Div([
+        html.Div([
+            html.Div([
+                html.I(className="fa fa-book", style={'marginRight': '8px'}),
+                html.H4("Corpus Controls", style={'marginBottom': '0', 'fontWeight': '400', 'flex': '1'}),
+                html.Button(
+                    html.I(className="fa fa-times"),
+                    id='close-corpus',
+                    style={
+                        'background': 'none',
+                        'border': 'none',
+                        'cursor': 'pointer',
+                        'fontSize': '16px'
+                    }
+                )
+            ], style={
+                'display': 'flex',
+                'justifyContent': 'space-between',
+                'alignItems': 'center',
+                'marginBottom': '10px',
+                'cursor': 'move'
+            }, id='corpus-header'),
+            
             # Upload section
             dcc.Upload(
                 id='popup-upload-corpus',
@@ -64,19 +85,6 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                 )
             ], className="mb-4"),
             
-            # Reset button
-            dbc.Button(
-                [
-                    html.I(className="fas fa-undo mr-2"),
-                    "Reset to Default"
-                ],
-                id='popup-reset-corpus',
-                color="secondary",
-                className="w-100"
-            ),
-            
-            html.Hr(),
-            
             # Category selection
             html.Div([
                 html.H5("Select Categories", className="mb-3"),
@@ -99,9 +107,168 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                     multi=True,
                     placeholder="Select titles..."
                 )
+            ], className="mb-4"),
+            
+            # Apply Filters button
+            dbc.Button(
+                [
+                    html.I(className="fas fa-check mr-2"),
+                    "Apply Filters"
+                ],
+                id='apply-filters',
+                color="primary",
+                className="w-100 mb-3"
+            ),
+            
+            # Reset button
+            dbc.Button(
+                [
+                    html.I(className="fas fa-undo mr-2"),
+                    "Clear Corpus"
+                ],
+                id='popup-reset-corpus',
+                color="secondary",
+                className="w-100"
+            ),
+            
+            # Corpus Info Section
+            html.Div([
+                html.Hr(className="my-3"),
+                html.H5("Corpus Information", className="mb-3"),
+                html.Div(id='corpus-controls-info', children=[
+                    html.P("No corpus loaded", className="text-muted")
+                ])
+            ], className="mt-4")
+        ], style={
+            'padding': '15px',
+            'backgroundColor': 'white',
+            'borderRadius': '8px',
+            'boxShadow': '0 4px 15px rgba(0,0,0,0.15)',
+            'border': '1px solid rgba(0,0,0,0.05)'
+        })
+    ], id='corpus-controls-container', style={
+        'position': 'absolute',
+        'top': '80px',
+        'left': '20px',
+        'width': '350px',
+        'maxHeight': '500px',
+        'overflowY': 'auto',
+        'zIndex': 800,
+        'display': 'none',
+        'cursor': 'auto'
+    })
+
+def create_visualization_controls(categories_list=None, titles_list=None, default_filters=None):
+    """Create the visualization controls as a popup dialogue."""
+    if categories_list is None:
+        categories_list = []
+    if titles_list is None:
+        titles_list = []
+    if default_filters is None:
+        default_filters = {'categories': [], 'titles': []}
+
+    return html.Div([
+        html.Div([
+            html.Div([
+                html.I(className="fa fa-grip-horizontal"),
+                html.H4("Visualization Controls", style={'marginBottom': '0', 'fontWeight': '400', 'flex': '1'}),
+                html.Button(
+                    html.I(className="fa fa-times"),
+                    id='close-visualization',
+                    style={
+                        'background': 'none',
+                        'border': 'none',
+                        'cursor': 'pointer',
+                        'fontSize': '16px'
+                    }
+                )
+            ], style={
+                'display': 'flex',
+                'justifyContent': 'space-between',
+                'alignItems': 'center',
+                'marginBottom': '10px',
+                'cursor': 'move'
+            }, id='visualization-header'),
+            
+            # View type selection
+            html.Div([
+                html.Label("View Type", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                dcc.RadioItems(
+                    id='view-toggle',
+                    options=[
+                        {'label': 'Points', 'value': 'points'},
+                        {'label': 'Heatmap', 'value': 'heatmap'}
+                    ],
+                    value='points',
+                    labelStyle={'display': 'inline-block', 'marginRight': '10px'}
+                )
+            ], className="mb-4"),
+            
+            # Marker size control
+            html.Div([
+                html.Label("Marker Size", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                dcc.Slider(
+                    id='marker-size-slider',
+                    min=1,
+                    max=20,
+                    step=1,
+                    value=8,  # Reduced default size
+                    marks={i: str(i) for i in range(1, 21, 2)},
+                    tooltip={"placement": "bottom", "always_visible": True}
+                ),
+                html.Div(style={'height': '10px'}),  # Add some spacing
+                
+                # Cluster marker size control
+                html.Label("Cluster Size", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                dcc.Slider(
+                    id='cluster-size-slider',
+                    min=1,
+                    max=10,
+                    step=1,
+                    value=3,  # Smaller default size for clusters
+                    marks={i: str(i) for i in range(1, 11)},
+                    tooltip={"placement": "bottom", "always_visible": True}
+                ),
+                html.Div(style={'height': '10px'}),  # Add some spacing
+                
+                # Heatmap controls
+                html.Div([
+                    html.Label("Heatmap Intensity", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                    dcc.Slider(
+                        id='heatmap-intensity',
+                        min=1,
+                        max=10,
+                        step=1,
+                        value=5,
+                        marks={i: str(i) for i in range(1, 11)},
+                        tooltip={"placement": "bottom", "always_visible": True}
+                    ),
+                    html.Div(style={'height': '10px'}),
+                    
+                    html.Label("Heatmap Radius", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                    dcc.Slider(
+                        id='heatmap-radius',
+                        min=1,
+                        max=10,
+                        step=1,
+                        value=5,
+                        marks={i: str(i) for i in range(1, 11)},
+                        tooltip={"placement": "bottom", "always_visible": True}
+                    )
+                ], id='heatmap-settings', style={'display': 'none'})
             ])
-        ]),
-        dbc.ModalFooter(
-            dbc.Button("Close", id="close-corpus-modal", className="ml-auto")
-        )
-    ], id='corpus-controls-modal', size="lg") 
+        ], style={
+            'padding': '15px',
+            'backgroundColor': 'white',
+            'borderRadius': '8px',
+            'boxShadow': '0 4px 15px rgba(0,0,0,0.15)',
+            'border': '1px solid rgba(0,0,0,0.05)'
+        })
+    ], id='visualization-controls-container', style={
+        'position': 'absolute',
+        'top': '80px',
+        'left': '20px',
+        'width': '350px',
+        'zIndex': 800,
+        'display': 'none'
+    }) 

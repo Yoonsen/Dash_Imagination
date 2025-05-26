@@ -10,11 +10,12 @@ import base64
 import io
 from dash.exceptions import PreventUpdate
 from dash_imagination.components.map import create_map_controls
-from dash_imagination.components.corpus import create_corpus_controls
+from dash_imagination.components.corpus import create_corpus_controls, create_visualization_controls
 from scipy.spatial import ConvexHull
 import math
 from dash_imagination.components.places.place_similarity import create_place_similarity_controls
 from dash_imagination.utils.db import get_db_connection
+import plotly.express as px
 
 #=== initialize
 
@@ -300,28 +301,57 @@ app.layout = html.Div([
     html.Div([
         # Database buttons (left)
         html.Div([
-            html.Button("Corpus", id='corpus-button', style={
-                'padding': '8px 16px',
+            # Main button group
+            html.Div([
+                html.Button("Corpus", id='corpus-button', style={
+                    'padding': '8px 16px',
+                    'backgroundColor': 'white',
+                    'color': '#475569',
+                    'border': 'none',
+                    'borderRadius': '20px',
+                    'cursor': 'pointer',
+                    'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                    'transition': 'all 0.2s',
+                    'fontSize': '14px',
+                    'fontWeight': '500',
+                    'lineHeight': '1.5'
+                }),
+                html.Button("Places", id='place-names-toggle', style={
+                    'padding': '8px 16px',
+                    'backgroundColor': 'white',
+                    'color': '#475569',
+                    'border': 'none',
+                    'borderRadius': '20px',
+                    'cursor': 'pointer',
+                    'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                    'transition': 'all 0.2s',
+                    'marginLeft': '8px',
+                    'fontSize': '14px',
+                    'fontWeight': '500',
+                    'lineHeight': '1.5'
+                }),
+            ], style={'display': 'flex', 'alignItems': 'flex-start'}),
+            
+            # Tools button below
+            html.Button(html.I(className="fas fa-sliders-h"), id='visualization-button', style={
+                'padding': '8px',
                 'backgroundColor': 'white',
                 'color': '#475569',
                 'border': 'none',
-                'borderRadius': '20px',
-                'cursor': 'pointer',
-                'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                'transition': 'all 0.2s'
-            }),
-            html.Button("Places", id='place-names-toggle', style={
-                'padding': '8px 16px',
-                'backgroundColor': 'white',
-                'color': '#475569',
-                'border': 'none',
-                'borderRadius': '20px',
+                'borderRadius': '50%',
                 'cursor': 'pointer',
                 'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
                 'transition': 'all 0.2s',
-                'marginLeft': '8px'
+                'marginTop': '16px',
+                'width': '36px',
+                'height': '36px',
+                'display': 'flex',
+                'alignItems': 'center',
+                'justifyContent': 'center',
+                'fontSize': '14px'
             }),
         ], style={'position': 'absolute', 'left': '20px', 'top': '20px', 'pointerEvents': 'auto'}),
+        
         # Display options (right)
         html.Div([
             html.Div([
@@ -333,7 +363,10 @@ app.layout = html.Div([
                     'borderRadius': '20px',
                     'cursor': 'pointer',
                     'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                    'transition': 'all 0.2s'
+                    'transition': 'all 0.2s',
+                    'fontSize': '14px',
+                    'fontWeight': '500',
+                    'lineHeight': '1.5'
                 }),
                 html.Button("Heatmap", id='heatmap-button', style={
                     'padding': '8px 16px',
@@ -344,7 +377,10 @@ app.layout = html.Div([
                     'cursor': 'pointer',
                     'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
                     'transition': 'all 0.2s',
-                    'marginLeft': '8px'
+                    'marginLeft': '8px',
+                    'fontSize': '14px',
+                    'fontWeight': '500',
+                    'lineHeight': '1.5'
                 }),
             ], style={'display': 'flex', 'alignItems': 'flex-start'}),
             html.Div([
@@ -373,20 +409,8 @@ app.layout = html.Div([
     html.Div(id='cached-data', style={'display': 'none'}),
 
     # Map controls in a modal
-    dbc.Modal([
-        dbc.ModalHeader(dbc.ModalTitle("Corpus Controls")),
-        dbc.ModalBody([
-            create_map_controls(),
-            html.Hr(),
-            html.Div([
-                html.H5("Corpus Information", style={'marginBottom': '10px'}),
-                html.Div(id='corpus-stats')
-            ])
-        ]),
-        dbc.ModalFooter(
-            dbc.Button("Close", id="close-corpus-modal", className="ml-auto")
-        )
-    ], id="corpus-modal", size="lg"),
+    create_corpus_controls(categories_list, titles_list, default_filters),
+    create_visualization_controls(categories_list, titles_list, default_filters),
 
     # ImagiNation info button and modal
     html.Div([
@@ -558,8 +582,8 @@ app.layout = html.Div([
     dcc.Store(id='upload-state', data=None),
     dcc.Store(id='category-selection', data=default_filters['categories']),
 
-    # Hidden div for view type
-    html.Div(id='view-type', style={'display': 'none'}),
+    # Change view-type from Div to Store
+    dcc.Store(id='view-type', data='points'),
 ], id='main-container')
 
 # Add custom CSS
@@ -592,6 +616,10 @@ app.index_string = '''
             #map-button:hover, #heatmap-button:hover {
                 background-color: #1d4ed8 !important;
             }
+            #visualization-button:hover {
+                background-color: #1e293b !important;
+                transform: scale(1.1);
+            }
             .place-item:hover {
                 background-color: #f8f9fa;
             }
@@ -608,38 +636,93 @@ app.index_string = '''
             {%renderer%}
         </footer>
         <script>
-            $("#place-summary-container").draggable({
-                handle: "#drag-handle",
-                containment: "parent",
-                start: function(event, ui) {
-                    $(this).addClass("dragging");
-                },
-                stop: function(event, ui) {
-                    $(this).removeClass("dragging");
-                    var pos = $(this).position();
-                    $("#summary-position").text(JSON.stringify({top: pos.top, left: pos.left}));
+            $(document).ready(function() {
+                // Initialize draggable elements
+                function initializeDraggable() {
+                    $("#place-summary-container").draggable({
+                        handle: "#summary-header",
+                        containment: "parent",
+                        start: function(event, ui) {
+                            $(this).addClass("dragging");
+                        },
+                        stop: function(event, ui) {
+                            $(this).removeClass("dragging");
+                        }
+                    });
+
+                    $("#place-names-container").draggable({
+                        handle: "#places-header",
+                        containment: "parent",
+                        start: function(event, ui) {
+                            $(this).addClass("dragging");
+                        },
+                        stop: function(event, ui) {
+                            $(this).removeClass("dragging");
+                        }
+                    });
+
+                    $("#corpus-controls-container").draggable({
+                        handle: "#corpus-header",
+                        containment: "parent",
+                        start: function(event, ui) {
+                            $(this).addClass("dragging");
+                        },
+                        stop: function(event, ui) {
+                            $(this).removeClass("dragging");
+                        }
+                    });
+
+                    $("#visualization-controls-container").draggable({
+                        handle: "#visualization-header",
+                        containment: "parent",
+                        start: function(event, ui) {
+                            $(this).addClass("dragging");
+                        },
+                        stop: function(event, ui) {
+                            $(this).removeClass("dragging");
+                        }
+                    });
                 }
+
+                // Initialize on document ready
+                initializeDraggable();
+
+                // Also initialize when elements become visible
+                var observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                            var element = mutation.target;
+                            if (element.style.display === 'block' && !$(element).hasClass('ui-draggable')) {
+                                initializeDraggable();
+                            }
+                        }
+                    });
+                });
+
+                // Observe all draggable containers
+                ['#place-summary-container', '#place-names-container', '#corpus-controls-container', '#visualization-controls-container'].forEach(function(selector) {
+                    var element = document.querySelector(selector);
+                    if (element) {
+                        observer.observe(element, { attributes: true });
+                    }
+                });
             });
-            var initialPos = $("#summary-position").text() ? JSON.parse($("#summary-position").text()) : {top: 0, left: 0};
-            $("#place-summary-container").css({top: initialPos.top, left: initialPos.left});
         </script>
     </body>
 </html>
 '''
 
 @app.callback(
-    [Output('upload-status', 'children'),
+    [Output('popup-upload-status', 'children'),
      Output('upload-state', 'data'),
      Output('current-filters', 'data')],
-    [Input('upload-corpus', 'contents'),
-     Input('max-places-slider', 'value'),
-     Input('sample-size', 'value'),
-     Input('reset-corpus', 'n_clicks')],
-    [State('upload-corpus', 'filename'),
-     State('upload-corpus', 'last_modified'),
-     State('current-filters', 'data')]
+    [Input('popup-upload-corpus', 'contents'),
+     Input('popup-reset-corpus', 'n_clicks')],
+    [State('popup-upload-corpus', 'filename'),
+     State('current-filters', 'data')],
+    prevent_initial_call=True
 )
-def update_state_and_filters(contents, max_places, sample_size, reset_clicks, filename, date, current_filters):
+def update_state_and_filters(contents, reset_clicks, filename, current_filters):
     global current_dhlabids
     ctx = callback_context
     if not ctx.triggered:
@@ -647,11 +730,11 @@ def update_state_and_filters(contents, max_places, sample_size, reset_clicks, fi
     
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
-    if trigger_id == 'reset-corpus':
+    if trigger_id == 'popup-reset-corpus':
         current_dhlabids = []  # Reset the global corpus
         return '', {}, default_filters
     
-    if trigger_id == 'upload-corpus' and contents:
+    if trigger_id == 'popup-upload-corpus' and contents:
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
         try:
@@ -661,19 +744,13 @@ def update_state_and_filters(contents, max_places, sample_size, reset_clicks, fi
             
             current_dhlabids = df['dhlabid'].tolist()  # Update the global corpus
             new_filters = current_filters.copy() if current_filters else default_filters.copy()
-            new_filters['sample_size'] = sample_size
-            new_filters['max_places'] = max_places
             new_filters['corpus_source'] = filename  # Store the filename as corpus source
             
             return html.Div(f'Successfully loaded {len(current_dhlabids)} books from {filename}', style={'color': 'green'}), {'uploaded': True, 'filename': filename}, new_filters
         except Exception as e:
             return html.Div(f'Error processing file: {str(e)}', style={'color': 'red'}), {}, current_filters
     
-    new_filters = current_filters.copy() if current_filters else default_filters.copy()
-    new_filters['sample_size'] = sample_size
-    new_filters['max_places'] = max_places
-    
-    return html.Div('', style={'display': 'none'}), current_filters.get('upload_state', {}), new_filters
+    return html.Div('', style={'display': 'none'}), current_filters.get('upload_state', {}), current_filters
 
 # Add this callback to toggle the info modal
 
@@ -724,15 +801,15 @@ app.clientside_callback(
     Output('filtered-data', 'data'),
     [Input('current-filters', 'data'),
      Input('upload-state', 'data'),
-     Input('reset-corpus', 'n_clicks')],
-    [State('upload-corpus', 'filename')],
+     Input('popup-reset-corpus', 'n_clicks')],  # Changed from reset-corpus to popup-reset-corpus
+    [State('popup-upload-corpus', 'filename')],
     prevent_initial_call=False
 )
 def update_filtered_data(filters, upload_state, reset_clicks, filename):
     ctx = callback_context
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
     
-    if triggered_id == 'reset-corpus' and reset_clicks:
+    if triggered_id == 'popup-reset-corpus' and reset_clicks:  # Updated ID here too
         update_current_dhlabids([])
         # Use default filters to get places data
         places_df = get_places_for_map(default_filters)
@@ -820,16 +897,30 @@ def update_category_selection(*args):
 @app.callback(
     Output('main-map', 'figure'),
     [Input('filtered-data', 'data'),
-     Input('map-style', 'value'),
-     Input('marker-size-slider', 'value'),
-     Input('view-toggle', 'value'),
+     Input('map-button', 'n_clicks'),
+     Input('heatmap-button', 'n_clicks'),
      Input('heatmap-intensity', 'value'),
      Input('heatmap-radius', 'value'),
      Input('top-cluster-toggle', 'value'),
      Input('selected-place', 'data'),
-     Input('main-map', 'clickData')]
+     Input('main-map', 'clickData'),
+     Input('marker-size-slider', 'value'),
+     Input('cluster-size-slider', 'value')],
+    [State('view-type', 'data')]
 )
-def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_intensity, heatmap_radius, cluster_toggle, selected_place, click_data):
+def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity, heatmap_radius, cluster_toggle, selected_place, click_data, marker_size, cluster_size, view_type):
+    ctx = callback_context
+    if not ctx.triggered:
+        view_type = 'points'  # Default view
+    else:
+        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        if trigger_id == 'heatmap-button':
+            view_type = 'heatmap'
+        elif trigger_id == 'map-button':
+            view_type = 'points'
+        else:
+            view_type = 'points'  # Default view
+
     # Create base figure with default view of Norway
     fig = go.Figure()
     
@@ -845,8 +936,8 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     if filtered_data_json is None:
         fig.update_layout(
             map=dict(
-                style=map_style or 'open-street-map',
-                center=dict(lat=60.5, lon=9.0),  # Center on Norway
+                style='open-street-map',
+                center=dict(lat=60.5, lon=9.0),
                 zoom=4
             ),
             margin=dict(l=0, r=0, t=0, b=0),
@@ -861,8 +952,8 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     if places_df.empty:
         fig.update_layout(
             map=dict(
-                style=map_style or 'open-street-map',
-                center=dict(lat=60.5, lon=9.0),  # Center on Norway
+                style='open-street-map',
+                center=dict(lat=60.5, lon=9.0),
                 zoom=4
             ),
             margin=dict(l=0, r=0, t=0, b=0),
@@ -878,8 +969,8 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     sizes = places_df['frequency'].fillna(1).copy()
     sizes = np.log1p(sizes)  # Logarithmic transformation (log(1 + x))
     min_size, max_size = sizes.min(), sizes.max()
-    base_size = 8 * marker_size  # Slightly smaller base size
-    size_range = 15 * marker_size  # Reduced range for more relative consistency
+    base_size = marker_size if marker_size is not None else 8  # Use slider value as base size
+    size_range = 15  # Reduced range for more relative consistency
     if min_size != max_size:
         sizes = base_size + (sizes - min_size) / (max_size - min_size) * size_range
     else:
@@ -899,8 +990,6 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
         zoom = 5  # Default zoom, to be updated with map-view-state if available
         
         # Increase the base threshold for larger clusters
-        # For reference, 1 degree of latitude is roughly 111km
-        # So for a 200km radius, we want a threshold around 1.8 degrees
         base_threshold = 1.8  # Approximately 200km radius
         threshold = max(0.1, base_threshold / (zoom / 5))  # Adjust with zoom but keep larger base value
         
@@ -928,16 +1017,19 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
                 'longitude': 'mean',
                 'frequency': 'sum',
                 'book_count': 'sum',
-                'token': lambda x: '<br>'.join([str(t) for t in dict.fromkeys(x) if t is not None]),  # Handle None values
-                'name': lambda x: '<br>'.join([str(n) for n in dict.fromkeys(x) if n is not None]),  # Handle None values
-                'hover_text': 'first'  # Use first for simplicity
+                'token': lambda x: '<br>'.join([str(t) for t in dict.fromkeys(x) if t is not None]),
+                'name': lambda x: '<br>'.join([str(n) for n in dict.fromkeys(x) if n is not None]),
+                'hover_text': 'first'
             }).reset_index()
             cluster_data['count'] = clustered.groupby('cluster').size().values
             cluster_data['hover_text'] = cluster_data.apply(
                 lambda row: f"""Cluster of {row['count']} places<br>Total Mentions: {int(row['frequency'])}<br>Total Books: {int(row['book_count'])}<br>Example place: {row['token'].split('<br>')[0] if row['token'] else 'Unknown'}""",
                 axis=1
             )
-            cluster_data['size'] = np.log1p(cluster_data['count']) * marker_size * 5  # Size based on cluster count
+            
+            # Use cluster_size slider to control cluster marker size
+            base_cluster_size = cluster_size if cluster_size is not None else 3
+            cluster_data['size'] = np.log1p(cluster_data['count']) * base_cluster_size * 2  # Reduced multiplier for more reasonable sizes
             
             # Add clustered markers
             fig.add_trace(go.Scattermap(
@@ -986,10 +1078,9 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
                         bearing = calculate_bearing(p1_lat, p1_lon, p2_lat, p2_lon)
                         
                         # Create rotated ellipse
-                        # Use distance/2 as radius and make it slightly wider perpendicular to the line
                         lats, lons = create_rotated_ellipse(
                             center_lat, center_lon,
-                            distance_km/2,  # Half the distance between points
+                            distance_km/2,
                             bearing,
                             points=100
                         )
@@ -998,12 +1089,12 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
                             lat=lats,
                             lon=lons,
                             mode='lines',
-                            line=dict(color='#1E40AF', width=3),  # Increased line width
+                            line=dict(color='#1E40AF', width=3),
                             fill='toself',
-                            fillcolor='rgba(30, 64, 175, 0.3)',  # Increased opacity
+                            fillcolor='rgba(30, 64, 175, 0.3)',
                             hoverinfo='skip',
                             showlegend=False,
-                            visible=True  # Explicitly set visibility
+                            visible=True
                         ))
                         
                     elif len(points) >= 3:
@@ -1011,29 +1102,31 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
                         points_array = np.array(points)
                         
                         try:
-                            # Add edge points if needed
-                            points_array = add_edge_points(points_array)
-                            
                             # Calculate convex hull
                             hull = ConvexHull(points_array)
                             
                             # Get the hull vertices
                             hull_points = points_array[hull.vertices]
                             
+                            # Add some padding to make the hull slightly larger
+                            center = np.mean(hull_points, axis=0)
+                            padding = 0.05  # 5% padding
+                            padded_points = center + (1 + padding) * (hull_points - center)
+                            
                             # Ensure the polygon is closed by adding the first point at the end
-                            hull_points = np.vstack([hull_points, hull_points[0]])
+                            padded_points = np.vstack([padded_points, padded_points[0]])
                             
                             # Add the polygon
                             fig.add_trace(go.Scattermap(
-                                lat=hull_points[:, 1],  # latitude is second column
-                                lon=hull_points[:, 0],  # longitude is first column
+                                lat=padded_points[:, 1],
+                                lon=padded_points[:, 0],
                                 mode='lines',
-                                line=dict(color='#1E40AF', width=3),  # Increased line width
+                                line=dict(color='#1E40AF', width=3),
                                 fill='toself',
-                                fillcolor='rgba(30, 64, 175, 0.3)',  # Increased opacity
+                                fillcolor='rgba(30, 64, 175, 0.3)',
                                 hoverinfo='skip',
                                 showlegend=False,
-                                visible=True  # Explicitly set visibility
+                                visible=True
                             ))
                         except Exception as e:
                             print(f"Error calculating convex hull: {e}")
@@ -1048,16 +1141,16 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
                                 lat=circle_lats,
                                 lon=circle_lons,
                                 mode='lines',
-                                line=dict(color='#1E40AF', width=3),  # Increased line width
+                                line=dict(color='#1E40AF', width=3),
                                 fill='toself',
-                                fillcolor='rgba(30, 64, 175, 0.3)',  # Increased opacity
+                                fillcolor='rgba(30, 64, 175, 0.3)',
                                 hoverinfo='skip',
                                 showlegend=False,
-                                visible=True  # Explicitly set visibility
+                                visible=True
                             ))
                     else:
                         # For single points, use a small circle
-                        radius_km = 50  # Smaller radius for small clusters
+                        radius_km = 50
                         radius_deg = radius_km / 111.32
                         angles = np.linspace(0, 2*np.pi, 100)
                         circle_lats = clicked_lat + radius_deg * np.cos(angles)
@@ -1067,18 +1160,17 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
                             lat=circle_lats,
                             lon=circle_lons,
                             mode='lines',
-                            line=dict(color='#1E40AF', width=3),  # Increased line width
+                            line=dict(color='#1E40AF', width=3),
                             fill='toself',
-                            fillcolor='rgba(30, 64, 175, 0.3)',  # Increased opacity
+                            fillcolor='rgba(30, 64, 175, 0.3)',
                             hoverinfo='skip',
                             showlegend=False,
-                            visible=True  # Explicitly set visibility
+                            visible=True
                         ))
         else:
             print("No valid data for clustering")
     else:
         # Add individual markers
-        # Create separate traces for selected and unselected places
         if selected_place:
             selected_df = places_df[places_df['token'] == selected_place]
             unselected_df = places_df[places_df['token'] != selected_place]
@@ -1125,30 +1217,26 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
             ))
     
     heatmap_visible = view_type == 'heatmap'
-    print(f"Heatmap mode: {heatmap_visible}, Places available: {len(places_df)}")
     if len(places_df) > 0 and heatmap_visible:
         try:
             x = places_df['longitude'].values
             y = places_df['latitude'].values
             z = places_df['frequency'].fillna(1).values
-            z = np.log1p(z)  # Logarithmic transformation for heatmap intensity
-            print(f"Raw heatmap data - x: {len(x)}, y: {len(y)}, z: {len(z)}")
+            z = np.log1p(z)
             mask = (~np.isnan(x)) & (~np.isnan(y)) & (~np.isnan(z)) & (~np.isinf(x)) & (~np.isinf(y)) & (~np.isinf(z))
             x, y, z = x[mask], y[mask], z[mask]
-            print(f"Cleaned heatmap data - x: {len(x)}, y: {len(y)}, z: {len(z)}")
+            
             if len(x) < 2:
-                print("Not enough valid data for heatmap, using fallback")
                 fig.add_trace(go.Densitymap(
                     lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap'
                 ))
             else:
                 heatmap_actual_radius = (heatmap_radius ** 0.5) * 10
-
                 fig.add_trace(go.Densitymap(
                     lat=y,
                     lon=x,
                     z=z,
-                    radius=heatmap_actual_radius,  # Use this transformed value
+                    radius=heatmap_actual_radius,
                     colorscale='Viridis',
                     opacity=0.8 * (heatmap_intensity / 10),
                     showscale=True,
@@ -1163,35 +1251,21 @@ def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_in
     else:
         fig.add_trace(go.Densitymap(visible=False, name='Heatmap'))
     
-    if not selected_place:  # Only update layout if no place is selected
-        fig.update_layout(
-            map=dict(
-                style=map_style or 'open-street-map',
-                center=dict(lat=60.5, lon=9.0),
-                zoom=4
-            ),
-            margin=dict(l=0, r=0, t=0, b=0),
-            showlegend=False,
-            uirevision='constant',
-            hovermode='closest',
-            dragmode='pan',
-            clickmode='event'
-        )
-    else:
-        fig.update_layout(
-            map=dict(
-                style=map_style or 'open-street-map',
-                center=dict(lat=60.5, lon=9.0),
-                zoom=4
-            ),
-            margin=dict(l=0, r=0, t=0, b=0),
-            showlegend=False,
-            uirevision='constant',
-            hovermode='closest',
-            dragmode='pan',
-            clickmode='event'
-        )
-    print("Returning populated figure")
+    # Update layout
+    fig.update_layout(
+        map=dict(
+            style='open-street-map',
+            center=dict(lat=60.5, lon=9.0),
+            zoom=4
+        ),
+        margin=dict(l=0, r=0, t=0, b=0),
+        showlegend=False,
+        uirevision='constant',
+        hovermode='closest',
+        dragmode='pan',
+        clickmode='event'
+    )
+    
     return fig
 
 @app.callback(
@@ -1411,14 +1485,15 @@ app.clientside_callback(
 )
 
 # Callback to toggle heatmap settings visibility
-@callback(
+@app.callback(
     Output('heatmap-settings', 'style'),
-    [Input('view-toggle', 'value')]
+    [Input('view-toggle', 'value')],
+    prevent_initial_call=True
 )
-def toggle_heatmap_settings(view):
-    if view == 'heatmap':
-        return {'display': 'block'}
-    return {'display': 'none'}
+def toggle_heatmap_settings(view_type):
+    if view_type is None:
+        raise PreventUpdate
+    return {'display': 'block'} if view_type == 'heatmap' else {'display': 'none'}
 
 # Callback to update map view state
 app.clientside_callback(
@@ -1435,10 +1510,11 @@ app.clientside_callback(
     prevent_initial_call=True
 )
 
-# Callback to update corpus stats
+# Update corpus stats callback to be more efficient
 @app.callback(
     Output('corpus-stats', 'children'),
-    [Input('current-filters', 'data')]
+    [Input('current-filters', 'data')],
+    prevent_initial_call=True
 )
 def update_corpus_stats(filters):
     if not filters:
@@ -1446,215 +1522,123 @@ def update_corpus_stats(filters):
     
     # Determine the corpus source
     conn = get_db_connection()
-    if filters.get('current_corpus'):
-        dhlabids = filters['current_corpus']
-        num_books = len(dhlabids)
-        book_query = f"""
-        SELECT dhlabid, year
-        FROM corpus
-        WHERE dhlabid IN ({','.join(['?'] * len(dhlabids))})
-        AND year IS NOT NULL
-        """
-        books_df = pd.read_sql_query(book_query, conn, params=tuple(dhlabids))
-    elif filters.get('categories') and filters['categories']:
-        categories = filters['categories']
-        book_query = f"""
-        SELECT dhlabid, year
-        FROM corpus
-        WHERE category IN ({','.join(['?'] * len(categories))})
-        AND year IS NOT NULL
-        """
-        books_df = pd.read_sql_query(book_query, conn, params=tuple(categories))
-        num_books = len(books_df)
-    else:
-        books_df = pd.DataFrame()
-        num_books = 0
-    
-    # Get the period from metadata
-    if not books_df.empty:
-        min_year = int(books_df['year'].min())
-        max_year = int(books_df['year'].max())
-        year_range = f"{min_year}–{max_year}"
-    else:
-        year_range = "No period data"
-    
-    # Get total places and filtered places
-    places_df, total_places = get_places_for_map(filters, return_total=True)
-    if places_df.empty:
-        return "No places match the current filters"
-    
-    total_places_shown = len(places_df)
-    total_mentions = int(places_df['frequency'].sum())
-    total_books = int(places_df['book_count'].sum())
-    category_count = len(filters['categories']) if filters['categories'] else 0
-    title_count = len(filters['titles']) if filters['titles'] else 0
-    
-    conn.close()
-    
-    # Build the stats display
-    stats = [
-        html.P(f"Corpus source: {filters.get('corpus_source', 'No corpus selected')}"),
-        html.P(f"Number of books: {num_books}"),
-        html.P(f"Total places in corpus: {total_places}"),
-        html.P(f"Period: {year_range}"),
-        html.P(f"Filters: {category_count} categories, {title_count} works"),
-        html.P(f"Places shown: {total_places_shown}"),
-        html.P(f"Total mentions: {total_mentions:,}")
-    ]
-    
-    # Add selected places information if available
-    if filters.get('selected_tokens'):
-        selected_places = filters['selected_tokens']
-        stats.extend([
-            html.Hr(),
-            html.H5("Selected Places", className="mt-3"),
-            html.P(f"Number of selected places: {len(selected_places)}"),
-            html.P("Selected places:", style={'marginBottom': '5px'}),
-            html.Div([
-                html.Span(place, style={'marginRight': '10px', 'marginBottom': '5px'})
-                for place in selected_places
-            ], style={'display': 'flex', 'flexWrap': 'wrap', 'gap': '5px'})
-        ])
-    
-    return html.Div(stats)
+    try:
+        if filters.get('current_corpus'):
+            dhlabids = filters['current_corpus']
+            num_books = len(dhlabids)
+            book_query = f"""
+            SELECT dhlabid, year
+            FROM corpus
+            WHERE dhlabid IN ({','.join(['?'] * len(dhlabids))})
+            AND year IS NOT NULL
+            """
+            books_df = pd.read_sql_query(book_query, conn, params=tuple(dhlabids))
+        elif filters.get('categories') and filters['categories']:
+            categories = filters['categories']
+            book_query = f"""
+            SELECT dhlabid, year
+            FROM corpus
+            WHERE category IN ({','.join(['?'] * len(categories))})
+            AND year IS NOT NULL
+            """
+            books_df = pd.read_sql_query(book_query, conn, params=tuple(categories))
+            num_books = len(books_df)
+        else:
+            books_df = pd.DataFrame()
+            num_books = 0
+        
+        # Get the period from metadata
+        if not books_df.empty:
+            min_year = int(books_df['year'].min())
+            max_year = int(books_df['year'].max())
+            year_range = f"{min_year}–{max_year}"
+        else:
+            year_range = "No period data"
+        
+        # Get total places and filtered places
+        places_df, total_places = get_places_for_map(filters, return_total=True)
+        if places_df.empty:
+            return "No places match the current filters"
+        
+        total_places_shown = len(places_df)
+        total_mentions = int(places_df['frequency'].sum())
+        total_books = int(places_df['book_count'].sum())
+        category_count = len(filters['categories']) if filters['categories'] else 0
+        title_count = len(filters['titles']) if filters['titles'] else 0
+        
+        # Build the stats display
+        stats = [
+            html.P(f"Corpus source: {filters.get('corpus_source', 'No corpus selected')}"),
+            html.P(f"Number of books: {num_books}"),
+            html.P(f"Total places in corpus: {total_places}"),
+            html.P(f"Period: {year_range}"),
+            html.P(f"Filters: {category_count} categories, {title_count} works"),
+            html.P(f"Places shown: {total_places_shown}"),
+            html.P(f"Total mentions: {total_mentions:,}")
+        ]
+        
+        # Add selected places information if available
+        if filters.get('selected_tokens'):
+            selected_places = filters['selected_tokens']
+            stats.extend([
+                html.Hr(),
+                html.H5("Selected Places", className="mt-3"),
+                html.P(f"Number of selected places: {len(selected_places)}"),
+                html.P("Selected places:", style={'marginBottom': '5px'}),
+                html.Div([
+                    html.Span(place, style={'marginRight': '10px', 'marginBottom': '5px'})
+                    for place in selected_places
+                ], style={'display': 'flex', 'flexWrap': 'wrap', 'gap': '5px'})
+            ])
+        
+        return html.Div(stats)
+    finally:
+        conn.close()
 
-# Add callback to toggle corpus modal
+# Update corpus controls callback
 @app.callback(
-    Output('corpus-modal', 'is_open'),
+    Output('corpus-controls-container', 'style'),
     [Input('corpus-button', 'n_clicks'),
-     Input('close-corpus-modal', 'n_clicks')],
-    [State('corpus-modal', 'is_open')]
+     Input('close-corpus', 'n_clicks')],
+    [State('corpus-controls-container', 'style')],
+    prevent_initial_call=True
 )
-def toggle_corpus_modal(n1, n2, is_open):
+def toggle_corpus_controls(n1, n2, current_style):
     if n1 or n2:
-        return not is_open
-    return is_open
+        new_style = dict(current_style)
+        new_style['display'] = 'block' if current_style.get('display') == 'none' else 'none'
+        return new_style
+    return current_style
 
-# Callback to handle view type from buttons
+# Update visualization controls callback
 @app.callback(
-    Output('view-toggle', 'value'),
-    [Input('map-button', 'n_clicks'),
-     Input('heatmap-button', 'n_clicks')],
-    [State('view-toggle', 'value')]
+    Output('visualization-controls-container', 'style'),
+    [Input('visualization-button', 'n_clicks'),
+     Input('close-visualization', 'n_clicks')],
+    [State('visualization-controls-container', 'style')],
+    prevent_initial_call=True
 )
-def update_view_type_from_buttons(map_clicks, heatmap_clicks, current_view):
-    ctx = callback_context
-    if not ctx.triggered:
-        return current_view
-    
-    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    if button_id == 'map-button':
-        return 'points'
-    elif button_id == 'heatmap-button':
-        return 'heatmap'
-    return current_view
+def toggle_visualization_controls(n1, n2, current_style):
+    if n1 or n2:
+        new_style = dict(current_style)
+        new_style['display'] = 'block' if current_style.get('display') == 'none' else 'none'
+        return new_style
+    return current_style
 
-def calculate_bearing(lat1, lon1, lat2, lon2):
-    """Calculate the bearing between two points in degrees."""
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-    dlon = lon2 - lon1
-    y = math.sin(dlon) * math.cos(lat2)
-    x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
-    bearing = math.degrees(math.atan2(y, x))
-    return (bearing + 360) % 360
-
-def create_rotated_ellipse(center_lat, center_lon, radius_km, bearing, points=100):
-    """Create an ellipse rotated by the given bearing."""
-    radius_deg = radius_km / 111.32  # Convert km to degrees
-    angles = np.linspace(0, 2*np.pi, points)
-    
-    # Create points for a circle
-    x = radius_deg * np.cos(angles)
-    y = radius_deg * np.sin(angles)
-    
-    # Rotate the points (subtract 90 degrees to align with the line)
-    bearing_rad = math.radians(bearing - 90)  # Subtract 90 degrees to align with the line
-    x_rot = x * np.cos(bearing_rad) - y * np.sin(bearing_rad)
-    y_rot = x * np.sin(bearing_rad) + y * np.cos(bearing_rad)
-    
-    # Translate to center point
-    lats = center_lat + y_rot
-    lons = center_lon + x_rot
-    
-    return lats, lons
-
-def add_edge_points(points):
-    """Add points at map edges to ensure complete polygon."""
-    # Convert to numpy array for easier manipulation
-    points = np.array(points)
-    
-    # Get bounds
-    min_lon, max_lon = points[:, 0].min(), points[:, 0].max()
-    min_lat, max_lat = points[:, 1].min(), points[:, 1].max()
-    
-    # If points span more than 180 degrees, we need to handle the wrap-around
-    if max_lon - min_lon > 180:
-        # Add points at the edges
-        edge_points = []
-        for lat in np.linspace(min_lat, max_lat, 20):  # Increased number of points
-            edge_points.append([-180, lat])  # Left edge
-            edge_points.append([180, lat])   # Right edge
-        
-        # Add points at the corners
-        edge_points.extend([
-            [-180, min_lat], [-180, max_lat],
-            [180, min_lat], [180, max_lat]
-        ])
-        
-        # Combine with original points
-        points = np.vstack([points, edge_points])
-    
-    return points
-
-@app.callback(
-    [Output('map-button', 'style'),
-     Output('heatmap-button', 'style')],
-    [Input('view-toggle', 'value')],
-    [State('map-button', 'style'),
-     State('heatmap-button', 'style')]
-)
-def update_map_heatmap_styles(view_type, map_style, heatmap_style):
-    # Base styles
-    base_style = {
-        'padding': '8px 16px',
-        'backgroundColor': 'white',
-        'color': '#475569',
-        'border': 'none',
-        'borderRadius': '20px',
-        'cursor': 'pointer',
-        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-        'transition': 'all 0.2s'
-    }
-    
-    active_style = {
-        'padding': '8px 16px',
-        'backgroundColor': '#3b82f6',
-        'color': 'white',
-        'border': 'none',
-        'borderRadius': '20px',
-        'cursor': 'pointer',
-        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-        'transition': 'all 0.2s'
-    }
-    
-    # Update map button style
-    map_style = active_style.copy() if view_type == 'points' else base_style.copy()
-    
-    # Update heatmap button style
-    heatmap_style = active_style.copy() if view_type == 'heatmap' else base_style.copy()
-    heatmap_style['marginLeft'] = '8px'  # Always maintain the margin
-    
-    return map_style, heatmap_style
-
+# Update button styles callback
 @app.callback(
     [Output('corpus-button', 'style'),
-     Output('place-names-toggle', 'style')],
-    [Input('corpus-modal', 'is_open'),
-     Input('place-names-container', 'style')],
+     Output('place-names-toggle', 'style'),
+     Output('visualization-button', 'style')],
+    [Input('corpus-controls-container', 'style'),
+     Input('place-names-container', 'style'),
+     Input('visualization-controls-container', 'style')],
     [State('corpus-button', 'style'),
-     State('place-names-toggle', 'style')]
+     State('place-names-toggle', 'style'),
+     State('visualization-button', 'style')],
+    prevent_initial_call=True
 )
-def update_corpus_places_styles(corpus_modal_open, place_names_style, corpus_style, places_style):
+def update_button_styles(corpus_style, places_style, viz_style, corpus_btn_style, places_btn_style, viz_btn_style):
     # Base styles
     base_style = {
         'padding': '8px 16px',
@@ -1664,7 +1648,10 @@ def update_corpus_places_styles(corpus_modal_open, place_names_style, corpus_sty
         'borderRadius': '20px',
         'cursor': 'pointer',
         'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-        'transition': 'all 0.2s'
+        'transition': 'all 0.2s',
+        'fontSize': '14px',
+        'fontWeight': '500',
+        'lineHeight': '1.5'
     }
     
     active_style = {
@@ -1675,17 +1662,211 @@ def update_corpus_places_styles(corpus_modal_open, place_names_style, corpus_sty
         'borderRadius': '20px',
         'cursor': 'pointer',
         'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-        'transition': 'all 0.2s'
+        'transition': 'all 0.2s',
+        'fontSize': '14px',
+        'fontWeight': '500',
+        'lineHeight': '1.5'
     }
     
     # Update corpus button style
-    corpus_style = active_style.copy() if corpus_modal_open else base_style.copy()
+    corpus_btn_style = active_style.copy() if corpus_style and corpus_style.get('display') == 'block' else base_style.copy()
     
     # Update places button style
-    places_style = active_style.copy() if place_names_style and place_names_style.get('display') == 'block' else base_style.copy()
-    places_style['marginLeft'] = '8px'  # Always maintain the margin
+    places_btn_style = active_style.copy() if places_style and places_style.get('display') == 'block' else base_style.copy()
+    places_btn_style['marginLeft'] = '8px'
     
-    return corpus_style, places_style
+    # Update visualization button style - maintain position and size
+    viz_btn_style = {
+        'padding': '8px',
+        'backgroundColor': '#475569' if viz_style and viz_style.get('display') == 'block' else 'white',
+        'color': 'white' if viz_style and viz_style.get('display') == 'block' else '#475569',
+        'border': 'none',
+        'borderRadius': '50%',
+        'cursor': 'pointer',
+        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+        'transition': 'all 0.2s',
+        'marginTop': '16px',
+        'width': '36px',
+        'height': '36px',
+        'display': 'flex',
+        'alignItems': 'center',
+        'justifyContent': 'center',
+        'fontSize': '14px'
+    }
+    
+    return corpus_btn_style, places_btn_style, viz_btn_style
+
+# Add callback for category and title selection
+@app.callback(
+    [Output('current-filters', 'data', allow_duplicate=True),
+     Output('filtered-data', 'data', allow_duplicate=True)],
+    [Input('apply-filters', 'n_clicks')],
+    [State('category-dropdown', 'value'),
+     State('title-dropdown', 'value'),
+     State('popup-sample-size', 'value'),
+     State('popup-max-places-slider', 'value'),
+     State('current-filters', 'data')],
+    prevent_initial_call=True
+)
+def update_corpus_from_selections(n_clicks, selected_categories, selected_titles, sample_size, max_places, current_filters):
+    if not n_clicks:
+        raise PreventUpdate
+        
+    if not current_filters:
+        current_filters = default_filters.copy()
+    
+    # Update filters with new selections
+    new_filters = current_filters.copy()
+    new_filters['categories'] = selected_categories if selected_categories else []
+    new_filters['titles'] = selected_titles if selected_titles else []
+    new_filters['sample_size'] = sample_size if sample_size is not None else default_filters['sample_size']
+    new_filters['max_places'] = max_places if max_places is not None else default_filters['max_places']
+    
+    # Get dhlabids for the selected filters
+    conn = get_db_connection()
+    try:
+        query_parts = []
+        params = []
+        
+        if selected_categories:
+            query_parts.append("category IN ({})".format(','.join(['?'] * len(selected_categories))))
+            params.extend(selected_categories)
+        
+        if selected_titles:
+            query_parts.append("title IN ({})".format(','.join(['?'] * len(selected_titles))))
+            params.extend(selected_titles)
+        
+        if query_parts:
+            where_clause = " AND ".join(query_parts)
+            query = f"SELECT DISTINCT dhlabid FROM corpus WHERE {where_clause}"
+            dhlabids_df = pd.read_sql_query(query, conn, params=tuple(params))
+            current_dhlabids = dhlabids_df['dhlabid'].tolist()
+            
+            # Apply sampling if needed
+            if sample_size and len(current_dhlabids) > sample_size:
+                current_dhlabids = np.random.choice(current_dhlabids, size=sample_size, replace=False).tolist()
+            
+            # Update the global current_dhlabids
+            update_current_dhlabids(current_dhlabids)
+        else:
+            update_current_dhlabids([])
+    finally:
+        conn.close()
+    
+    # Get places data with new filters
+    places_df = get_places_for_map(new_filters)
+    
+    return new_filters, places_df.to_json(date_format='iso', orient='split')
+
+# Add callback for corpus info
+@app.callback(
+    Output('corpus-controls-info', 'children'),
+    [Input('current-filters', 'data'),
+     Input('apply-filters', 'n_clicks')],
+    prevent_initial_call=True
+)
+def update_corpus_info(filters, n_clicks):
+    if not filters:
+        return html.P("No corpus loaded", className="text-muted")
+    
+    conn = get_db_connection()
+    try:
+        # Get corpus information
+        if filters.get('categories') or filters.get('titles'):
+            query_parts = []
+            params = []
+            
+            if filters.get('categories'):
+                query_parts.append("category IN ({})".format(','.join(['?'] * len(filters['categories']))))
+                params.extend(filters['categories'])
+            
+            if filters.get('titles'):
+                query_parts.append("title IN ({})".format(','.join(['?'] * len(filters['titles']))))
+                params.extend(filters['titles'])
+            
+            where_clause = " AND ".join(query_parts)
+            query = f"""
+            SELECT COUNT(DISTINCT dhlabid) as book_count,
+                   COUNT(DISTINCT author) as author_count,
+                   MIN(year) as min_year,
+                   MAX(year) as max_year
+            FROM corpus
+            WHERE {where_clause}
+            """
+            
+            info = pd.read_sql_query(query, conn, params=tuple(params)).iloc[0]
+            
+            return html.Div([
+                html.P(f"Books in corpus: {info['book_count']:,}"),
+                html.P(f"Authors: {info['author_count']:,}"),
+                html.P(f"Time period: {int(info['min_year'])}–{int(info['max_year'])}"),
+                html.P(f"Categories: {', '.join(filters['categories']) if filters.get('categories') else 'All'}"),
+                html.P(f"Sample size: {filters.get('sample_size', 'Not set')}"),
+                html.P(f"Max places: {filters.get('max_places', 'Not set')}")
+            ])
+        else:
+            return html.P("No filters applied", className="text-muted")
+    finally:
+        conn.close()
+
+def add_edge_points(points_array):
+    """Add edge points to ensure the convex hull covers the entire cluster area."""
+    if len(points_array) < 2:
+        return points_array
+    
+    # Calculate the bounding box
+    min_lon, min_lat = points_array.min(axis=0)
+    max_lon, max_lat = points_array.max(axis=0)
+    
+    # Add corner points with some padding
+    padding = 0.1  # 10% padding
+    lon_range = max_lon - min_lon
+    lat_range = max_lat - min_lat
+    
+    edge_points = np.array([
+        [min_lon - padding * lon_range, min_lat - padding * lat_range],  # Bottom left
+        [max_lon + padding * lon_range, min_lat - padding * lat_range],  # Bottom right
+        [max_lon + padding * lon_range, max_lat + padding * lat_range],  # Top right
+        [min_lon - padding * lon_range, max_lat + padding * lat_range]   # Top left
+    ])
+    
+    # Combine original points with edge points
+    return np.vstack([points_array, edge_points])
+
+def calculate_bearing(lat1, lon1, lat2, lon2):
+    """Calculate the bearing between two points."""
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    dlon = lon2 - lon1
+    y = math.sin(dlon) * math.cos(lat2)
+    x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+    bearing = math.atan2(y, x)
+    return math.degrees(bearing)
+
+def create_rotated_ellipse(center_lat, center_lon, radius_km, bearing, points=100):
+    """Create a rotated ellipse around a center point."""
+    # Convert radius from km to degrees (approximate)
+    radius_deg = radius_km / 111.32
+    
+    # Create points for the ellipse
+    angles = np.linspace(0, 2*np.pi, points)
+    
+    # Create the ellipse points
+    x = radius_deg * np.cos(angles)
+    y = radius_deg * np.sin(angles)
+    
+    # Rotate the points
+    bearing_rad = math.radians(bearing)
+    cos_bearing = math.cos(bearing_rad)
+    sin_bearing = math.sin(bearing_rad)
+    
+    x_rot = x * cos_bearing - y * sin_bearing
+    y_rot = x * sin_bearing + y * cos_bearing
+    
+    # Translate to center point
+    lats = center_lat + y_rot
+    lons = center_lon + x_rot
+    
+    return lats, lons
 
 # Run Server
 if __name__ == '__main__':

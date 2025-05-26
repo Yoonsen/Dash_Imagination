@@ -28,8 +28,6 @@ $(document).ready(function() {
                         console.log("Stopped dragging summary at:", ui.position);
                     }
                 });
-            } else {
-                console.log("Place summary container not found yet, will try again later");
             }
 
             // Initialize place-names-container if it exists
@@ -48,8 +46,42 @@ $(document).ready(function() {
                         console.log("Stopped dragging places at:", ui.position);
                     }
                 });
-            } else {
-                console.log("Place names container not found yet, will try again later");
+            }
+
+            // Initialize corpus-controls-container if it exists
+            if ($('#corpus-controls-container').length > 0) {
+                console.log("Found corpus-controls-container, making it draggable");
+
+                $('#corpus-controls-container').draggable({
+                    handle: '#corpus-header',
+                    containment: 'window',
+                    start: function(event, ui) {
+                        $(this).addClass("dragging");
+                        console.log("Started dragging corpus controls");
+                    },
+                    stop: function(event, ui) {
+                        $(this).removeClass("dragging");
+                        console.log("Stopped dragging corpus controls at:", ui.position);
+                    }
+                });
+            }
+
+            // Initialize visualization-controls-container if it exists
+            if ($('#visualization-controls-container').length > 0) {
+                console.log("Found visualization-controls-container, making it draggable");
+
+                $('#visualization-controls-container').draggable({
+                    handle: '#visualization-header',
+                    containment: 'window',
+                    start: function(event, ui) {
+                        $(this).addClass("dragging");
+                        console.log("Started dragging visualization controls");
+                    },
+                    stop: function(event, ui) {
+                        $(this).removeClass("dragging");
+                        console.log("Stopped dragging visualization controls at:", ui.position);
+                    }
+                });
             }
 
             console.log("Draggable initialization attempt completed");
@@ -76,6 +108,20 @@ $(document).ready(function() {
             console.log("Places container is visible but not draggable yet, initializing");
             initializeDraggable();
         }
+
+        // Check corpus controls container
+        if ($('#corpus-controls-container').is(':visible') && 
+            !$('#corpus-controls-container').hasClass('ui-draggable')) {
+            console.log("Corpus controls container is visible but not draggable yet, initializing");
+            initializeDraggable();
+        }
+
+        // Check visualization controls container
+        if ($('#visualization-controls-container').is(':visible') && 
+            !$('#visualization-controls-container').hasClass('ui-draggable')) {
+            console.log("Visualization controls container is visible but not draggable yet, initializing");
+            initializeDraggable();
+        }
     });
 
     // Also check periodically
@@ -93,14 +139,28 @@ $(document).ready(function() {
             console.log("Places container is visible in interval check but not draggable, initializing");
             initializeDraggable();
         }
+
+        // Check corpus controls container
+        if ($('#corpus-controls-container').is(':visible') && 
+            !$('#corpus-controls-container').hasClass('ui-draggable')) {
+            console.log("Corpus controls container is visible in interval check but not draggable, initializing");
+            initializeDraggable();
+        }
+
+        // Check visualization controls container
+        if ($('#visualization-controls-container').is(':visible') && 
+            !$('#visualization-controls-container').hasClass('ui-draggable')) {
+            console.log("Visualization controls container is visible in interval check but not draggable, initializing");
+            initializeDraggable();
+        }
     }, 2000);
 
     // Set cursor styles
-    $("#summary-header, #places-header").css("cursor", "grab");
+    $("#summary-header, #places-header, #corpus-header, #visualization-header").css("cursor", "grab");
 
     // Add touch support for draggable elements
     function addTouchSupport() {
-        $('#place-summary-container, #place-names-container').on('touchstart', function(event) {
+        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container').on('touchstart', function(event) {
             var touch = event.originalEvent.touches[0];
             var simulatedEvent = new MouseEvent('mousedown', {
                 bubbles: true,
@@ -113,7 +173,7 @@ $(document).ready(function() {
             event.preventDefault();
         });
 
-        $('#place-summary-container, #place-names-container').on('touchmove', function(event) {
+        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container').on('touchmove', function(event) {
             var touch = event.originalEvent.touches[0];
             var simulatedEvent = new MouseEvent('mousemove', {
                 bubbles: true,
@@ -126,7 +186,7 @@ $(document).ready(function() {
             event.preventDefault();
         });
 
-        $('#place-summary-container, #place-names-container').on('touchend', function(event) {
+        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container').on('touchend', function(event) {
             var simulatedEvent = new MouseEvent('mouseup', {
                 bubbles: true,
                 cancelable: true,

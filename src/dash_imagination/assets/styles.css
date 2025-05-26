@@ -88,39 +88,39 @@ body, html {
 /* Add these styles to your app.index_string, inside the <style> tags */
 
 /* Draggable container styling */
-#place-summary-container {
-    transition: box-shadow 0.2s ease, transform 0.1s ease;
-    will-change: transform;
-}
-
-#place-summary-container:active {
-    transform: scale(1.01);
-}
-
-#drag-handle {
-    opacity: 0.5;
+#place-summary-container,
+#place-names-container,
+#corpus-controls-container,
+#visualization-controls-container {
     transition: opacity 0.2s ease;
+    z-index: 1000;
 }
 
-#drag-handle:hover {
-    opacity: 1;
+#place-summary-container.dragging,
+#place-names-container.dragging,
+#corpus-controls-container.dragging,
+#visualization-controls-container.dragging {
+    opacity: 0.8;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
 }
 
-#summary-header {
+/* Make sure the draggable panel header looks like a handle */
+#summary-header,
+#places-header,
+#corpus-header,
+#visualization-header {
+    cursor: grab;
     user-select: none;
     -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
 }
 
-#place-summary-container, #place-names-container {
-    /* Removed slow transition */
-}
-
-#summary-header, #places-header {
-    cursor: grab;
-}
-
-#place-summary-container.dragging, #place-names-container.dragging {
-    opacity: 0.7;
+#summary-header:active,
+#places-header:active,
+#corpus-header:active,
+#visualization-header:active {
+    cursor: grabbing;
 }
 
 /* Make the map fill the entire screen */
@@ -176,25 +176,6 @@ body {
 
 .scrollable-list::-webkit-scrollbar-thumb:hover {
     background: #a1a1a1;
-}
-#summary-header, #places-header {
-    cursor: grab !important;
-}
-
-#summary-header:active, #places-header:active {
-    cursor: grabbing !important;
-}
-
-#place-summary-container.dragging, #place-names-container.dragging {
-    opacity: 0.7;
-}
-
-/* Make sure the draggable panel header looks like a handle */
-#places-header, #summary-header {
-    background-color: #f8f9fa;
-    border-bottom: 1px solid #eee;
-    padding: 8px;
-    border-radius: 8px 8px 0 0;
 }
 
 /* Style the close button */
