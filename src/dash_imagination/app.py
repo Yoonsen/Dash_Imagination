@@ -1340,6 +1340,12 @@ def update_place_list(filtered_data_json, search_term, selected_place):
             places_df['name'].str.lower().str.contains(search_term)
         ]
     
+    # Create hover text before creating place items
+    places_df['hover_text'] = places_df.apply(
+        lambda row: f"{row['token']} ({row['name']})<br>Mentions: {int(row['frequency'])}<br>Books: {int(row['book_count'])}",
+        axis=1
+    )
+    
     # Limit to top 5000 places
     places_df = places_df.head(5000)
     
@@ -1360,7 +1366,10 @@ def update_place_list(filtered_data_json, search_term, selected_place):
             'transition': 'background-color 0.2s',
             'cursor': 'pointer',
             'backgroundColor': '#ffebee' if is_selected else 'transparent'
-        }, className='place-item', id={'type': 'place-item', 'index': row['token']})
+        }, 
+        className='place-item', 
+        id={'type': 'place-item', 'index': row['token']},
+        **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
     
     if places_df.empty:
         return html.Div("No matching places found"), None
@@ -1382,10 +1391,13 @@ def update_place_list(filtered_data_json, search_term, selected_place):
     [Output('selected-place', 'data', allow_duplicate=True),
      Output('main-map', 'clickData', allow_duplicate=True)],
     [Input({'type': 'place-item', 'index': dash.ALL}, 'n_clicks')],
-    [State('filtered-data', 'data')],
+    [State({'type': 'place-item', 'index': dash.ALL}, 'id'),
+     State({'type': 'place-item', 'index': dash.ALL}, 'data-lat'),
+     State({'type': 'place-item', 'index': dash.ALL}, 'data-lon'),
+     State({'type': 'place-item', 'index': dash.ALL}, 'data-hover')],
     prevent_initial_call=True
 )
-def handle_place_click(n_clicks, filtered_data_json):
+def handle_place_click(n_clicks, ids, lats, lons, hovers):
     if not any(n_clicks):
         raise PreventUpdate
     
@@ -1397,18 +1409,27 @@ def handle_place_click(n_clicks, filtered_data_json):
     if not triggered_id:
         raise PreventUpdate
     
-    # Extract the place token from the triggered component ID
-    place_token = eval(triggered_id.split('.')[0])['index']
+    # Get the index of the clicked item
+    try:
+        # Parse the triggered ID to get the place token
+        triggered_id_dict = eval(triggered_id.split('.')[0])
+        clicked_idx = next(i for i, id_dict in enumerate(ids) if id_dict['index'] == triggered_id_dict['index'])
+    except (ValueError, SyntaxError, StopIteration):
+        raise PreventUpdate
     
-    # Load cached data to get place details
-    places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split')
-    place_data = places_df[places_df['token'] == place_token].iloc[0]
+    # Get the place data from the clicked item's data attributes
+    place_token = ids[clicked_idx]['index']
+    lat = lats[clicked_idx]
+    lon = lons[clicked_idx]
+    hover_text = hovers[clicked_idx]
     
-    # Create click data structure
+    # Create click data structure using the stored data
     click_data = {
         'points': [{
+            'lat': lat,
+            'lon': lon,
             'customdata': place_token,
-            'text': f"{place_token} ({place_data['name']})<br>Mentions: {int(place_data['frequency'])}<br>Books: {int(place_data['book_count'])}"
+            'text': hover_text
         }]
     }
     
