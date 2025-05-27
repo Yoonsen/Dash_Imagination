@@ -112,6 +112,7 @@ current_dhlabids = []
 
 def update_current_dhlabids(new_dhlabids):
     global current_dhlabids
+    print(f"DEBUG: Updating current_dhlabids from {len(current_dhlabids)} to {len(new_dhlabids)}")
     current_dhlabids = new_dhlabids
     return current_dhlabids
 
@@ -130,34 +131,7 @@ def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
         WITH filtered_books AS (
             SELECT DISTINCT b.dhlabid
             FROM books b
-            JOIN corpus c ON b.dhlabid = c.dhlabid
-            WHERE 1=1
-        """
-        
-        params = []
-        
-        # Add year range filter if specified
-        if filters.get('year_range'):
-            min_year, max_year = filters['year_range']
-            query += " AND c.year BETWEEN ? AND ?"
-            params.extend([min_year, max_year])
-        
-        # Add category filter if specified
-        if filters.get('categories') and filters['categories']:
-            query += " AND c.category IN ({})".format(','.join(['?'] * len(filters['categories'])))
-            params.extend(filters['categories'])
-        
-        # Add title filter if specified
-        if filters.get('titles') and filters['titles']:
-            query += " AND c.title IN ({})".format(','.join(['?'] * len(filters['titles'])))
-            params.extend(filters['titles'])
-        
-        # Add sample size limit if specified and greater than 0
-        if filters.get('sample_size', 0) > 0:
-            query += " ORDER BY RANDOM() LIMIT ?"
-            params.append(filters['sample_size'])
-        
-        query += """
+            WHERE b.dhlabid IN ({})
         )
         SELECT 
             b.token,
@@ -177,29 +151,38 @@ def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
         ORDER BY frequency DESC
         """
         
-        # Always apply a limit to protect performance
-        # Use the smaller of user-specified max_places or MAX_PLACES
-        user_max = filters.get('max_places', 0)
-        effective_max = min(user_max if user_max > 0 else MAX_PLACES, MAX_PLACES)
-        query += " LIMIT ?"
-        params.append(effective_max)
+        # Use current_dhlabids as source of truth
+        if not current_dhlabids:
+            return pd.DataFrame(), 0
+            
+        # Format the query with the current_dhlabids
+        query = query.format(','.join(['?'] * len(current_dhlabids)))
         
         # Execute query
-        places_df = pd.read_sql_query(query, conn, params=tuple(params))
+        places_df = pd.read_sql_query(query, conn, params=tuple(current_dhlabids))
         
         # Convert latitude and longitude to numeric
         places_df['latitude'] = pd.to_numeric(places_df['latitude'], errors='coerce')
         places_df['longitude'] = pd.to_numeric(places_df['longitude'], errors='coerce')
         
+        # Always apply a limit to protect performance
+        # Use the smaller of user-specified max_places or MAX_PLACES
+        user_max = filters.get('max_places', 0)
+        effective_max = min(user_max if user_max > 0 else MAX_PLACES, MAX_PLACES)
+        places_df = places_df.head(effective_max)
+        
         return places_df
     finally:
         conn.close()
 
-def get_place_details(token, filters=None, page=1, page_size=100):
+def get_place_details(token, filters=None, page=1, page_size=10):
     global current_dhlabids
     conn = None
     try:
         conn = get_db_connection()
+        
+        print(f"DEBUG: current_dhlabids length: {len(current_dhlabids)}")
+        print(f"DEBUG: current_dhlabids sample: {current_dhlabids[:5] if current_dhlabids else 'empty'}")
         
         if not current_dhlabids:
             return pd.DataFrame(columns=['title', 'author', 'year', 'urn', 'mentions']), 0
@@ -1465,7 +1448,10 @@ def update_place_summary(click_data, current_style, filters):
                             ])
                         ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
                         for i, row in books_df.iterrows() if pd.notna(row['title'])
-                    ]) if not books_df.empty else html.Div("No book details available")
+                    ]) if not books_df.empty else html.Div("No book details available"),
+                    html.Div([
+                        html.P(f"Showing {len(books_df)} of {total_books:,} books", style={'fontSize': '13px', 'color': '#666', 'marginTop': '10px'})
+                    ]) if total_books > 10 else None
                 ])
             ])
         
@@ -1529,32 +1515,36 @@ def update_corpus_stats(filters):
     if not filters:
         return "No filters available"
     
-    # Determine the corpus source
+    # Use current_dhlabids as source of truth
     conn = get_db_connection()
     try:
-        if filters.get('current_corpus'):
-            dhlabids = filters['current_corpus']
-            num_books = len(dhlabids)
-            book_query = f"""
-            SELECT dhlabid, year
-            FROM corpus
-            WHERE dhlabid IN ({','.join(['?'] * len(dhlabids))})
-            AND year IS NOT NULL
-            """
-            books_df = pd.read_sql_query(book_query, conn, params=tuple(dhlabids))
-        elif filters.get('categories') and filters['categories']:
-            categories = filters['categories']
-            book_query = f"""
-            SELECT dhlabid, year
-            FROM corpus
-            WHERE category IN ({','.join(['?'] * len(categories))})
-            AND year IS NOT NULL
-            """
-            books_df = pd.read_sql_query(book_query, conn, params=tuple(categories))
-            num_books = len(books_df)
-        else:
-            books_df = pd.DataFrame()
-            num_books = 0
+        if not current_dhlabids:
+            return "No corpus loaded"
+        
+        print(f"DEBUG: current_dhlabids length: {len(current_dhlabids)}")
+        print(f"DEBUG: current_dhlabids sample: {current_dhlabids[:5] if current_dhlabids else 'empty'}")
+        
+        # Get book details for the current corpus
+        book_query = f"""
+        SELECT dhlabid, year, category, title
+        FROM corpus
+        WHERE dhlabid IN ({','.join(['?'] * len(current_dhlabids))})
+        AND year IS NOT NULL
+        """
+        books_df = pd.read_sql_query(book_query, conn, params=tuple(current_dhlabids))
+        
+        print(f"DEBUG: Total books before year filter: {len(books_df)}")
+        print(f"DEBUG: Year range in books_df: {books_df['year'].min()}-{books_df['year'].max()}")
+        
+        # Apply year range filter if specified
+        if filters.get('year_range'):
+            min_year, max_year = filters['year_range']
+            print(f"DEBUG: Applying year range filter: {min_year}-{max_year}")
+            books_df = books_df[(books_df['year'] >= min_year) & (books_df['year'] <= max_year)]
+            print(f"DEBUG: Books after year filter: {len(books_df)}")
+            print(f"DEBUG: Year range after filter: {books_df['year'].min()}-{books_df['year'].max()}")
+        
+        num_books = len(books_df)
         
         # Get the period from metadata
         if not books_df.empty:
@@ -1565,7 +1555,7 @@ def update_corpus_stats(filters):
             year_range = "No period data"
         
         # Get total places and filtered places
-        places_df, total_places = get_places_for_map(filters, return_total=True)
+        places_df = get_places_for_map(filters)
         if places_df.empty:
             return "No places match the current filters"
         
@@ -1579,7 +1569,7 @@ def update_corpus_stats(filters):
         stats = [
             html.P(f"Corpus source: {filters.get('corpus_source', 'No corpus selected')}"),
             html.P(f"Number of books: {num_books}"),
-            html.P(f"Total places in corpus: {total_places}"),
+            html.P(f"Total places in corpus: {total_places_shown}"),
             html.P(f"Period: {year_range}"),
             html.P(f"Filters: {category_count} categories, {title_count} works"),
             html.P(f"Places shown: {total_places_shown}"),
@@ -1735,6 +1725,39 @@ def update_corpus_from_selections(n_clicks, selected_categories, selected_titles
     }
     
     try:
+        # Get dhlabids for the selected filters
+        conn = get_db_connection()
+        try:
+            query_parts = []
+            params = []
+            
+            if selected_categories:
+                query_parts.append("category IN ({})".format(','.join(['?'] * len(selected_categories))))
+                params.extend(selected_categories)
+            
+            if selected_titles:
+                query_parts.append("title IN ({})".format(','.join(['?'] * len(selected_titles))))
+                params.extend(selected_titles)
+            
+            # Always apply year range filter
+            min_year, max_year = new_filters['year_range']
+            query_parts.append("year BETWEEN ? AND ?")
+            params.extend([min_year, max_year])
+            
+            where_clause = " AND ".join(query_parts) if query_parts else "1=1"
+            query = f"""
+            SELECT DISTINCT dhlabid
+            FROM corpus
+            WHERE {where_clause}
+            """
+            
+            print(f"DEBUG: Applying filters - Categories: {selected_categories}, Year range: {min_year}-{max_year}")
+            dhlabids = pd.read_sql_query(query, conn, params=tuple(params))['dhlabid'].tolist()
+            print(f"DEBUG: Found {len(dhlabids)} books matching filters")
+            update_current_dhlabids(dhlabids)
+        finally:
+            conn.close()
+        
         # Get filtered data
         places_df = get_places_for_map(new_filters)
         return new_filters, places_df.to_json(date_format='iso', orient='split')
@@ -1755,41 +1778,34 @@ def update_corpus_info(filters, n_clicks):
     
     conn = get_db_connection()
     try:
-        # Get corpus information
-        if filters.get('categories') or filters.get('titles'):
-            query_parts = []
-            params = []
-            
-            if filters.get('categories'):
-                query_parts.append("category IN ({})".format(','.join(['?'] * len(filters['categories']))))
-                params.extend(filters['categories'])
-            
-            if filters.get('titles'):
-                query_parts.append("title IN ({})".format(','.join(['?'] * len(filters['titles']))))
-                params.extend(filters['titles'])
-            
-            where_clause = " AND ".join(query_parts)
-            query = f"""
-            SELECT COUNT(DISTINCT dhlabid) as book_count,
-                   COUNT(DISTINCT author) as author_count,
-                   MIN(year) as min_year,
-                   MAX(year) as max_year
-            FROM corpus
-            WHERE {where_clause}
-            """
-            
-            info = pd.read_sql_query(query, conn, params=tuple(params)).iloc[0]
-            
-            return html.Div([
-                html.P(f"Books in corpus: {info['book_count']:,}"),
-                html.P(f"Authors: {info['author_count']:,}"),
-                html.P(f"Time period: {int(info['min_year'])}–{int(info['max_year'])}"),
-                html.P(f"Categories: {', '.join(filters['categories']) if filters.get('categories') else 'All'}"),
-                html.P(f"Sample size: {filters.get('sample_size', 'Not set')}"),
-                html.P(f"Max places: {filters.get('max_places', 'Not set')}")
-            ])
-        else:
-            return html.P("No filters applied", className="text-muted")
+        # Use current_dhlabids as source of truth
+        if not current_dhlabids:
+            return html.P("No corpus loaded", className="text-muted")
+        
+        print(f"DEBUG: Corpus info - current_dhlabids length: {len(current_dhlabids)}")
+        
+        # Get corpus information using current_dhlabids
+        query = f"""
+        SELECT COUNT(DISTINCT dhlabid) as book_count,
+               COUNT(DISTINCT author) as author_count,
+               MIN(year) as min_year,
+               MAX(year) as max_year
+        FROM corpus
+        WHERE dhlabid IN ({','.join(['?'] * len(current_dhlabids))})
+        AND year IS NOT NULL
+        """
+        
+        info = pd.read_sql_query(query, conn, params=tuple(current_dhlabids)).iloc[0]
+        print(f"DEBUG: Corpus info - Book count: {info['book_count']}, Year range: {info['min_year']}-{info['max_year']}")
+        
+        return html.Div([
+            html.P(f"Books in corpus: {info['book_count']:,}"),
+            html.P(f"Authors: {info['author_count']:,}"),
+            html.P(f"Time period: {int(info['min_year'])}–{int(info['max_year'])}"),
+            html.P(f"Categories: {', '.join(filters['categories']) if filters.get('categories') else 'All'}"),
+            html.P(f"Sample size: {filters.get('sample_size', 'Not set')}"),
+            html.P(f"Max places: {filters.get('max_places', 'Not set')}")
+        ])
     finally:
         conn.close()
 
@@ -1984,4 +2000,4 @@ def trigger_download(n_clicks, format, resolution, figure):
 
 # Run Server
 if __name__ == '__main__':
-    app.run_server(debug=True, host='0.0.0.0', port=8050, dev_tools_hot_reload=False)
+    app.run_server(debug=True, host='0.0.0.0', port=8055, dev_tools_hot_reload=False)
