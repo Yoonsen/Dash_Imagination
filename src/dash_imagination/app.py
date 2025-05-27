@@ -14,7 +14,9 @@ from dash_imagination.components.corpus import create_corpus_controls, create_vi
 from scipy.spatial import ConvexHull
 import math
 from dash_imagination.components.places.place_similarity import create_place_similarity_controls
+from dash_imagination.components.places.place_similarity_dialog import create_place_similarity_dialog
 from dash_imagination.utils.db import get_db_connection
+from dash_imagination.utils.global_state import current_dhlabids, update_current_dhlabids
 import plotly.express as px
 import json
 from flask import request, send_file
@@ -107,15 +109,6 @@ default_filters = {
     'year_range': [1814, 1905]
 }
 
-# Global variable for current corpus
-current_dhlabids = []
-
-def update_current_dhlabids(new_dhlabids):
-    global current_dhlabids
-    print(f"DEBUG: Updating current_dhlabids from {len(current_dhlabids)} to {len(new_dhlabids)}")
-    current_dhlabids = new_dhlabids
-    return current_dhlabids
-
 def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
     """Get places data for the map visualization."""
     if filters is None:
@@ -126,40 +119,77 @@ def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
     
     conn = get_db_connection()
     try:
-        # Base query to get places with their frequencies
-        query = """
-        WITH filtered_books AS (
-            SELECT DISTINCT b.dhlabid
+        if selected_tokens:
+            # If we have selected tokens, use them directly but include corpus stats
+            query = """
+            WITH selected_places AS (
+                SELECT 
+                    p.token,
+                    p.modern as name,
+                    p.latitude,
+                    p.longitude
+                FROM places p
+                WHERE p.token IN ({})
+                AND p.latitude IS NOT NULL 
+                AND p.longitude IS NOT NULL
+                AND p.latitude != '0'
+                AND p.longitude != '0'
+            )
+            SELECT 
+                sp.token,
+                sp.name,
+                sp.latitude,
+                sp.longitude,
+                COUNT(DISTINCT b.dhlabid) as frequency,
+                COUNT(DISTINCT b.dhlabid) as book_count
+            FROM selected_places sp
+            LEFT JOIN books b ON sp.token = b.token
+            LEFT JOIN (
+                SELECT DISTINCT dhlabid 
+                FROM books 
+                WHERE dhlabid IN ({})
+            ) current_corpus ON b.dhlabid = current_corpus.dhlabid
+            GROUP BY sp.token, sp.name, sp.latitude, sp.longitude
+            """
+            # Format the query with both selected tokens and current_dhlabids
+            query = query.format(
+                ','.join(['?'] * len(selected_tokens)),
+                ','.join(['?'] * len(current_dhlabids))
+            )
+            places_df = pd.read_sql_query(query, conn, params=tuple(selected_tokens + current_dhlabids))
+        else:
+            # Use dhlabids for corpus-based place generation
+            query = """
+            WITH filtered_books AS (
+                SELECT DISTINCT b.dhlabid
+                FROM books b
+                WHERE b.dhlabid IN ({})
+            )
+            SELECT 
+                b.token,
+                p.modern as name,
+                p.latitude,
+                p.longitude,
+                COUNT(DISTINCT b.dhlabid) as frequency,
+                COUNT(DISTINCT b.dhlabid) as book_count
             FROM books b
-            WHERE b.dhlabid IN ({})
-        )
-        SELECT 
-            b.token,
-            p.modern as name,
-            p.latitude,
-            p.longitude,
-            COUNT(DISTINCT b.dhlabid) as frequency,
-            COUNT(DISTINCT b.dhlabid) as book_count
-        FROM books b
-        JOIN places p ON b.token = p.token
-        JOIN filtered_books fb ON b.dhlabid = fb.dhlabid
-        WHERE p.latitude IS NOT NULL 
-        AND p.longitude IS NOT NULL
-        AND p.latitude != '0'
-        AND p.longitude != '0'
-        GROUP BY b.token, p.modern, p.latitude, p.longitude
-        ORDER BY frequency DESC
-        """
-        
-        # Use current_dhlabids as source of truth
-        if not current_dhlabids:
-            return pd.DataFrame(), 0
+            JOIN places p ON b.token = p.token
+            JOIN filtered_books fb ON b.dhlabid = fb.dhlabid
+            WHERE p.latitude IS NOT NULL 
+            AND p.longitude IS NOT NULL
+            AND p.latitude != '0'
+            AND p.longitude != '0'
+            GROUP BY b.token, p.modern, p.latitude, p.longitude
+            ORDER BY frequency DESC
+            """
             
-        # Format the query with the current_dhlabids
-        query = query.format(','.join(['?'] * len(current_dhlabids)))
-        
-        # Execute query
-        places_df = pd.read_sql_query(query, conn, params=tuple(current_dhlabids))
+            # Use current_dhlabids as source of truth
+            if not current_dhlabids:
+                return pd.DataFrame(), 0
+                
+            # Format the query with the current_dhlabids
+            query = query.format(','.join(['?'] * len(current_dhlabids)))
+            places_df = pd.read_sql_query(query, conn, params=tuple(current_dhlabids))
         
         # Convert latitude and longitude to numeric
         places_df['latitude'] = pd.to_numeric(places_df['latitude'], errors='coerce')
@@ -175,53 +205,62 @@ def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
     finally:
         conn.close()
 
-def get_place_details(token, filters=None, page=1, page_size=10):
-    global current_dhlabids
-    conn = None
+def get_place_details(token, page=1, per_page=10):
+    """Get details about a place from the database."""
+    conn = get_db_connection()
     try:
-        conn = get_db_connection()
-        
-        print(f"DEBUG: current_dhlabids length: {len(current_dhlabids)}")
-        print(f"DEBUG: current_dhlabids sample: {current_dhlabids[:5] if current_dhlabids else 'empty'}")
+        # Get current dhlabids from the store
+        current_dhlabids = get_current_dhlabids()
         
         if not current_dhlabids:
-            return pd.DataFrame(columns=['title', 'author', 'year', 'urn', 'mentions']), 0
+            return pd.DataFrame()  # Return empty DataFrame if no dhlabids
         
-        # Build query to get book details with proper aggregation
+        # Create a CTE to get the distinct dhlabids from our corpus
+        place_books_cte = f"""
+        WITH place_books AS (
+            SELECT DISTINCT b.dhlabid
+            FROM books b
+            WHERE b.token = ? AND b.dhlabid IN ({','.join(['?'] * len(current_dhlabids))})
+        )
+        """
+        
+        # Query to get book details with pagination
         query = f"""
-        SELECT c.title, c.author, c.year, c.urn,
-               SUM(bp.book_count) as mentions
-        FROM corpus c
-        JOIN books bp ON c.dhlabid = bp.dhlabid
-        WHERE bp.token = ?
-        AND c.dhlabid IN ({','.join(['?'] * len(current_dhlabids))})
-        GROUP BY c.title, c.author, c.year, c.urn
-        ORDER BY mentions DESC
+        {place_books_cte}
+        SELECT 
+            c.title,
+            c.author,
+            c.year,
+            COUNT(b.dhlabid) as mention_count
+        FROM place_books pb
+        JOIN books b ON pb.dhlabid = b.dhlabid AND b.token = ?
+        JOIN corpus c ON b.dhlabid = c.dhlabid
+        GROUP BY c.title, c.author, c.year
+        ORDER BY c.year DESC, c.title
         LIMIT ? OFFSET ?
         """
         
-        # Calculate offset
-        offset = (page - 1) * page_size
+        # Add token and dhlabids to params
+        params = [token] + current_dhlabids + [token, per_page, (page - 1) * per_page]
         
-        # Add pagination parameters
-        params = [token] + current_dhlabids + [page_size, offset]
-        
-        books = pd.read_sql_query(query, conn, params=tuple(params))
+        # Get the data
+        df = pd.read_sql_query(query, conn, params=params)
         
         # Get total count for pagination
         count_query = f"""
-        SELECT COUNT(DISTINCT c.dhlabid) as total
-        FROM corpus c
-        JOIN books bp ON c.dhlabid = bp.dhlabid
-        WHERE bp.token = ?
-        AND c.dhlabid IN ({','.join(['?'] * len(current_dhlabids))})
+        {place_books_cte}
+        SELECT COUNT(DISTINCT c.title) as total
+        FROM place_books pb
+        JOIN books b ON pb.dhlabid = b.dhlabid AND b.token = ?
+        JOIN corpus c ON b.dhlabid = c.dhlabid
         """
-        total_count = pd.read_sql_query(count_query, conn, params=tuple([token] + current_dhlabids))['total'].iloc[0]
         
-        return books, total_count
+        total = pd.read_sql_query(count_query, conn, params=[token] + current_dhlabids + [token]).iloc[0]['total']
+        
+        return df, total
+        
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 # Initialize lists with defaults
 authors_list = ["Ibsen", "Bjørnson", "Collett", "Lie", "Kielland"]
@@ -520,8 +559,16 @@ app.layout = html.Div([
                 'cursor': 'grab'
             }, id='places-header'),
             html.Div([
-                create_place_similarity_controls(),
-                html.Hr(),
+                # Add button to open similarity dialog
+                dbc.Button(
+                    [
+                        html.I(className="fas fa-search", style={'marginRight': '8px'}),
+                        "Find Similar Places"
+                    ],
+                    id="similar-places-button",
+                    color="primary",
+                    className="w-100 mb-3"
+                ),
                 dcc.Input(
                     id='place-search',
                     type='text',
@@ -549,6 +596,9 @@ app.layout = html.Div([
         'cursor': 'auto'
     }),
 
+    # Add place similarity dialog
+    create_place_similarity_dialog(),
+
     # Hidden divs and stores
     html.Div(id='reset-status', style={'display': 'none'}),
     dcc.Store(id='filtered-data'),
@@ -560,6 +610,9 @@ app.layout = html.Div([
 
     # Change view-type from Div to Store
     dcc.Store(id='view-type', data='points'),
+
+    # Add this to the app layout, near the other Store components
+    dcc.Store(id='current-dhlabids-store', data=[]),
 ], id='main-container')
 
 # Add custom CSS
@@ -691,7 +744,7 @@ app.index_string = '''
 @app.callback(
     [Output('popup-upload-status', 'children'),
      Output('upload-state', 'data'),
-     Output('current-filters', 'data')],
+     Output('current-filters', 'data', allow_duplicate=True)],
     [Input('popup-upload-corpus', 'contents'),
      Input('popup-reset-corpus', 'n_clicks')],
     [State('popup-upload-corpus', 'filename'),
@@ -774,10 +827,11 @@ app.clientside_callback(
 
 
 @app.callback(
-    Output('filtered-data', 'data'),
+    [Output('filtered-data', 'data', allow_duplicate=True),
+     Output('current-dhlabids-store', 'data')],
     [Input('current-filters', 'data'),
      Input('upload-state', 'data'),
-     Input('popup-reset-corpus', 'n_clicks')],  # Changed from reset-corpus to popup-reset-corpus
+     Input('popup-reset-corpus', 'n_clicks')],
     [State('popup-upload-corpus', 'filename')],
     prevent_initial_call=True
 )
@@ -785,12 +839,11 @@ def update_filtered_data(filters, upload_state, reset_clicks, filename):
     ctx = callback_context
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
     
-    if triggered_id == 'popup-reset-corpus' and reset_clicks:  # Updated ID here too
-        update_current_dhlabids([])
-        return pd.DataFrame().to_json(date_format='iso', orient='split')
+    if triggered_id == 'popup-reset-corpus' and reset_clicks:
+        return pd.DataFrame().to_json(date_format='iso', orient='split'), []
     
     if not filters:
-        return pd.DataFrame().to_json(date_format='iso', orient='split')
+        return pd.DataFrame().to_json(date_format='iso', orient='split'), []
     
     # Handle uploaded corpus data
     if triggered_id == 'upload-state' and upload_state:
@@ -798,9 +851,9 @@ def update_filtered_data(filters, upload_state, reset_clicks, filename):
             if isinstance(upload_state, dict) and 'uploaded' in upload_state:
                 pass
             else:
-                return dash.no_update
+                return dash.no_update, dash.no_update
         except Exception as e:
-            return dash.no_update
+            return dash.no_update, dash.no_update
     
     try:
         # Get selected tokens from filters if they exist
@@ -831,15 +884,34 @@ def update_filtered_data(filters, upload_state, reset_clicks, filename):
                 
                 # Get unique dhlabids and ensure uniqueness with set
                 dhlabids = list(set(pd.read_sql_query(final_query, conn, params=tuple(all_params))['dhlabid'].tolist()))
-                update_current_dhlabids(dhlabids)
             finally:
                 conn.close()
+        else:
+            dhlabids = []
         
-        places_df = get_places_for_map(filters, selected_tokens=selected_tokens)
-        return places_df.to_json(date_format='iso', orient='split')
+        # Debug: Log current_dhlabids before calling get_places_for_map
+        print(f"DEBUG: dhlabids length before get_places_for_map: {len(dhlabids)}")
+        print(f"DEBUG: dhlabids sample: {dhlabids[:5] if dhlabids else 'empty'}")
+        
+        places_result = get_places_for_map(filters, selected_tokens=selected_tokens)
+        # If a tuple is returned, use only the first element (the DataFrame)
+        if isinstance(places_result, tuple):
+            places_df = places_result[0]
+        else:
+            places_df = places_result
+        
+        # Debug: Log the shape and content of places_df
+        print(f"DEBUG: places_df shape: {places_df.shape}")
+        print(f"DEBUG: places_df head: {places_df.head()}")
+        
+        json_output = places_df.to_json(date_format='iso', orient='split')
+        # Debug: Log the JSON output length
+        print(f"DEBUG: JSON output length: {len(json_output)}")
+        
+        return json_output, dhlabids
     except Exception as e:
         print(f"Error in update_filtered_data: {e}")
-        return dash.no_update
+        return dash.no_update, dash.no_update
 
 @app.callback(
     [Output('category-selection', 'data')] + [
@@ -1368,92 +1440,71 @@ def handle_place_click(n_clicks, filtered_data_json):
      Output('place-summary', 'children')],
     [Input('main-map', 'clickData')],
     [State('place-summary-container', 'style'),
-     State('current-filters', 'data')]
+     State('current-dhlabids-store', 'data')],
+    prevent_initial_call=True
 )
-def update_place_summary(click_data, current_style, filters):
-    if click_data is None:
+def update_place_summary(click_data, current_style, current_dhlabids):
+    if not click_data:
         return dash.no_update, dash.no_update
     
     try:
+        # Get the clicked place
         point = click_data['points'][0]
-        token = point.get('customdata')
-        text = point.get('text', '')
-        parts = text.split('<br>')
+        token = point['customdata']
         
-        # Handle both individual points and clusters
-        if 'Cluster of' in text:
-            # This is a cluster
-            cluster_info = parts[0].split('Cluster of ')[1].split(' places')[0]
-            total_mentions = int(parts[1].split('Total Mentions: ')[1])
-            total_books = int(parts[2].split('Total Books: ')[1])
-            example_place = parts[3].split('Example place: ')[1]
-            
-            summary = html.Div([
-                html.Div([
-                    html.H5(f"Cluster of {cluster_info} Places", style={'marginBottom': '5px'}),
-                    html.P(f"Total Mentions: {total_mentions:,}", style={'fontSize': '14px', 'color': '#666'}),
-                    html.P(f"Total Books: {total_books:,}", style={'fontSize': '14px', 'color': '#666'}),
-                    html.P(f"Example place: {example_place}", style={'fontSize': '14px', 'color': '#666'}),
-                    html.Hr(style={'margin': '10px 0'})
-                ])
-            ])
-        else:
-            # This is an individual point
-            place_info = parts[0]
-            if '(' in place_info and ')' in place_info:
-                token_part = place_info.split('(')[0].strip()
-                modern_part = place_info.split('(')[1].split(')')[0].strip()
-            else:
-                token_part = place_info
-                modern_part = ""
-            
-            frequency = 0
-            book_count = 0
-            if len(parts) > 1 and 'Mentions' in parts[1]:
-                mentions_part = parts[1].split('Mentions: ')
+        # Get the hover text from the point
+        hover_text = point.get('text', '')
+        parts = hover_text.split('<br>')
+        
+        token_part = parts[0]
+        modern_part = ""
+        frequency = 0
+        book_count = 0
+        
+        # Parse the hover text to get additional information
+        for part in parts:
+            if 'Modern name:' in part:
+                modern_part = part.split('Modern name: ')[1].strip()
+            elif 'Mentions:' in part:
                 try:
-                    frequency = int(mentions_part[1].split('<br>')[0].strip())
-                    book_count = int(parts[2].split('Books: ')[1].strip())
+                    frequency = int(part.split('Mentions: ')[1].strip())
                 except (ValueError, IndexError):
-                    print("Could not parse frequency/book count")
-            
-            try:
-                books_df, total_books = get_place_details(token, filters)
-                print(f"Got {len(books_df)} books for place {token}")
-            except Exception as e:
-                print(f"Error getting place details: {e}")
-                books_df = pd.DataFrame(columns=['title', 'author', 'year', 'urn', 'mentions'])
-                total_books = 0
-            
-            summary = html.Div([
+                    print("Could not parse frequency")
+            elif 'Books:' in part:
+                try:
+                    book_count = int(part.split('Books: ')[1].strip())
+                except (ValueError, IndexError):
+                    print("Could not parse book count")
+        
+        try:
+            books_df, total_books = get_place_details(token)
+            print(f"Got {len(books_df)} books for place {token}")
+        except Exception as e:
+            print(f"Error getting place details: {e}")
+            books_df = pd.DataFrame(columns=['title', 'author', 'year', 'mention_count'])
+            total_books = 0
+        
+        summary = html.Div([
+            html.Div([
+                html.H5(token_part, style={'marginBottom': '5px'}),
+                html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
+                html.P(f"Appears in {book_count:,} books with {frequency:,} total mentions", style={'marginTop': '5px'}),
+                html.Hr(style={'margin': '10px 0'})
+            ]),
+            html.Div([
+                html.H6(f"Books mentioning this place ({total_books:,} total):", style={'marginBottom': '10px'}),
                 html.Div([
-                    html.H5(token_part, style={'marginBottom': '5px'}),
-                    html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
-                    html.P(f"Appears in {book_count:,} books with {frequency:,} total mentions", style={'marginTop': '5px'}),
-                    html.Hr(style={'margin': '10px 0'})
-                ]),
-                html.Div([
-                    html.H6(f"Books mentioning this place ({total_books:,} total):", style={'marginBottom': '10px'}),
                     html.Div([
+                        html.Div(f"{row['title']} ({row['year']})", style={'fontWeight': '500'}),
                         html.Div([
-                            html.Div(f"{row['title']} ({row['year']})", style={'fontWeight': '500'}),
-                            html.Div([
-                                html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
-                                html.Span(f" • {int(row['mentions']):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
-                            ], style={'display': 'flex', 'justifyContent': 'space-between'}),
-                            html.Div([
-                                html.A("View at National Library", href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{token}\"",
-                                       target="_blank", style={'fontSize': '13px', 'color': '#4285F4'})
-                                if pd.notna(row['urn']) else ""
-                            ])
-                        ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
-                        for i, row in books_df.iterrows() if pd.notna(row['title'])
-                    ]) if not books_df.empty else html.Div("No book details available"),
-                    html.Div([
-                        html.P(f"Showing {len(books_df)} of {total_books:,} books", style={'fontSize': '13px', 'color': '#666', 'marginTop': '10px'})
-                    ]) if total_books > 10 else None
-                ])
+                            html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
+                            html.Span(f" • {int(row['mention_count']):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                        ], style={'display': 'flex', 'justifyContent': 'space-between'})
+                    ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
+                    for i, row in books_df.iterrows() if pd.notna(row['title'])
+                ]) if not books_df.empty else html.Div("No book details available")
             ])
+        ])
         
         new_style = dict(current_style)
         new_style['display'] = 'block'
@@ -2000,4 +2051,4 @@ def trigger_download(n_clicks, format, resolution, figure):
 
 # Run Server
 if __name__ == '__main__':
-    app.run_server(debug=True, host='0.0.0.0', port=8055, dev_tools_hot_reload=False)
+    app.run_server(debug=True, host='0.0.0.0', port=8060, dev_tools_hot_reload=False)
