@@ -351,7 +351,6 @@ app.layout = html.Div([
 
         # Database buttons (left)
         html.Div([
-            # Main button group
             html.Div([
                 html.Button("Corpus", id='corpus-button', style={
                     'padding': '8px 16px',
@@ -379,33 +378,17 @@ app.layout = html.Div([
                     'fontSize': '14px',
                     'fontWeight': '500',
                     'lineHeight': '1.5'
-                }),
-            ], style={'display': 'flex', 'alignItems': 'flex-start', 'marginLeft': '440px'}),
-            
-            # Tools button below
-            html.Button(html.I(className="fas fa-sliders-h"), id='visualization-button', style={
-                'padding': '8px',
-                'backgroundColor': 'white',
-                'color': '#475569',
-                'border': 'none',
-                'borderRadius': '50%',
-                'cursor': 'pointer',
-                'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                'transition': 'all 0.2s',
-                'marginTop': '16px',
-                'width': '36px',
-                'height': '36px',
-                'display': 'flex',
-                'alignItems': 'center',
-                'justifyContent': 'center',
-                'fontSize': '14px'
-            }),
+                })
+            ], style={'display': 'flex', 'alignItems': 'flex-start', 'marginLeft': '400px'})
         ], style={'position': 'absolute', 'left': '20px', 'top': '20px', 'pointerEvents': 'auto'}),
         
         # Display options (right)
         html.Div([
             html.Div([
-                html.Button("Map", id='map-button', style={
+                html.Button([
+                    html.I(className="fas fa-map-marker-alt", style={'marginRight': '8px'}),
+                    "Map View"
+                ], id='map-button', style={
                     'padding': '8px 16px',
                     'backgroundColor': 'white',
                     'color': '#475569',
@@ -416,22 +399,10 @@ app.layout = html.Div([
                     'transition': 'all 0.2s',
                     'fontSize': '14px',
                     'fontWeight': '500',
-                    'lineHeight': '1.5'
-                }),
-                html.Button("Heatmap", id='heatmap-button', style={
-                    'padding': '8px 16px',
-                    'backgroundColor': 'white',
-                    'color': '#475569',
-                    'border': 'none',
-                    'borderRadius': '20px',
-                    'cursor': 'pointer',
-                    'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                    'transition': 'all 0.2s',
-                    'marginLeft': '8px',
-                    'fontSize': '14px',
-                    'fontWeight': '500',
-                    'lineHeight': '1.5'
-                }),
+                    'lineHeight': '1.5',
+                    'display': 'flex',
+                    'alignItems': 'center'
+                })
             ], style={'display': 'flex', 'alignItems': 'flex-start'})
         ], style={'position': 'absolute', 'right': '20px', 'top': '20px', 'pointerEvents': 'auto'}),
     ], style={
@@ -444,7 +415,34 @@ app.layout = html.Div([
         'zIndex': 1000,
         'pointerEvents': 'none'
     }),
-    
+
+    # Tools button (between search and corpus)
+    html.Button(
+        html.I(className="fas fa-sliders-h"),
+        id='visualization-button',
+        style={
+            'padding': '8px',
+            'backgroundColor': 'white',
+            'color': '#475569',
+            'border': 'none',
+            'borderRadius': '50%',
+            'cursor': 'pointer',
+            'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+            'transition': 'all 0.2s',
+            'width': '36px',
+            'height': '36px',
+            'display': 'flex',
+            'alignItems': 'center',
+            'justifyContent': 'center',
+            'fontSize': '14px',
+            'position': 'fixed',
+            'top': '20px',
+            'left': '340px',
+            'zIndex': 1001,
+            'pointerEvents': 'auto'
+        }
+    ),
+
     # Rest of the components...
     html.Div(id='cached-data', style={'display': 'none'}),
 
@@ -947,10 +945,10 @@ def update_category_selection(*args):
 
 @app.callback(
     [Output('main-map', 'figure'),
-     Output('view-type', 'data')],
+     Output('view-type', 'data'),
+     Output('map-button', 'children')],
     [Input('filtered-data', 'data'),
      Input('map-button', 'n_clicks'),
-     Input('heatmap-button', 'n_clicks'),
      Input('heatmap-intensity', 'value'),
      Input('heatmap-radius', 'value'),
      Input('heatmap-colorscale', 'value'),
@@ -959,26 +957,28 @@ def update_category_selection(*args):
      Input('main-map', 'clickData'),
      Input('marker-size-slider', 'value'),
      Input('cluster-size-slider', 'value'),
-     Input('cluster-radius-slider', 'value'),
-     Input('view-tabs', 'active_tab')],
+     Input('cluster-radius-slider', 'value')],
     [State('view-type', 'data')],
     prevent_initial_call=True
 )
-def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity, heatmap_radius, heatmap_colorscale, cluster_toggle, selected_place, click_data, marker_size, cluster_size, cluster_radius, active_tab, current_view_type):
+def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius, heatmap_colorscale, cluster_toggle, selected_place, click_data, marker_size, cluster_size, cluster_radius, current_view_type):
     try:
         ctx = callback_context
         if not ctx.triggered:
             view_type = 'points'  # Default view
         else:
             trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-            if trigger_id == 'view-tabs':
-                view_type = active_tab
-            elif trigger_id == 'heatmap-button':
-                view_type = 'heatmap'
-            elif trigger_id == 'map-button':
-                view_type = 'points'
+            if trigger_id == 'map-button':
+                view_type = 'heatmap' if current_view_type == 'points' else 'points'
             else:
                 view_type = current_view_type or 'points'  # Use current view type or default to points
+
+        # Update button content based on view type
+        button_content = [
+            html.I(className="fas fa-fire" if view_type == 'heatmap' else "fas fa-map-marker-alt", 
+                   style={'marginRight': '8px'}),
+            "Heatmap View" if view_type == 'heatmap' else "Map View"
+        ]
 
         # Create base figure with default view of Norway
         fig = go.Figure()
@@ -1003,7 +1003,7 @@ def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity
                 showlegend=False,
                 uirevision='constant'
             )
-            return fig, view_type
+            return fig, view_type, button_content
         
         # Load cached data
         places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split')
@@ -1019,7 +1019,7 @@ def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity
                 showlegend=False,
                 uirevision='constant'
             )
-            return fig, view_type
+            return fig, view_type, button_content
         
         # Clean data
         places_df = places_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', 'frequency'])
@@ -1331,10 +1331,10 @@ def update_map(filtered_data_json, map_clicks, heatmap_clicks, heatmap_intensity
             clickmode='event'
         )
         
-        return fig, view_type
+        return fig, view_type, button_content
     except Exception as e:
         print(f"Error in update_map: {e}")
-        return dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update
 
 @app.callback(
     [Output('place-list', 'children'),
@@ -1762,13 +1762,16 @@ def update_button_styles(corpus_style, places_style, viz_style, corpus_btn_style
         'cursor': 'pointer',
         'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
         'transition': 'all 0.2s',
-        'marginTop': '16px',
         'width': '36px',
         'height': '36px',
         'display': 'flex',
         'alignItems': 'center',
         'justifyContent': 'center',
-        'fontSize': '14px'
+        'fontSize': '14px',
+        'position': 'absolute',
+        'top': '20px',
+        'left': '340px',
+        'zIndex': 1000
     }
     
     return corpus_btn_style, places_btn_style, viz_btn_style
