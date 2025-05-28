@@ -308,32 +308,46 @@ app.layout = html.Div([
         # Search field (left)
         html.Div([
             html.Div([
-                html.I(className="fas fa-search", style={'color': '#666', 'marginRight': '8px'}),
+                html.I(className="fas fa-search", style={
+                    "color": "#666",
+                    "marginRight": "8px",
+                    "fontSize": "16px"
+                }),
                 dcc.Input(
-                    id='global-place-search',
-                    type='text',
-                    placeholder='Search places...',
+                    id="global-place-search",
+                    type="text",
+                    placeholder="Search places...",
                     style={
-                        'width': '400px',
-                        'height': '40px',
-                        'border': 'none',
-                        'borderRadius': '20px',
-                        'padding': '0 15px',
-                        'fontSize': '14px',
-                        'boxShadow': '0 2px 6px rgba(0,0,0,0.1)',
-                        'backgroundColor': 'white'
+                        "width": "100%",
+                        "height": "100%",
+                        "border": "none",
+                        "outline": "none",
+                        "fontSize": "14px",
+                        "color": "#333",
+                        "backgroundColor": "transparent",
+                        "padding": "0"
                     }
                 )
             ], style={
-                'display': 'flex',
-                'alignItems': 'center',
-                'backgroundColor': 'white',
-                'borderRadius': '20px',
-                'padding': '0 15px',
-                'boxShadow': '0 2px 6px rgba(0,0,0,0.1)',
-                'pointerEvents': 'auto'
+                "display": "flex",
+                "alignItems": "center",
+                "padding": "0 12px",
+                "height": "100%",
+                "backgroundColor": "white",
+                "borderRadius": "8px",
+                "boxShadow": "0 2px 6px rgba(0,0,0,0.15)",
+                "transition": "box-shadow 0.3s ease",
+                "pointerEvents": "auto"
             })
-        ], style={'position': 'absolute', 'left': '20px', 'top': '20px', 'zIndex': 1000}),
+        ], style={
+            "position": "absolute",
+            "top": "20px",
+            "left": "20px",
+            "zIndex": 1000,
+            "width": "300px",
+            "height": "40px",
+            "pointerEvents": "auto"
+        }),
 
         # Database buttons (left)
         html.Div([
