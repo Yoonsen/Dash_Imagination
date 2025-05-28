@@ -208,24 +208,8 @@ def get_place_details(token, page=1, per_page=10):
     """Get details about a place from the database."""
     conn = get_db_connection()
     try:
-        # Get current state
-        books, places = get_current_state()
-        
-        if not books:
-            return pd.DataFrame(), 0  # Return empty DataFrame if no books
-        
-        # Create a CTE to get the distinct dhlabids from our corpus
-        place_books_cte = f"""
-        WITH place_books AS (
-            SELECT DISTINCT b.dhlabid
-            FROM books b
-            WHERE b.token = ? AND b.dhlabid IN ({','.join(['?'] * len(books))})
-        )
-        """
-        
         # Query to get book details with pagination
-        query = f"""
-        {place_books_cte}
+        query = """
         SELECT 
             c.title,
             c.author,
@@ -233,30 +217,26 @@ def get_place_details(token, page=1, per_page=10):
             c.dhlabid,
             c.urn,
             COUNT(b.dhlabid) as mention_count
-        FROM place_books pb
-        JOIN books b ON pb.dhlabid = b.dhlabid AND b.token = ?
+        FROM books b
         JOIN corpus c ON b.dhlabid = c.dhlabid
+        WHERE b.token = ?
         GROUP BY c.title, c.author, c.year, c.dhlabid, c.urn
         ORDER BY c.year DESC, c.title
         LIMIT ? OFFSET ?
         """
         
-        # Add token and books to params
-        params = [token] + books + [token, per_page, (page - 1) * per_page]
-        
         # Get the data
-        df = pd.read_sql_query(query, conn, params=params)
+        df = pd.read_sql_query(query, conn, params=[token, per_page, (page - 1) * per_page])
         
         # Get total count for pagination
-        count_query = f"""
-        {place_books_cte}
+        count_query = """
         SELECT COUNT(DISTINCT c.title) as total
-        FROM place_books pb
-        JOIN books b ON pb.dhlabid = b.dhlabid AND b.token = ?
+        FROM books b
         JOIN corpus c ON b.dhlabid = c.dhlabid
+        WHERE b.token = ?
         """
         
-        total = pd.read_sql_query(count_query, conn, params=[token] + books + [token]).iloc[0]['total']
+        total = pd.read_sql_query(count_query, conn, params=[token]).iloc[0]['total']
         
         return df, total
         
@@ -325,6 +305,36 @@ app.layout = html.Div([
     
     # Top bar (top layer with translucent background)
     html.Div([
+        # Search field (left)
+        html.Div([
+            html.Div([
+                html.I(className="fas fa-search", style={'color': '#666', 'marginRight': '8px'}),
+                dcc.Input(
+                    id='global-place-search',
+                    type='text',
+                    placeholder='Search places...',
+                    style={
+                        'width': '400px',
+                        'height': '40px',
+                        'border': 'none',
+                        'borderRadius': '20px',
+                        'padding': '0 15px',
+                        'fontSize': '14px',
+                        'boxShadow': '0 2px 6px rgba(0,0,0,0.1)',
+                        'backgroundColor': 'white'
+                    }
+                )
+            ], style={
+                'display': 'flex',
+                'alignItems': 'center',
+                'backgroundColor': 'white',
+                'borderRadius': '20px',
+                'padding': '0 15px',
+                'boxShadow': '0 2px 6px rgba(0,0,0,0.1)',
+                'pointerEvents': 'auto'
+            })
+        ], style={'position': 'absolute', 'left': '20px', 'top': '20px', 'zIndex': 1000}),
+
         # Database buttons (left)
         html.Div([
             # Main button group
@@ -356,7 +366,7 @@ app.layout = html.Div([
                     'fontWeight': '500',
                     'lineHeight': '1.5'
                 }),
-            ], style={'display': 'flex', 'alignItems': 'flex-start'}),
+            ], style={'display': 'flex', 'alignItems': 'flex-start', 'marginLeft': '440px'}),
             
             # Tools button below
             html.Button(html.I(className="fas fa-sliders-h"), id='visualization-button', style={
@@ -1489,7 +1499,7 @@ def update_place_summary(click_data, current_style):
             html.Div([
                 html.H5(token_part, style={'marginBottom': '5px'}),
                 html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
-                html.P(f"Appears in {len(books_df):,} books with {books_df['mention_count'].sum():,} total mentions", style={'marginTop': '5px'}),
+                html.P(f"Appears in {len(books_df):,} books with {int(place['frequency']):,} total mentions", style={'marginTop': '5px'}),
                 html.Hr(style={'margin': '10px 0'})
             ]),
             html.Div([
@@ -1504,7 +1514,7 @@ def update_place_summary(click_data, current_style):
                         ),
                         html.Div([
                             html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
-                            html.Span(f" • {int(row['mention_count']):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                            html.Span(f" • {int(row.get('mention_count', 1)):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
                         ], style={'display': 'flex', 'justifyContent': 'space-between'})
                     ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
                     for i, row in books_df.iterrows() if pd.notna(row['title'])
@@ -2139,6 +2149,118 @@ def update_filtered_data(filters, upload_state, reset_clicks, filename):
     except Exception as e:
         print(f"Error in update_filtered_data: {e}")
         return dash.no_update
+
+# Add new callback for global place search
+@app.callback(
+    [Output('main-map', 'figure', allow_duplicate=True),
+     Output('place-summary-container', 'style', allow_duplicate=True),
+     Output('place-summary', 'children', allow_duplicate=True)],
+    [Input('global-place-search', 'value')],
+    [State('main-map', 'figure')],
+    prevent_initial_call=True
+)
+def handle_global_search(search_term, current_figure):
+    if not search_term or len(search_term) < 2:
+        raise PreventUpdate
+    
+    try:
+        conn = get_db_connection()
+        try:
+            # Search in both historical and modern names
+            query = """
+            SELECT 
+                p.token,
+                p.modern as name,
+                p.latitude,
+                p.longitude,
+                COUNT(DISTINCT b.dhlabid) as book_count,
+                COUNT(b.dhlabid) as frequency
+            FROM places p
+            JOIN books b ON p.token = b.token
+            WHERE (LOWER(p.token) LIKE LOWER(?) OR LOWER(p.modern) LIKE LOWER(?))
+            AND p.latitude IS NOT NULL 
+            AND p.longitude IS NOT NULL
+            AND p.latitude != '0'
+            AND p.longitude != '0'
+            GROUP BY p.token, p.modern, p.latitude, p.longitude
+            ORDER BY frequency DESC
+            LIMIT 1
+            """
+            
+            # Add wildcards for partial matching
+            search_pattern = f"%{search_term}%"
+            places_df = pd.read_sql_query(query, conn, params=(search_pattern, search_pattern))
+            
+            if places_df.empty:
+                return current_figure, dash.no_update, dash.no_update
+            
+            # Get the first matching place
+            place = places_df.iloc[0]
+            
+            # Create hover text
+            hover_text = f"{place['token']} ({place['name']})<br>Mentions: {int(place['frequency'])}<br>Books: {int(place['book_count'])}"
+            
+            # Update the map to center on the found place
+            fig = go.Figure(current_figure)
+            fig.update_layout(
+                map=dict(
+                    center=dict(lat=float(place['latitude']), lon=float(place['longitude'])),
+                    zoom=10
+                )
+            )
+            
+            # Get book details for the place
+            books_df, total_books = get_place_details(place['token'])
+            
+            # Create summary content
+            summary = html.Div([
+                html.Div([
+                    html.H5(place['token'], style={'marginBottom': '5px'}),
+                    html.P(f"Modern name: {place['name']}", style={'fontSize': '14px', 'color': '#666'}) if place['name'] else None,
+                    html.P(f"Appears in {len(books_df):,} books with {int(place['frequency']):,} total mentions", style={'marginTop': '5px'}),
+                    html.Hr(style={'margin': '10px 0'})
+                ]),
+                html.Div([
+                    html.H6(f"Books mentioning this place ({len(books_df):,} total):", style={'marginBottom': '10px'}),
+                    html.Div([
+                        html.Div([
+                            html.A(
+                                f"{row['title']} ({row['year']})",
+                                href=f"https://www.nb.no/items/{row['urn']}?searchText={place['token']}",
+                                target="_blank",
+                                style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
+                            ),
+                            html.Div([
+                                html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
+                                html.Span(f" • {int(row.get('mention_count', 1)):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                            ], style={'display': 'flex', 'justifyContent': 'space-between'})
+                        ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
+                        for i, row in books_df.iterrows() if pd.notna(row['title'])
+                    ]) if not books_df.empty else html.Div("No book details available")
+                ])
+            ])
+            
+            # Show the summary container
+            summary_style = {
+                'position': 'absolute',
+                'bottom': '80px',
+                'left': '20px',
+                'width': '350px',
+                'maxHeight': '500px',
+                'overflowY': 'auto',
+                'zIndex': 800,
+                'display': 'block',
+                'cursor': 'auto'
+            }
+            
+            return fig, summary_style, summary
+            
+        finally:
+            conn.close()
+            
+    except Exception as e:
+        print(f"Error in handle_global_search: {e}")
+        return current_figure, dash.no_update, dash.no_update
 
 # Run Server
 if __name__ == '__main__':
