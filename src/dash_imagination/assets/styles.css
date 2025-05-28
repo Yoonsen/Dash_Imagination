@@ -224,3 +224,55 @@ body {
 #place-summary-container[style*="display: block"] {
     animation: float-in 0.3s ease-out forwards;
 }
+
+/* Place similarity dialog styles */
+#place-similarity-dialog {
+    transition: opacity 0.2s ease;
+    z-index: 1000;
+}
+
+#place-similarity-dialog.dragging {
+    opacity: 0.8;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+}
+
+#similarity-header {
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+#similarity-header:active {
+    cursor: grabbing;
+}
+
+.similar-places-list {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 1rem;
+}
+
+.similar-place-item {
+    padding: 0.5rem;
+    border-bottom: 1px solid #dee2e6;
+    transition: background-color 0.2s;
+}
+
+.similar-place-item:hover {
+    background-color: #f8f9fa;
+}
+
+.similar-place-item:last-child {
+    border-bottom: none;
+}
+
+.place-name {
+    font-weight: 500;
+}
+
+.similarity-score {
+    color: #6c757d;
+    font-size: 0.875rem;
+}

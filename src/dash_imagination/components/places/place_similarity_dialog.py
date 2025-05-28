@@ -4,7 +4,7 @@ from .word_similarity import WordSimilarityAPI
 import pandas as pd
 from dash.exceptions import PreventUpdate
 from dash_imagination.utils.db import get_db_connection
-from dash_imagination.utils.global_state import update_current_dhlabids
+from dash_imagination.utils.global_state import get_current_state, update_from_books
 import io
 import dash
 
@@ -219,6 +219,9 @@ def handle_similar_places(n_clicks, n_submit, threshold, max_places, search_word
             if corpus_info['dhlabids']:
                 dhlabids = [int(x) for x in corpus_info['dhlabids'].split(',')]
             
+            # Update state with new books and places
+            books, places = update_from_books(dhlabids, valid_tokens)
+            
             # Create place list items
             place_items = []
             for _, row in places_df.iterrows():
@@ -260,7 +263,7 @@ def handle_similar_places(n_clicks, n_submit, threshold, max_places, search_word
             # Update filters with selected tokens
             new_filters = {'selected_tokens': valid_tokens}
             
-            return False, results, corpus_info_display, {'display': 'block'}, new_filters, "", dash.no_update, dhlabids
+            return False, results, corpus_info_display, {'display': 'block'}, new_filters, "", dash.no_update, books
             
         finally:
             conn.close()

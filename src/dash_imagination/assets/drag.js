@@ -48,6 +48,24 @@ $(document).ready(function() {
                 });
             }
 
+            // Initialize place-similarity-dialog if it exists
+            if ($('#place-similarity-dialog').length > 0) {
+                console.log("Found place-similarity-dialog, making it draggable");
+
+                $('#place-similarity-dialog').draggable({
+                    handle: '#similarity-header',
+                    containment: 'window',
+                    start: function(event, ui) {
+                        $(this).addClass("dragging");
+                        console.log("Started dragging similarity dialog");
+                    },
+                    stop: function(event, ui) {
+                        $(this).removeClass("dragging");
+                        console.log("Stopped dragging similarity dialog at:", ui.position);
+                    }
+                });
+            }
+
             // Initialize corpus-controls-container if it exists
             if ($('#corpus-controls-container').length > 0) {
                 console.log("Found corpus-controls-container, making it draggable");
@@ -109,6 +127,13 @@ $(document).ready(function() {
             initializeDraggable();
         }
 
+        // Check place similarity dialog
+        if ($('#place-similarity-dialog').is(':visible') && 
+            !$('#place-similarity-dialog').hasClass('ui-draggable')) {
+            console.log("Similarity dialog is visible but not draggable yet, initializing");
+            initializeDraggable();
+        }
+
         // Check corpus controls container
         if ($('#corpus-controls-container').is(':visible') && 
             !$('#corpus-controls-container').hasClass('ui-draggable')) {
@@ -137,6 +162,13 @@ $(document).ready(function() {
         if ($('#place-names-container').is(':visible') && 
             !$('#place-names-container').hasClass('ui-draggable')) {
             console.log("Places container is visible in interval check but not draggable, initializing");
+            initializeDraggable();
+        }
+
+        // Check place similarity dialog
+        if ($('#place-similarity-dialog').is(':visible') && 
+            !$('#place-similarity-dialog').hasClass('ui-draggable')) {
+            console.log("Similarity dialog is visible in interval check but not draggable, initializing");
             initializeDraggable();
         }
 
