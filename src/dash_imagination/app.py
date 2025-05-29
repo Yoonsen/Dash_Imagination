@@ -204,29 +204,51 @@ def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
     finally:
         conn.close()
 
-def get_place_details(token, page=1, per_page=10):
+def get_place_details(token, page=1, per_page=20):
     """Get details about a place from the database."""
     conn = get_db_connection()
     try:
+        # Get current state
+        books, _ = get_current_state()
+        if not books:
+            return pd.DataFrame(), 0
+
         # Query to get book details with pagination
         query = """
+        WITH place_stats AS (
+            SELECT 
+                COUNT(DISTINCT b.dhlabid) as total_books,
+                SUM(b.book_count) as total_mentions
+            FROM books b
+            WHERE b.token = ?
+            AND b.dhlabid IN ({})
+        ),
+        book_mentions AS (
+            SELECT 
+                b.dhlabid,
+                b.book_count as mention_count
+            FROM books b
+            WHERE b.token = ?
+            AND b.dhlabid IN ({})
+        )
         SELECT 
             c.title,
             c.author,
             c.year,
             c.dhlabid,
             c.urn,
-            COUNT(b.dhlabid) as mention_count
-        FROM books b
-        JOIN corpus c ON b.dhlabid = c.dhlabid
-        WHERE b.token = ?
-        GROUP BY c.title, c.author, c.year, c.dhlabid, c.urn
+            bm.mention_count,
+            (SELECT total_books FROM place_stats) as total_books,
+            (SELECT total_mentions FROM place_stats) as total_mentions
+        FROM book_mentions bm
+        JOIN corpus c ON bm.dhlabid = c.dhlabid
         ORDER BY c.year DESC, c.title
         LIMIT ? OFFSET ?
-        """
+        """.format(','.join(['?'] * len(books)), ','.join(['?'] * len(books)))
         
         # Get the data
-        df = pd.read_sql_query(query, conn, params=[token, per_page, (page - 1) * per_page])
+        params = [token] + books + [token] + books + [per_page, (page - 1) * per_page]
+        df = pd.read_sql_query(query, conn, params=params)
         
         # Get total count for pagination
         count_query = """
@@ -234,9 +256,10 @@ def get_place_details(token, page=1, per_page=10):
         FROM books b
         JOIN corpus c ON b.dhlabid = c.dhlabid
         WHERE b.token = ?
-        """
+        AND b.dhlabid IN ({})
+        """.format(','.join(['?'] * len(books)))
         
-        total = pd.read_sql_query(count_query, conn, params=[token]).iloc[0]['total']
+        total = pd.read_sql_query(count_query, conn, params=[token] + books).iloc[0]['total']
         
         return df, total
         
@@ -1530,15 +1553,19 @@ def update_place_summary(click_data, current_style):
         books_df, total_books = get_place_details(token)
         print(f"Got {len(books_df)} books for place {token}")
         
+        # Get total counts from the first row (they're the same for all rows)
+        total_books = int(books_df['total_books'].iloc[0]) if not books_df.empty else 0
+        total_mentions = int(books_df['total_mentions'].iloc[0]) if not books_df.empty else 0
+        
         summary = html.Div([
             html.Div([
                 html.H5(token_part, style={'marginBottom': '5px'}),
                 html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
-                html.P(f"Appears in {book_count:,} books with {frequency:,} total mentions", style={'marginTop': '5px'}),
+                html.P(f"Appears in {total_books:,} books with {total_mentions:,} total mentions", style={'marginTop': '5px'}),
                 html.Hr(style={'margin': '10px 0'})
             ]),
             html.Div([
-                html.H6(f"Books mentioning this place ({len(books_df):,} total):", style={'marginBottom': '10px'}),
+                html.H6(f"Books mentioning this place (showing {len(books_df):,} of {total_books:,}):", style={'marginBottom': '10px'}),
                 html.Div([
                     html.Div([
                         html.A(
@@ -1549,7 +1576,7 @@ def update_place_summary(click_data, current_style):
                         ),
                         html.Div([
                             html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
-                            html.Span(f" • {int(row.get('mention_count', 1)):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                            html.Span(f" • {int(row['mention_count']):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
                         ], style={'display': 'flex', 'justifyContent': 'space-between'})
                     ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
                     for i, row in books_df.iterrows() if pd.notna(row['title'])
