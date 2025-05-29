@@ -305,52 +305,73 @@ app.layout = html.Div([
     
     # Top bar (top layer with translucent background)
     html.Div([
-        # Search field (left)
+        # Left section with search and corpus controls
         html.Div([
+            # Search field
             html.Div([
-                html.I(className="fas fa-search", style={
-                    "color": "#666",
-                    "marginRight": "8px",
-                    "fontSize": "16px"
-                }),
-                dcc.Input(
-                    id="global-place-search",
-                    type="text",
-                    placeholder="Search places...",
-                    style={
-                        "width": "100%",
-                        "height": "100%",
-                        "border": "none",
-                        "outline": "none",
-                        "fontSize": "14px",
-                        "color": "#333",
-                        "backgroundColor": "transparent",
-                        "padding": "0"
-                    }
-                )
+                html.Div([
+                    html.I(className="fas fa-search", style={
+                        "color": "#666",
+                        "marginRight": "8px",
+                        "fontSize": "16px"
+                    }),
+                    dcc.Input(
+                        id="global-place-search",
+                        type="text",
+                        placeholder="Search places...",
+                        style={
+                            "width": "100%",
+                            "height": "100%",
+                            "border": "none",
+                            "outline": "none",
+                            "fontSize": "14px",
+                            "color": "#333",
+                            "backgroundColor": "transparent",
+                            "padding": "0"
+                        }
+                    )
+                ], style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "padding": "0 12px",
+                    "height": "36px",
+                    "backgroundColor": "white",
+                    "borderRadius": "8px",
+                    "boxShadow": "0 2px 6px rgba(0,0,0,0.15)",
+                    "transition": "box-shadow 0.3s ease",
+                    "pointerEvents": "auto",
+                    "width": "240px"
+                })
             ], style={
                 "display": "flex",
-                "alignItems": "center",
-                "padding": "0 12px",
-                "height": "100%",
-                "backgroundColor": "white",
-                "borderRadius": "8px",
-                "boxShadow": "0 2px 6px rgba(0,0,0,0.15)",
-                "transition": "box-shadow 0.3s ease",
-                "pointerEvents": "auto"
-            })
-        ], style={
-            "position": "absolute",
-            "top": "20px",
-            "left": "20px",
-            "zIndex": 1000,
-            "width": "300px",
-            "height": "40px",
-            "pointerEvents": "auto"
-        }),
+                "alignItems": "center"
+            }),
 
-        # Database buttons (left)
-        html.Div([
+            # Tools button
+            html.Button(
+                html.I(className="fas fa-sliders-h"),
+                id='visualization-button',
+                style={
+                    'padding': '8px',
+                    'backgroundColor': 'white',
+                    'color': '#475569',
+                    'border': 'none',
+                    'borderRadius': '50%',
+                    'cursor': 'pointer',
+                    'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                    'transition': 'all 0.2s',
+                    'width': '36px',
+                    'height': '36px',
+                    'display': 'flex',
+                    'alignItems': 'center',
+                    'justifyContent': 'center',
+                    'fontSize': '14px',
+                    'marginLeft': '8px',
+                    'flexShrink': '0'  # Prevent the button from shrinking
+                }
+            ),
+
+            # Corpus and Places buttons
             html.Div([
                 html.Button("Corpus", id='corpus-button', style={
                     'padding': '8px 16px',
@@ -363,7 +384,8 @@ app.layout = html.Div([
                     'transition': 'all 0.2s',
                     'fontSize': '14px',
                     'fontWeight': '500',
-                    'lineHeight': '1.5'
+                    'lineHeight': '1.5',
+                    'flexShrink': '0'  # Prevent the button from shrinking
                 }),
                 html.Button("Places", id='place-names-toggle', style={
                     'padding': '8px 16px',
@@ -377,34 +399,56 @@ app.layout = html.Div([
                     'marginLeft': '8px',
                     'fontSize': '14px',
                     'fontWeight': '500',
-                    'lineHeight': '1.5'
-                })
-            ], style={'display': 'flex', 'alignItems': 'flex-start', 'marginLeft': '400px'})
-        ], style={'position': 'absolute', 'left': '20px', 'top': '20px', 'pointerEvents': 'auto'}),
-        
-        # Display options (right)
-        html.Div([
-            html.Div([
-                html.Button([
-                    html.I(className="fas fa-map-marker-alt", style={'marginRight': '8px'}),
-                    "Map View"
-                ], id='map-button', style={
-                    'padding': '8px 16px',
-                    'backgroundColor': 'white',
-                    'color': '#475569',
-                    'border': 'none',
-                    'borderRadius': '20px',
-                    'cursor': 'pointer',
-                    'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                    'transition': 'all 0.2s',
-                    'fontSize': '14px',
-                    'fontWeight': '500',
                     'lineHeight': '1.5',
-                    'display': 'flex',
-                    'alignItems': 'center'
+                    'flexShrink': '0'  # Prevent the button from shrinking
                 })
-            ], style={'display': 'flex', 'alignItems': 'flex-start'})
-        ], style={'position': 'absolute', 'right': '20px', 'top': '20px', 'pointerEvents': 'auto'}),
+            ], style={
+                'display': 'flex', 
+                'alignItems': 'center', 
+                'marginLeft': '8px',
+                'flexShrink': '0'  # Prevent the container from shrinking
+            })
+        ], style={
+            'display': 'flex',
+            'alignItems': 'center',
+            'position': 'absolute',
+            'left': '20px',
+            'top': '20px',
+            'zIndex': 1000,
+            'pointerEvents': 'auto',
+            'flexWrap': 'wrap',  # Allow wrapping on small screens
+            'gap': '8px',  # Add gap between wrapped items
+            'maxWidth': 'calc(100% - 40px)'  # Ensure it doesn't overflow on mobile
+        }),
+
+        # Right section with map view button
+        html.Div([
+            html.Button([
+                html.I(className="fas fa-map-marker-alt", style={'marginRight': '8px'}),
+                "Map View"
+            ], id='map-button', style={
+                'padding': '8px 16px',
+                'backgroundColor': 'white',
+                'color': '#475569',
+                'border': 'none',
+                'borderRadius': '20px',
+                'cursor': 'pointer',
+                'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                'transition': 'all 0.2s',
+                'fontSize': '14px',
+                'fontWeight': '500',
+                'lineHeight': '1.5',
+                'display': 'flex',
+                'alignItems': 'center',
+                'whiteSpace': 'nowrap'  # Prevent text wrapping
+            })
+        ], style={
+            'position': 'absolute',
+            'right': '20px',
+            'top': '20px',
+            'zIndex': 1000,
+            'pointerEvents': 'auto'
+        })
     ], style={
         'position': 'fixed',
         'top': 0,
@@ -413,35 +457,12 @@ app.layout = html.Div([
         'height': '80px',
         'backgroundColor': 'rgba(255, 255, 255, 0)',
         'zIndex': 1000,
-        'pointerEvents': 'none'
+        'pointerEvents': 'none',
+        'padding': '0 20px',  # Add padding for better mobile spacing
+        'display': 'flex',
+        'justifyContent': 'space-between',
+        'alignItems': 'center'
     }),
-
-    # Tools button (between search and corpus)
-    html.Button(
-        html.I(className="fas fa-sliders-h"),
-        id='visualization-button',
-        style={
-            'padding': '8px',
-            'backgroundColor': 'white',
-            'color': '#475569',
-            'border': 'none',
-            'borderRadius': '50%',
-            'cursor': 'pointer',
-            'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-            'transition': 'all 0.2s',
-            'width': '36px',
-            'height': '36px',
-            'display': 'flex',
-            'alignItems': 'center',
-            'justifyContent': 'center',
-            'fontSize': '14px',
-            'position': 'fixed',
-            'top': '20px',
-            'left': '340px',
-            'zIndex': 1001,
-            'pointerEvents': 'auto'
-        }
-    ),
 
     # Rest of the components...
     html.Div(id='cached-data', style={'display': 'none'}),
@@ -1366,7 +1387,7 @@ def update_place_list(filtered_data_json, search_term, selected_place):
     
     # Create hover text before creating place items
     places_df['hover_text'] = places_df.apply(
-        lambda row: f"{row['token']} ({row['name']})<br>Mentions: {int(row['frequency'])}<br>Books: {int(row['book_count'])}",
+        lambda row: f"{row['token']} ({row['name']})<br>Modern name: {row['name']}<br>Mentions: {int(row['frequency'])}<br>Books: {int(row['book_count'])}",
         axis=1
     )
     
@@ -1513,7 +1534,7 @@ def update_place_summary(click_data, current_style):
             html.Div([
                 html.H5(token_part, style={'marginBottom': '5px'}),
                 html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
-                html.P(f"Appears in {len(books_df):,} books with {int(place['frequency']):,} total mentions", style={'marginTop': '5px'}),
+                html.P(f"Appears in {book_count:,} books with {frequency:,} total mentions", style={'marginTop': '5px'}),
                 html.Hr(style={'margin': '10px 0'})
             ]),
             html.Div([
@@ -1768,10 +1789,8 @@ def update_button_styles(corpus_style, places_style, viz_style, corpus_btn_style
         'alignItems': 'center',
         'justifyContent': 'center',
         'fontSize': '14px',
-        'position': 'absolute',
-        'top': '20px',
-        'left': '340px',
-        'zIndex': 1000
+        'marginLeft': '8px',
+        'flexShrink': '0'
     }
     
     return corpus_btn_style, places_btn_style, viz_btn_style
