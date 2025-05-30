@@ -40,6 +40,17 @@ def create_place_similarity_dialog():
                     marks={i/10: f"{i/10:.1f}" for i in range(0, 11, 2)},
                     className="mb-3"
                 ),
+                html.Div([
+                    html.Label("Max Places", className="form-label"),
+                    dcc.Input(
+                        id='max-places',
+                        type='number',
+                        min=1,
+                        max=500,
+                        value=100,
+                        className="form-control"
+                    )
+                ], className="mb-3"),
                 dbc.Button(
                     [
                         html.I(className="fas fa-search me-2"),
@@ -93,13 +104,16 @@ def toggle_similarity_dialog(n_clicks_close, n_clicks_show, current_style):
 @callback(
     [Output('similar-places-results', 'children'),
      Output('similar-places-results', 'style')],
-    [Input('find-similar', 'n_clicks'),
-     Input('similar-place-input', 'value'),
-     Input('similarity-threshold', 'value')],
-    [State('similar-place-input', 'value')],
+    [Input('find-similar', 'n_clicks')],
+    [State('similar-place-input', 'value'),
+     State('similarity-threshold', 'value'),
+     State('max-places', 'value')],
     prevent_initial_call=True
 )
-def handle_similar_places(n_clicks, search_word, threshold, current_value):
+def handle_similar_places(n_clicks, search_word, threshold, max_places):
+    if not n_clicks:
+        return no_update, no_update
+        
     if not search_word:
         return html.Div("Please enter a search term"), {'display': 'block'}
     
@@ -121,28 +135,38 @@ def handle_similar_places(n_clicks, search_word, threshold, current_value):
         # Connect to database and get place information
         conn = get_db_connection()
         
-        # Get valid tokens from the database
-        valid_tokens = [word for word in filtered_words if word in pd.read_sql_query(
-            "SELECT DISTINCT token FROM books", conn)['token'].tolist()]
+        # Get place information in a single query with CTE
+        query = """
+        WITH valid_tokens AS (
+            SELECT DISTINCT token 
+            FROM books 
+            WHERE token IN ({})
+        )
+        SELECT DISTINCT 
+            p.token,
+            p.modern as name,
+            p.latitude,
+            p.longitude,
+            COUNT(DISTINCT b.dhlabid) as book_count,
+            SUM(b.book_count) as frequency
+        FROM places p
+        JOIN books b ON p.token = b.token
+        JOIN valid_tokens vt ON p.token = vt.token
+        WHERE p.latitude IS NOT NULL 
+        AND p.longitude IS NOT NULL
+        AND p.latitude != '0'
+        AND p.longitude != '0'
+        GROUP BY p.token, p.modern, p.latitude, p.longitude
+        ORDER BY frequency DESC
+        LIMIT ?
+        """.format(','.join(['?'] * len(filtered_words)))
         
-        if not valid_tokens:
+        places_df = pd.read_sql_query(query, conn, params=tuple(filtered_words + [max_places]))
+        
+        if places_df.empty:
             return html.Div("No matching places found in the database"), {'display': 'block'}
         
-        # Get place information
-        query = """
-        SELECT DISTINCT p.token, p.modern as name, p.latitude, p.longitude,
-               COUNT(DISTINCT b.dhlabid) as book_count,
-               SUM(b.book_count) as frequency
-        FROM books b
-        JOIN places p ON b.token = p.token
-        WHERE b.token IN ({})
-        GROUP BY p.token, p.modern, p.latitude, p.longitude
-        LIMIT ?
-        """.format(','.join(['?'] * len(valid_tokens)))
-        
-        places_df = pd.read_sql_query(query, conn, params=tuple(valid_tokens + [500]))
-        
-        # Create hover text
+        # Create hover text more efficiently
         places_df['hover_text'] = places_df.apply(
             lambda row: f"{row['token']} ({row['name']})<br>Mentions: {int(row['frequency'])}<br>Books: {int(row['book_count'])}",
             axis=1
@@ -186,7 +210,12 @@ def handle_similar_places(n_clicks, search_word, threshold, current_value):
                         id={'type': 'place-item', 'index': row['token']},
                         **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
                         for _, row in places_df.iterrows()
-                    ], style={'maxHeight': '400px', 'overflowY': 'auto'})
+                    ], style={
+                        'maxHeight': '400px', 
+                        'overflowY': 'auto',
+                        'scrollbarWidth': 'thin',
+                        'scrollbarColor': '#ccc #f8f9fa'
+                    })
                 ], style={'border': '1px solid #eee', 'borderRadius': '4px'})
             ], style={'padding': '12px'})
         ], style={'backgroundColor': 'white', 'borderRadius': '8px', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'}), {'display': 'block'}
