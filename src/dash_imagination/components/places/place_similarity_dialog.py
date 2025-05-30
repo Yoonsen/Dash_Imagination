@@ -36,7 +36,7 @@ def create_place_similarity_dialog():
                     min=0,
                     max=1,
                     step=0.1,
-                    value=0.8,
+                    value=0.7,
                     marks={i/10: f"{i/10:.1f}" for i in range(0, 11, 2)},
                     className="mb-3"
                 ),
@@ -121,7 +121,7 @@ def handle_similar_places(n_clicks, search_word, threshold, max_places):
     try:
         # Get similar words from API with limit
         api = WordSimilarityAPI()
-        similar_words = api.find_similar_words(search_word, limit=500)
+        similar_words = api.find_similar_words(search_word, collection_name="vss_1850_cos", limit=max_places)
         
         if not similar_words:
             return html.Div("No similar places found"), {'display': 'block'}
