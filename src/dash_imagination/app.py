@@ -363,39 +363,41 @@ app.layout = html.Div([
                     "boxShadow": "0 2px 6px rgba(0,0,0,0.15)",
                     "transition": "box-shadow 0.3s ease",
                     "pointerEvents": "auto",
-                    "width": "240px"
+                    "width": "240px",
+                    "flexShrink": "0"  # Prevent search field from shrinking
                 })
             ], style={
                 "display": "flex",
-                "alignItems": "center"
+                "alignItems": "center",
+                "flexShrink": "0"  # Prevent container from shrinking
             }),
 
-            # Tools button
-            html.Button(
-                html.I(className="fas fa-sliders-h"),
-                id='visualization-button',
-                style={
-                    'padding': '8px',
-                    'backgroundColor': 'white',
-                    'color': '#475569',
-                    'border': 'none',
-                    'borderRadius': '50%',
-                    'cursor': 'pointer',
-                    'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                    'transition': 'all 0.2s',
-                    'width': '36px',
-                    'height': '36px',
-                    'display': 'flex',
-                    'alignItems': 'center',
-                    'justifyContent': 'center',
-                    'fontSize': '14px',
-                    'marginLeft': '8px',
-                    'flexShrink': '0'  # Prevent the button from shrinking
-                }
-            ),
-
-            # Corpus and Places buttons
+            # Buttons container
             html.Div([
+                # Tools button
+                html.Button(
+                    html.I(className="fas fa-sliders-h"),
+                    id='visualization-button',
+                    style={
+                        'padding': '8px',
+                        'backgroundColor': 'white',
+                        'color': '#475569',
+                        'border': 'none',
+                        'borderRadius': '50%',
+                        'cursor': 'pointer',
+                        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                        'transition': 'all 0.2s',
+                        'width': '36px',
+                        'height': '36px',
+                        'display': 'flex',
+                        'alignItems': 'center',
+                        'justifyContent': 'center',
+                        'fontSize': '14px',
+                        'flexShrink': '0'  # Prevent the button from shrinking
+                    }
+                ),
+
+                # Corpus and Places buttons
                 html.Button("Corpus", id='corpus-button', style={
                     'padding': '8px 16px',
                     'backgroundColor': 'white',
@@ -408,7 +410,8 @@ app.layout = html.Div([
                     'fontSize': '14px',
                     'fontWeight': '500',
                     'lineHeight': '1.5',
-                    'flexShrink': '0'  # Prevent the button from shrinking
+                    'flexShrink': '0',  # Prevent the button from shrinking
+                    'marginLeft': '8px'  # Add margin between buttons
                 }),
                 html.Button("Places", id='place-names-toggle', style={
                     'padding': '8px 16px',
@@ -419,29 +422,33 @@ app.layout = html.Div([
                     'cursor': 'pointer',
                     'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
                     'transition': 'all 0.2s',
-                    'marginLeft': '8px',
                     'fontSize': '14px',
                     'fontWeight': '500',
                     'lineHeight': '1.5',
-                    'flexShrink': '0'  # Prevent the button from shrinking
+                    'flexShrink': '0',  # Prevent the button from shrinking
+                    'marginLeft': '8px'  # Add margin between buttons
                 })
             ], style={
-                'display': 'flex', 
-                'alignItems': 'center', 
-                'marginLeft': '8px',
-                'flexShrink': '0'  # Prevent the container from shrinking
+                'display': 'flex',
+                'flexDirection': 'row',  # Default to horizontal layout
+                'alignItems': 'center',
+                'flexWrap': 'wrap',  # Allow wrapping only when needed
+                'gap': '8px',  # Add gap between wrapped items
+                'marginLeft': '8px',  # Add margin between search and buttons
+                'flexShrink': '0'  # Prevent container from shrinking
             })
         ], style={
             'display': 'flex',
+            'flexDirection': 'row',  # Change to horizontal layout
             'alignItems': 'center',
             'position': 'absolute',
             'left': '20px',
             'top': '20px',
             'zIndex': 1000,
             'pointerEvents': 'auto',
-            'flexWrap': 'wrap',  # Allow wrapping on small screens
+            'flexWrap': 'wrap',  # Allow wrapping when needed
             'gap': '8px',  # Add gap between wrapped items
-            'maxWidth': 'calc(100% - 40px)'  # Ensure it doesn't overflow on mobile
+            'maxWidth': 'calc(100% - 180px)'  # Reserve space for map view button
         }),
 
         # Right section with map view button
@@ -463,14 +470,16 @@ app.layout = html.Div([
                 'lineHeight': '1.5',
                 'display': 'flex',
                 'alignItems': 'center',
-                'whiteSpace': 'nowrap'  # Prevent text wrapping
+                'whiteSpace': 'nowrap',  # Prevent text wrapping
+                'flexShrink': '0'  # Prevent button from shrinking
             })
         ], style={
             'position': 'absolute',
             'right': '20px',
             'top': '20px',
             'zIndex': 1000,
-            'pointerEvents': 'auto'
+            'pointerEvents': 'auto',
+            'flexShrink': '0'  # Prevent container from shrinking
         })
     ], style={
         'position': 'fixed',
