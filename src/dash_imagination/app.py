@@ -797,16 +797,37 @@ app.index_string = '''
                     const header = element.querySelector('.card-header');
                     if (!header) return;
                     
-                    header.addEventListener('mousedown', function(e) {
+                    // Mouse event handlers
+                    header.addEventListener('mousedown', startDrag);
+                    document.addEventListener('mousemove', drag);
+                    document.addEventListener('mouseup', stopDrag);
+                    
+                    // Touch event handlers
+                    header.addEventListener('touchstart', handleTouchStart, { passive: false });
+                    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+                    document.addEventListener('touchend', handleTouchEnd);
+                    
+                    function startDrag(e) {
                         isDragging = true;
                         element.classList.add('dragging');
                         startX = e.clientX;
                         startY = e.clientY;
                         initialLeft = parseInt(window.getComputedStyle(element).left);
                         initialTop = parseInt(window.getComputedStyle(element).top);
-                    });
+                    }
                     
-                    document.addEventListener('mousemove', function(e) {
+                    function handleTouchStart(e) {
+                        e.preventDefault(); // Prevent scrolling while dragging
+                        const touch = e.touches[0];
+                        isDragging = true;
+                        element.classList.add('dragging');
+                        startX = touch.clientX;
+                        startY = touch.clientY;
+                        initialLeft = parseInt(window.getComputedStyle(element).left);
+                        initialTop = parseInt(window.getComputedStyle(element).top);
+                    }
+                    
+                    function drag(e) {
                         if (!isDragging) return;
                         
                         const dx = e.clientX - startX;
@@ -814,14 +835,30 @@ app.index_string = '''
                         
                         element.style.left = `${initialLeft + dx}px`;
                         element.style.top = `${initialTop + dy}px`;
-                    });
+                    }
                     
-                    document.addEventListener('mouseup', function() {
+                    function handleTouchMove(e) {
+                        if (!isDragging) return;
+                        e.preventDefault(); // Prevent scrolling while dragging
+                        
+                        const touch = e.touches[0];
+                        const dx = touch.clientX - startX;
+                        const dy = touch.clientY - startY;
+                        
+                        element.style.left = `${initialLeft + dx}px`;
+                        element.style.top = `${initialTop + dy}px`;
+                    }
+                    
+                    function stopDrag() {
                         if (isDragging) {
                             isDragging = false;
                             element.classList.remove('dragging');
                         }
-                    });
+                    }
+                    
+                    function handleTouchEnd() {
+                        stopDrag();
+                    }
                 }
                 
                 function initializeResizable(element) {
