@@ -12,24 +12,31 @@ def create_place_similarity_dialog():
         dbc.CardHeader([
             html.Div([
                 html.I(className="fa fa-search me-2"),
-                html.H4("Find Similar Places", className="mb-0"),
+                html.H5("Find Similar Places", className="mb-0"),
                 html.Button(
                     html.I(className="fa fa-times"),
                     id='close-similarity',
                     className="btn-close"
                 )
             ], className="d-flex justify-content-between align-items-center")
-        ], className="bg-success text-white", id='similarity-header'),
+        ], className="bg-info-subtle text-dark", id='similarity-header'),
         dbc.CardBody([
             # Input section
             html.Div([
                 html.Label("Place Name", className="form-label"),
-                dcc.Input(
-                    id='similar-place-input',
-                    type='text',
-                    placeholder='Enter a place name...',
-                    className="form-control mb-3"
-                ),
+                dbc.InputGroup([
+                    dcc.Input(
+                        id='similar-place-input',
+                        type='text',
+                        placeholder='Enter a place name...',
+                        className="form-control"
+                    ),
+                    dbc.Button(
+                        html.I(className="fas fa-search"),
+                        id='find-similar',
+                        color="primary"
+                    )
+                ], className="mb-3"),
                 html.Label("Similarity Threshold", className="form-label"),
                 dcc.Slider(
                     id='similarity-threshold',
@@ -50,16 +57,7 @@ def create_place_similarity_dialog():
                         value=100,
                         className="form-control"
                     )
-                ], className="mb-3"),
-                dbc.Button(
-                    [
-                        html.I(className="fas fa-search me-2"),
-                        "Find Similar Places"
-                    ],
-                    id='find-similar',
-                    color="primary",
-                    className="w-100"
-                )
+                ], className="mb-3")
             ], className="mb-4"),
             
             # Results section
@@ -67,7 +65,22 @@ def create_place_similarity_dialog():
                 html.H5("Results", className="mb-3"),
                 html.Div(id='similar-places-results', children=[
                     html.P("Enter a place name and click 'Find Similar Places' to see results", className="text-muted")
-                ])
+                ]),
+                html.Div([
+                    dbc.Button(
+                        "Select All Places and Build Corpus",
+                        color="primary",
+                        className="w-100",
+                        id="select-all-build-corpus-button"
+                    ),
+                    dbc.Spinner(
+                        html.Div(id="select-all-loading"),
+                        color="primary",
+                        type="grow",
+                        fullscreen=False,
+                        spinner_style={"width": "1rem", "height": "1rem"}
+                    )
+                ], id="select-all-container", style={'display': 'none', 'marginBottom': '15px'})
             ])
         ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
     ], id='place-similarity-dialog', className="position-absolute", style={
@@ -76,7 +89,8 @@ def create_place_similarity_dialog():
         'zIndex': 800,
         'display': 'none',
         'top': '100px',  # Position below the top button container
-        'left': '20px'   # Align with other containers
+        'left': '20px',   # Align with other containers
+        'cursor': 'move'  # Add cursor style
     })
 
 @callback(
@@ -99,6 +113,16 @@ def toggle_similarity_dialog(n_clicks_close, n_clicks_show, current_style):
         new_style['display'] = 'block'
         return new_style
     return current_style
+
+@callback(
+    Output('form-submit-trigger', 'children'),
+    Input('similar-place-form', 'submit'),
+    prevent_initial_call=True
+)
+def handle_form_submit(submit):
+    if submit:
+        return 'submitted'
+    return no_update
 
 @callback(
     [Output('similar-places-results', 'children'),
@@ -223,3 +247,69 @@ def handle_similar_places(n_clicks, search_word, threshold, max_places):
     finally:
         if conn:
             conn.close() 
+
+@callback(
+    Output('select-all-container', 'style'),
+    Input('similar-places-results', 'children'),
+    prevent_initial_call=True
+)
+def show_select_all_button(results):
+    if results and not isinstance(results, str):
+        return {'display': 'block', 'marginBottom': '15px'}
+    return {'display': 'none'}
+
+@callback(
+    Output('current-filters', 'data', allow_duplicate=True),
+    Input('select-all-build-corpus-button', 'n_clicks'),
+    [State('similar-places-results', 'children')],
+    prevent_initial_call=True
+)
+def build_corpus_from_places(n_clicks, results):
+    if not n_clicks:
+        return no_update
+        
+    # Extract place tokens from the results
+    place_tokens = []
+    if isinstance(results, dict) and 'props' in results:
+        # Navigate through the nested structure to find place items
+        def extract_tokens(element):
+            if isinstance(element, dict):
+                if 'props' in element:
+                    props = element['props']
+                    if 'id' in props and isinstance(props['id'], dict):
+                        if 'type' in props['id'] and props['id']['type'] == 'place-item':
+                            place_tokens.append(props['id']['index'])
+                    if 'children' in props:
+                        for child in props['children']:
+                            extract_tokens(child)
+            elif isinstance(element, list):
+                for item in element:
+                    extract_tokens(item)
+        
+        extract_tokens(results)
+    
+    if not place_tokens:
+        return no_update
+        
+    # Get books for these places
+    conn = get_db_connection()
+    try:
+        query = """
+        SELECT DISTINCT dhlabid
+        FROM books
+        WHERE token IN ({})
+        """.format(','.join(['?'] * len(place_tokens)))
+        
+        books_df = pd.read_sql_query(query, conn, params=tuple(place_tokens))
+        book_ids = books_df['dhlabid'].tolist()
+        
+        # Create new filters
+        new_filters = {
+            'selected_tokens': place_tokens,
+            'books': book_ids,
+            'corpus_source': 'Similar Places'
+        }
+        
+        return new_filters
+    finally:
+        conn.close() 

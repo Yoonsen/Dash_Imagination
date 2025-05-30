@@ -15,14 +15,14 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
         dbc.CardHeader([
             html.Div([
                 html.I(className="fa fa-book me-2"),
-                html.H4("Corpus Controls", className="mb-0"),
+                html.H5("Corpus Controls", className="mb-0"),
                 html.Button(
                     html.I(className="fa fa-times"),
                     id='close-corpus',
                     className="btn-close"
                 )
             ], className="d-flex justify-content-between align-items-center")
-        ], className="bg-primary text-white", id='corpus-header'),
+        ], className="bg-primary-subtle text-dark", id='corpus-header'),
         dbc.CardBody([
             # Upload section
             dcc.Upload(
@@ -180,15 +180,15 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
     return dbc.Card([
         dbc.CardHeader([
             html.Div([
-                html.I(className="fa fa-grip-horizontal me-2"),
-                html.H4("Visualization Controls", className="mb-0"),
+                html.I(className="fa fa-chart-bar me-2"),
+                html.H5("Visualization Controls", className="mb-0"),
                 html.Button(
                     html.I(className="fa fa-times"),
                     id='close-visualization',
                     className="btn-close"
                 )
             ], className="d-flex justify-content-between align-items-center")
-        ], className="bg-info text-white", id='visualization-header'),
+        ], className="bg-info-subtle text-dark", id='visualization-header'),
         dbc.CardBody([
             # Tabs for Map and Heatmap views
             dbc.Tabs([

@@ -564,7 +564,7 @@ app.layout = html.Div([
         dbc.CardHeader([
             html.Div([
                 html.I(className="fa fa-grip-horizontal me-2"),
-                html.H4("Place Details", className="mb-0"),
+                html.H5("Place Details", className="mb-0"),
                 html.Button(
                     html.I(className="fa fa-times"),
                     id='close-summary',
@@ -582,7 +582,7 @@ app.layout = html.Div([
         'display': 'none',
         'top': '100px',  # Position below the top button container
         'left': '20px',  # Align with other containers
-        'cursor': 'move'  # Add cursor style
+        'cursor': 'grab'  # Change cursor to grab
     }),
 
     # Place Names Container
@@ -590,7 +590,7 @@ app.layout = html.Div([
         dbc.CardHeader([
             html.Div([
                 html.I(className="fa fa-map-marker me-2"),
-                html.H4("Place Names", className="mb-0"),
+                html.H5("Place Names", className="mb-0"),
                 html.Button(
                     html.I(className="fa fa-times"),
                     id='close-place-names',
@@ -629,7 +629,7 @@ app.layout = html.Div([
         'display': 'none',
         'top': '60px',
         'right': '10px',  # Initial right position
-        'cursor': 'move'  # Add cursor style
+        'cursor': 'grab'  # Change cursor to grab
     }),
 
     # Add place similarity dialog
@@ -698,27 +698,76 @@ app.index_string = '''
                 opacity: 0.7;
             }
             /* Resize handle styles */
-            .ui-resizable-handle {
-                background: #e2e8f0;
-                border: 1px solid #cbd5e1;
+            .resize-handle {
+                position: absolute;
+                background: #94a3b8;
                 border-radius: 2px;
+                opacity: 0;
+                transition: opacity 0.2s;
+                z-index: 1000;
             }
-            .ui-resizable-se {
+            .resize-handle:hover {
+                opacity: 1;
+            }
+            .resize-handle.e {
+                width: 8px;
+                height: 100%;
+                right: -4px;
+                top: 0;
+                cursor: e-resize;
+            }
+            .resize-handle.s {
+                width: 100%;
+                height: 8px;
+                bottom: -4px;
+                left: 0;
+                cursor: s-resize;
+            }
+            .resize-handle.se {
                 width: 12px;
                 height: 12px;
                 right: -6px;
                 bottom: -6px;
                 cursor: se-resize;
+                border-radius: 50%;
             }
-            .ui-resizable-e {
+            .resize-handle.w {
                 width: 8px;
-                right: -4px;
-                cursor: e-resize;
+                height: 100%;
+                left: -4px;
+                top: 0;
+                cursor: w-resize;
             }
-            .ui-resizable-s {
+            .resize-handle.n {
+                width: 100%;
                 height: 8px;
-                bottom: -4px;
-                cursor: s-resize;
+                top: -4px;
+                left: 0;
+                cursor: n-resize;
+            }
+            .resize-handle.sw {
+                width: 12px;
+                height: 12px;
+                left: -6px;
+                bottom: -6px;
+                cursor: sw-resize;
+                border-radius: 50%;
+            }
+            .resize-handle.ne {
+                width: 12px;
+                height: 12px;
+                right: -6px;
+                top: -6px;
+                cursor: ne-resize;
+                border-radius: 50%;
+            }
+            .resize-handle.nw {
+                width: 12px;
+                height: 12px;
+                left: -6px;
+                top: -6px;
+                cursor: nw-resize;
+                border-radius: 50%;
             }
         </style>
     </head>
@@ -730,65 +779,161 @@ app.index_string = '''
             {%renderer%}
         </footer>
         <script>
-            $(document).ready(function() {
-                // Initialize draggable and resizable elements
-                function initializeDraggable() {
-                    // Common options for all cards
-                    const cardOptions = {
-                        handle: ".card-header",
-                        containment: "parent",
-                        start: function(event, ui) {
-                            $(this).addClass("dragging");
-                        },
-                        stop: function(event, ui) {
-                            $(this).removeClass("dragging");
+            document.addEventListener('DOMContentLoaded', function() {
+                function initializeDraggable(element) {
+                    let isDragging = false;
+                    let startX, startY;
+                    let initialLeft, initialTop;
+                    
+                    const header = element.querySelector('.card-header');
+                    if (!header) return;
+                    
+                    header.addEventListener('mousedown', function(e) {
+                        isDragging = true;
+                        element.classList.add('dragging');
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        initialLeft = parseInt(window.getComputedStyle(element).left);
+                        initialTop = parseInt(window.getComputedStyle(element).top);
+                    });
+                    
+                    document.addEventListener('mousemove', function(e) {
+                        if (!isDragging) return;
+                        
+                        const dx = e.clientX - startX;
+                        const dy = e.clientY - startY;
+                        
+                        element.style.left = `${initialLeft + dx}px`;
+                        element.style.top = `${initialTop + dy}px`;
+                    });
+                    
+                    document.addEventListener('mouseup', function() {
+                        if (isDragging) {
+                            isDragging = false;
+                            element.classList.remove('dragging');
                         }
-                    };
-
-                    // Common resize options
-                    const resizeOptions = {
-                        minWidth: 300,
-                        minHeight: 400,
-                        maxWidth: 800,
-                        maxHeight: 800,
-                        handles: 'e, s, se',
-                        start: function(event, ui) {
-                            $(this).addClass("resizing");
-                        },
-                        stop: function(event, ui) {
-                            $(this).removeClass("resizing");
-                            // Update the card body's max height
-                            const headerHeight = $(this).find('.card-header').outerHeight();
-                            $(this).find('.card-body').css('maxHeight', `calc(${ui.size.height}px - ${headerHeight}px)`);
-                        }
-                    };
-
-                    // Initialize each card
-                    $("#place-names-container").draggable(cardOptions).resizable(resizeOptions);
-                    $("#place-summary-container").draggable(cardOptions).resizable(resizeOptions);
-                    $("#corpus-controls-container").draggable(cardOptions).resizable(resizeOptions);
-                    $("#visualization-controls-container").draggable(cardOptions).resizable(resizeOptions);
-                    $("#place-similarity-dialog").draggable(cardOptions).resizable(resizeOptions);
+                    });
                 }
-
-                // Initialize on document ready
-                initializeDraggable();
-
-                // Also initialize when elements become visible
-                var observer = new MutationObserver(function(mutations) {
+                
+                function initializeResizable(element) {
+                    const handles = {
+                        e: { cursor: 'e-resize', x: true, y: false },
+                        w: { cursor: 'w-resize', x: true, y: false },
+                        s: { cursor: 's-resize', x: false, y: true },
+                        n: { cursor: 'n-resize', x: false, y: true },
+                        se: { cursor: 'se-resize', x: true, y: true },
+                        sw: { cursor: 'sw-resize', x: true, y: true },
+                        ne: { cursor: 'ne-resize', x: true, y: true },
+                        nw: { cursor: 'nw-resize', x: true, y: true }
+                    };
+                    
+                    let isResizing = false;
+                    let currentHandle = null;
+                    let startX, startY;
+                    let startWidth, startHeight;
+                    let startLeft, startTop;
+                    
+                    function startResize(e, handle) {
+                        isResizing = true;
+                        currentHandle = handle;
+                        element.classList.add('resizing');
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        startWidth = element.offsetWidth;
+                        startHeight = element.offsetHeight;
+                        startLeft = parseInt(window.getComputedStyle(element).left);
+                        startTop = parseInt(window.getComputedStyle(element).top);
+                        e.preventDefault();
+                    }
+                    
+                    function doResize(e) {
+                        if (!isResizing) return;
+                        
+                        const dx = e.clientX - startX;
+                        const dy = e.clientY - startY;
+                        const handle = handles[currentHandle];
+                        
+                        if (handle.x) {
+                            if (currentHandle.includes('e')) {
+                                const newWidth = Math.max(300, Math.min(800, startWidth + dx));
+                                element.style.width = `${newWidth}px`;
+                            } else {
+                                const newWidth = Math.max(300, Math.min(800, startWidth - dx));
+                                element.style.width = `${newWidth}px`;
+                        }
+                        
+                        if (currentHandle === 's' || currentHandle === 'se') {
+                            const newHeight = Math.max(400, Math.min(800, startHeight + dy));
+                            element.style.height = `${newHeight}px`;
+                            
+                            // Update card body max height
+                            const headerHeight = element.querySelector('.card-header').offsetHeight;
+                            const cardBody = element.querySelector('.card-body');
+                            if (cardBody) {
+                                cardBody.style.maxHeight = `calc(${newHeight}px - ${headerHeight}px)`;
+                            }
+                        }
+                    }
+                    
+                    function stopResize() {
+                        if (isResizing) {
+                            isResizing = false;
+                            element.classList.remove('resizing');
+                            currentHandle = null;
+                        }
+                    }
+                    
+                    // Add resize handles
+                    const handleElements = {
+                        e: document.createElement('div'),
+                        s: document.createElement('div'),
+                        se: document.createElement('div')
+                    };
+                    
+                    Object.entries(handleElements).forEach(([key, el]) => {
+                        el.className = `resize-handle ${key}`;
+                        element.appendChild(el);
+                        
+                        el.addEventListener('mousedown', (e) => startResize(e, key));
+                    });
+                    
+                    document.addEventListener('mousemove', doResize);
+                    document.addEventListener('mouseup', stopResize);
+                }
+                
+                // Initialize all cards
+                const cards = [
+                    '#place-names-container',
+                    '#place-summary-container',
+                    '#corpus-controls-container',
+                    '#visualization-controls-container',
+                    '#place-similarity-dialog'
+                ];
+                
+                cards.forEach(selector => {
+                    const element = document.querySelector(selector);
+                    if (element) {
+                        initializeDraggable(element);
+                        initializeResizable(element);
+                    }
+                });
+                
+                // Initialize new cards when they become visible
+                const observer = new MutationObserver(function(mutations) {
                     mutations.forEach(function(mutation) {
                         if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-                            var element = mutation.target;
-                            if (element.style.display === 'block' && !$(element).hasClass('ui-draggable')) {
-                                initializeDraggable();
+                            const element = mutation.target;
+                            if (element.style.display === 'block' && !element.classList.contains('initialized')) {
+                                initializeDraggable(element);
+                                initializeResizable(element);
+                                element.classList.add('initialized');
                             }
                         }
                     });
                 });
-
-                // Observe all draggable containers
-                ['#place-summary-container', '#place-names-container', '#corpus-controls-container', '#visualization-controls-container', '#place-similarity-dialog'].forEach(function(selector) {
-                    var element = document.querySelector(selector);
+                
+                cards.forEach(selector => {
+                    const element = document.querySelector(selector);
                     if (element) {
                         observer.observe(element, { attributes: true });
                     }
