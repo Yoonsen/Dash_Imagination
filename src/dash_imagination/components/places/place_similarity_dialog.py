@@ -69,11 +69,10 @@ def create_place_similarity_dialog():
                     html.P("Enter a place name and click 'Find Similar Places' to see results", className="text-muted")
                 ])
             ])
-        ])
+        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
     ], id='place-similarity-dialog', className="position-absolute", style={
         'width': '350px',
-        'maxHeight': '500px',
-        'overflowY': 'auto',
+        'height': '500px',
         'zIndex': 800,
         'display': 'none',
         'top': '100px',  # Position below the top button container
@@ -212,9 +211,7 @@ def handle_similar_places(n_clicks, search_word, threshold, max_places):
                         for _, row in places_df.iterrows()
                     ], style={
                         'maxHeight': '400px', 
-                        'overflowY': 'auto',
-                        'scrollbarWidth': 'thin',
-                        'scrollbarColor': '#ccc #f8f9fa'
+                        'overflowY': 'auto'
                     })
                 ], style={'border': '1px solid #eee', 'borderRadius': '4px'})
             ], style={'padding': '12px'})
