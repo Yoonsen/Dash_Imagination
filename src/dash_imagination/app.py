@@ -143,7 +143,7 @@ def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
                 sp.name,
                 sp.latitude,
                 sp.longitude,
-                COUNT(b.dhlabid) as frequency,
+                SUM(b.book_count) as frequency,
                 COUNT(DISTINCT b.dhlabid) as book_count
             FROM selected_places sp
             LEFT JOIN books b ON sp.token = b.token
@@ -169,7 +169,7 @@ def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
                 p.modern as name,
                 p.latitude,
                 p.longitude,
-                COUNT(b.dhlabid) as frequency,
+                SUM(b.book_count) as frequency,
                 COUNT(DISTINCT b.dhlabid) as book_count
             FROM books b
             JOIN places p ON b.token = p.token
@@ -560,107 +560,76 @@ app.layout = html.Div([
     }),
     
     # Place summary container
-    html.Div([
-        html.Div([
+    dbc.Card([
+        dbc.CardHeader([
             html.Div([
-                html.I(className="fa fa-grip-horizontal"),
-                html.H4("Place Details", style={'marginBottom': '0', 'fontWeight': '400', 'flex': '1'}),
+                html.I(className="fa fa-grip-horizontal me-2"),
+                html.H4("Place Details", className="mb-0"),
                 html.Button(
                     html.I(className="fa fa-times"),
                     id='close-summary',
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'cursor': 'pointer',
-                        'fontSize': '16px'
-                    }
+                    className="btn-close"
                 )
-            ], style={
-                'display': 'flex',
-                'justifyContent': 'space-between',
-                'alignItems': 'center',
-                'marginBottom': '10px',
-                'cursor': 'move'
-            }, id='summary-header'),
+            ], className="d-flex justify-content-between align-items-center")
+        ], className="bg-info text-white", id='summary-header'),
+        dbc.CardBody([
             html.Div(id='place-summary')
-        ], style={
-            'padding': '15px',
-            'backgroundColor': 'white',
-            'borderRadius': '8px',
-            'boxShadow': '0 4px 15px rgba(0,0,0,0.15)',
-            'border': '1px solid rgba(0,0,0,0.05)'
-        })
-    ], id='place-summary-container', style={
-        'position': 'absolute',
-        'bottom': '80px',
-        'left': '20px',
+        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
+    ], id='place-summary-container', className="position-absolute", style={
         'width': '350px',
-        'maxHeight': '500px',
-        'overflowY': 'auto',
+        'height': '500px',
         'zIndex': 800,
         'display': 'none',
-        'cursor': 'auto'
+        'top': '100px',  # Position below the top button container
+        'left': '20px',  # Align with other containers
+        'cursor': 'move'  # Add cursor style
     }),
 
-    # Place names container
-    html.Div([
-        html.Div([
+    # Place Names Container
+    dbc.Card([
+        dbc.CardHeader([
             html.Div([
-                html.I(className="fa fa-list", style={'marginRight': '8px'}),
-                html.H4("Place Names", style={'marginBottom': '0', 'fontWeight': '400', 'flex': '1'}),
+                html.I(className="fa fa-map-marker me-2"),
+                html.H4("Place Names", className="mb-0"),
                 html.Button(
                     html.I(className="fa fa-times"),
-                    id='close-places',
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'cursor': 'pointer',
-                        'fontSize': '16px'
-                    }
+                    id='close-place-names',
+                    className="btn-close"
                 )
-            ], style={
-                'display': 'flex',
-                'justifyContent': 'space-between',
-                'alignItems': 'center',
-                'marginBottom': '10px',
-                'cursor': 'grab'
-            }, id='places-header'),
+            ], className="d-flex justify-content-between align-items-center", id='place-names-header')
+        ], className="bg-warning text-dark"),
+        dbc.CardBody([
+            # Search input
             html.Div([
-                # Add button to open similarity dialog
-                dbc.Button(
-                    [
-                        html.I(className="fas fa-search", style={'marginRight': '8px'}),
-                        "Find Similar Places"
-                    ],
-                    id="similar-places-button",
-                    color="primary",
-                    className="w-100 mb-3"
-                ),
+                html.Label("Search Places", className="form-label"),
                 dcc.Input(
                     id='place-search',
                     type='text',
-                    placeholder='Search places...',
-                    className='form-control mb-2'
+                    placeholder='Type to search...',
+                    className="form-control mb-3"
                 ),
-                html.Div(id='place-list', style={'maxHeight': '300px', 'overflowY': 'auto'})
+                html.Button([
+                    html.I(className="fas fa-search me-2"),
+                    "Find Similar Places"
+                ], id='find-similar-places', className="btn btn-primary w-100")
+            ], className="mb-4"),
+            
+            # Place list
+            html.Div([
+                html.H5("Results", className="mb-3"),
+                html.Div(id='place-names-list', children=[
+                    html.P("Type in the search box to find places", className="text-muted")
+                ])
             ])
-        ], style={
-            'padding': '15px',
-            'backgroundColor': 'white',
-            'borderRadius': '8px',
-            'boxShadow': '0 4px 15px rgba(0,0,0,0.15)',
-            'border': '1px solid rgba(0,0,0,0.05)'
-        })
-    ], id='place-names-container', style={
-        'position': 'absolute',
-        'top': '80px',
-        'right': '20px',
+        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
+    ], id='place-names-container', className="position-absolute", style={
         'width': '350px',
-        'maxHeight': '500px',
-        'overflowY': 'auto',
+        'height': '500px',
         'zIndex': 800,
         'display': 'none',
-        'cursor': 'auto'
+        'top': '60px',
+        'right': '10px',  # Initial right position
+        'cursor': 'move'  # Add cursor style
     }),
 
     # Add place similarity dialog
@@ -722,6 +691,12 @@ app.index_string = '''
             .place-item:active {
                 background-color: #e9ecef;
             }
+            #place-names-container {
+                cursor: move;
+            }
+            #place-names-container.dragging {
+                opacity: 0.7;
+            }
         </style>
     </head>
     <body>
@@ -735,8 +710,8 @@ app.index_string = '''
             $(document).ready(function() {
                 // Initialize draggable elements
                 function initializeDraggable() {
-                    $("#place-summary-container").draggable({
-                        handle: "#summary-header",
+                    $("#place-names-container").draggable({
+                        handle: "#place-names-header",
                         containment: "parent",
                         start: function(event, ui) {
                             $(this).addClass("dragging");
@@ -746,8 +721,8 @@ app.index_string = '''
                         }
                     });
 
-                    $("#place-names-container").draggable({
-                        handle: "#places-header",
+                    $("#place-summary-container").draggable({
+                        handle: "#summary-header",
                         containment: "parent",
                         start: function(event, ui) {
                             $(this).addClass("dragging");
@@ -900,7 +875,7 @@ app.clientside_callback(
     }
     """,
     Output('place-names-container', 'style', allow_duplicate=True),
-    [Input('close-places', 'n_clicks')],
+    [Input('close-place-names', 'n_clicks')],
     [State('place-names-container', 'style')],
     prevent_initial_call=True
 )
@@ -1381,7 +1356,7 @@ def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius
         return dash.no_update, dash.no_update, dash.no_update
 
 @app.callback(
-    [Output('place-list', 'children'),
+    [Output('place-names-list', 'children'),
      Output('selected-place', 'data')],
     [Input('filtered-data', 'data'),
      Input('place-search', 'value')],
@@ -1448,9 +1423,41 @@ def update_place_list(filtered_data_json, search_term, selected_place):
             html.Div(f"Showing {len(places_df)} places", 
                      style={'marginBottom': '8px', 'fontSize': '0.9rem', 'color': '#666'}),
             html.Div([
-                html.Div([create_place_item(row) for _, row in places_df.iterrows()], 
-                        style={'maxHeight': '400px', 'overflowY': 'auto'})
-            ], style={'border': '1px solid #eee', 'borderRadius': '4px', 'padding': '8px'})
+                # Table header
+                html.Div([
+                    html.Div("Place", style={'flex': '2', 'fontWeight': 'bold', 'padding': '8px'}),
+                    html.Div("📚", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'}),
+                    html.Div("📝", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'})
+                ], style={
+                    'display': 'flex',
+                    'borderBottom': '2px solid #eee',
+                    'marginBottom': '4px',
+                    'fontSize': '0.9rem'
+                }),
+                # Table rows
+                html.Div([
+                    html.Div([
+                        html.Div([
+                            html.Div(f"{row['token']}", style={'fontWeight': '500', 'fontSize': '0.9rem'}),
+                            html.Div(f"{row['name']}", style={'color': '#666', 'fontSize': '0.8rem'})
+                        ], style={'flex': '2', 'padding': '8px'}),
+                        html.Div(f"{int(row['book_count'])}", 
+                                style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}),
+                        html.Div(f"{int(row['frequency'])}", 
+                                style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'})
+                    ], style={
+                        'display': 'flex',
+                        'borderBottom': '1px solid #eee',
+                        'transition': 'background-color 0.2s',
+                        'cursor': 'pointer',
+                        'backgroundColor': '#ffebee' if selected_place == row['token'] else 'transparent'
+                    }, 
+                    className='place-item', 
+                    id={'type': 'place-item', 'index': row['token']},
+                    **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
+                    for _, row in places_df.iterrows()
+                ], style={'maxHeight': '400px', 'overflowY': 'auto'})
+            ], style={'border': '1px solid #eee', 'borderRadius': '4px'})
         ], style={'padding': '12px'})
     ], style={'backgroundColor': 'white', 'borderRadius': '8px', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'}), selected_place
 
@@ -2325,6 +2332,172 @@ def handle_global_search(search_term, current_figure):
         print(f"Error in handle_global_search: {e}")
         return current_figure, dash.no_update, dash.no_update
 
+@app.callback(
+    Output('similar-places-list', 'children'),
+    [Input('similar-place-search', 'value')],
+    prevent_initial_call=True
+)
+def update_similar_places(search_term):
+    if not search_term or len(search_term) < 2:
+        return html.Div("Enter at least 2 characters to search", style={'color': '#666'})
+    
+    try:
+        conn = get_db_connection()
+        try:
+            # Get current state
+            books, _ = get_current_state()
+            if not books:
+                return html.Div("No corpus loaded", style={'color': '#666'})
+            
+            # Search in both historical and modern names
+            query = """
+            SELECT 
+                p.token,
+                p.modern as name,
+                p.latitude,
+                p.longitude,
+                COUNT(DISTINCT b.dhlabid) as book_count,
+                SUM(b.book_count) as frequency
+            FROM places p
+            JOIN books b ON p.token = b.token
+            WHERE (LOWER(p.token) LIKE LOWER(?) OR LOWER(p.modern) LIKE LOWER(?))
+            AND b.dhlabid IN ({})
+            AND p.latitude IS NOT NULL 
+            AND p.longitude IS NOT NULL
+            AND p.latitude != '0'
+            AND p.longitude != '0'
+            GROUP BY p.token, p.modern, p.latitude, p.longitude
+            ORDER BY frequency DESC
+            LIMIT 50
+            """.format(','.join(['?'] * len(books)))
+            
+            # Add wildcards for partial matching
+            search_pattern = f"%{search_term}%"
+            places_df = pd.read_sql_query(query, conn, params=(search_pattern, search_pattern) + tuple(books))
+            
+            if places_df.empty:
+                return html.Div("No matching places found", style={'color': '#666'})
+            
+            # Create hover text
+            places_df['hover_text'] = places_df.apply(
+                lambda row: f"{row['token']} ({row['name']})<br>Mentions: {int(row['frequency'])}<br>Books: {int(row['book_count'])}",
+                axis=1
+            )
+            
+            return html.Div([
+                html.Div([
+                    html.Div([
+                        html.Div("Place", style={'flex': '2', 'fontWeight': 'bold', 'padding': '8px'}),
+                        html.Div("📚", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'}),
+                        html.Div("📝", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'})
+                    ], style={
+                        'display': 'flex',
+                        'borderBottom': '2px solid #eee',
+                        'marginBottom': '4px',
+                        'fontSize': '0.9rem'
+                    }),
+                    html.Div([
+                        html.Div([
+                            html.Div([
+                                html.Div(f"{row['token']}", style={'fontWeight': '500', 'fontSize': '0.9rem'}),
+                                html.Div(f"{row['name']}", style={'color': '#666', 'fontSize': '0.8rem'})
+                            ], style={'flex': '2', 'padding': '8px'}),
+                            html.Div(f"{int(row['book_count'])}", 
+                                    style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}),
+                            html.Div(f"{int(row['frequency'])}", 
+                                    style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'})
+                        ], style={
+                            'display': 'flex',
+                            'borderBottom': '1px solid #eee',
+                            'transition': 'background-color 0.2s',
+                            'cursor': 'pointer'
+                        }, 
+                        className='similar-place-item', 
+                        id={'type': 'similar-place-item', 'index': row['token']},
+                        **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
+                        for _, row in places_df.iterrows()
+                    ], style={'maxHeight': '300px', 'overflowY': 'auto'})
+                ], style={'border': '1px solid #eee', 'borderRadius': '4px'})
+            ], style={'backgroundColor': 'white', 'borderRadius': '8px', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'})
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"Error in update_similar_places: {e}")
+        return html.Div("Error searching for places", style={'color': 'red'})
+
+# Add callback for resampling places
+@app.callback(
+    [Output('total-places', 'children'),
+     Output('sample-places', 'children'),
+     Output('max-sample-size', 'children'),
+     Output('resample-container', 'style')],
+    [Input('current-filters', 'data'),
+     Input('resample-places', 'n_clicks')],
+    [State('popup-max-places-slider', 'value')],
+    prevent_initial_call=True
+)
+def update_places_info(filters, n_clicks, max_places):
+    if not filters:
+        return "No corpus loaded", "", "", {'display': 'none'}
+    
+    # Get current state
+    books, places = get_current_state()
+    if not books:
+        return "No corpus loaded", "", "", {'display': 'none'}
+    
+    conn = get_db_connection()
+    try:
+        # Get total places in corpus
+        total_places_query = f"""
+        SELECT COUNT(DISTINCT token) as total_places
+        FROM books
+        WHERE dhlabid IN ({','.join(['?'] * len(books))})
+        """
+        total_places = pd.read_sql_query(total_places_query, conn, params=tuple(books))['total_places'].iloc[0]
+        
+        # Get current sample size
+        current_sample = len(places) if places else 0
+        
+        # If resample button was clicked, resample places
+        ctx = callback_context
+        if ctx.triggered and ctx.triggered[0]['prop_id'] == 'resample-places.n_clicks':
+            if max_places > 0:
+                # Get all places and randomly sample
+                places_query = f"""
+                SELECT DISTINCT token
+                FROM books
+                WHERE dhlabid IN ({','.join(['?'] * len(books))})
+                ORDER BY RANDOM()
+                LIMIT ?
+                """
+                sampled_places = pd.read_sql_query(places_query, conn, params=tuple(books + [max_places]))['token'].tolist()
+                books, places = update_from_books(books, sampled_places)
+                current_sample = len(sampled_places)
+        elif max_places > 0 and current_sample > max_places:
+            # If we have more places than the max limit, resample
+            places_query = f"""
+            SELECT DISTINCT token
+            FROM books
+            WHERE dhlabid IN ({','.join(['?'] * len(books))})
+            ORDER BY RANDOM()
+            LIMIT ?
+            """
+            sampled_places = pd.read_sql_query(places_query, conn, params=tuple(books + [max_places]))['token'].tolist()
+            books, places = update_from_books(books, sampled_places)
+            current_sample = len(sampled_places)
+        
+        # Update display
+        total_places_text = f"Total places in corpus: {total_places:,}"
+        sample_places_text = f"Currently sampled: {current_sample:,} places"
+        max_sample_text = f"Maximum sample size: {max_places:,} places" if max_places > 0 else "No sample size limit"
+        
+        return total_places_text, sample_places_text, max_sample_text, {'display': 'block'}
+    except Exception as e:
+        print(f"Error in update_places_info: {e}")
+        return "Error loading places", "", "", {'display': 'none'}
+    finally:
+        conn.close()
+
 # Run Server
 if __name__ == '__main__':
-    app.run_server(debug=True, host='0.0.0.0', port=8060, dev_tools_hot_reload=False)
+    app.run(debug=True, port=8053)
