@@ -35,7 +35,7 @@ $(document).ready(function() {
                 console.log("Found place-names-container, making it draggable");
 
                 $('#place-names-container').draggable({
-                    handle: '#places-header',
+                    handle: '#place-names-header',
                     containment: 'window',
                     start: function(event, ui) {
                         $(this).addClass("dragging");
@@ -188,7 +188,7 @@ $(document).ready(function() {
     }, 2000);
 
     // Set cursor styles
-    $("#summary-header, #places-header, #corpus-header, #visualization-header").css("cursor", "grab");
+    $("#summary-header, #place-names-header, #corpus-header, #visualization-header").css("cursor", "grab");
 
     // Add touch support for draggable elements
     function addTouchSupport() {
