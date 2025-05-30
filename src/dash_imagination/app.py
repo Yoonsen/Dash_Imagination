@@ -802,12 +802,14 @@ app.index_string = '''
                     document.addEventListener('mousemove', drag);
                     document.addEventListener('mouseup', stopDrag);
                     
-                    // Touch event handlers
+                    // Touch event handlers with improved handling
                     header.addEventListener('touchstart', handleTouchStart, { passive: false });
                     document.addEventListener('touchmove', handleTouchMove, { passive: false });
                     document.addEventListener('touchend', handleTouchEnd);
+                    document.addEventListener('touchcancel', handleTouchEnd);
                     
                     function startDrag(e) {
+                        e.preventDefault();
                         isDragging = true;
                         element.classList.add('dragging');
                         startX = e.clientX;
@@ -817,7 +819,7 @@ app.index_string = '''
                     }
                     
                     function handleTouchStart(e) {
-                        e.preventDefault(); // Prevent scrolling while dragging
+                        e.preventDefault();
                         const touch = e.touches[0];
                         isDragging = true;
                         element.classList.add('dragging');
@@ -829,6 +831,7 @@ app.index_string = '''
                     
                     function drag(e) {
                         if (!isDragging) return;
+                        e.preventDefault();
                         
                         const dx = e.clientX - startX;
                         const dy = e.clientY - startY;
@@ -839,7 +842,7 @@ app.index_string = '''
                     
                     function handleTouchMove(e) {
                         if (!isDragging) return;
-                        e.preventDefault(); // Prevent scrolling while dragging
+                        e.preventDefault();
                         
                         const touch = e.touches[0];
                         const dx = touch.clientX - startX;
@@ -856,7 +859,8 @@ app.index_string = '''
                         }
                     }
                     
-                    function handleTouchEnd() {
+                    function handleTouchEnd(e) {
+                        e.preventDefault();
                         stopDrag();
                     }
                 }
