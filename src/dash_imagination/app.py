@@ -571,7 +571,7 @@ app.layout = html.Div([
                     className="btn-close"
                 )
             ], className="d-flex justify-content-between align-items-center")
-        ], className="bg-info text-white", id='summary-header'),
+        ], className="bg-danger-subtle text-dark", id='summary-header'),
         dbc.CardBody([
             html.Div(id='place-summary')
         ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
@@ -597,7 +597,7 @@ app.layout = html.Div([
                     className="btn-close"
                 )
             ], className="d-flex justify-content-between align-items-center", id='place-names-header')
-        ], className="bg-warning text-dark"),
+        ], className="bg-warning-subtle text-dark"),
         dbc.CardBody([
             # Search input
             html.Div([
@@ -697,6 +697,29 @@ app.index_string = '''
             #place-names-container.dragging {
                 opacity: 0.7;
             }
+            /* Resize handle styles */
+            .ui-resizable-handle {
+                background: #e2e8f0;
+                border: 1px solid #cbd5e1;
+                border-radius: 2px;
+            }
+            .ui-resizable-se {
+                width: 12px;
+                height: 12px;
+                right: -6px;
+                bottom: -6px;
+                cursor: se-resize;
+            }
+            .ui-resizable-e {
+                width: 8px;
+                right: -4px;
+                cursor: e-resize;
+            }
+            .ui-resizable-s {
+                height: 8px;
+                bottom: -4px;
+                cursor: s-resize;
+            }
         </style>
     </head>
     <body>
@@ -708,10 +731,11 @@ app.index_string = '''
         </footer>
         <script>
             $(document).ready(function() {
-                // Initialize draggable elements
+                // Initialize draggable and resizable elements
                 function initializeDraggable() {
-                    $("#place-names-container").draggable({
-                        handle: "#place-names-header",
+                    // Common options for all cards
+                    const cardOptions = {
+                        handle: ".card-header",
                         containment: "parent",
                         start: function(event, ui) {
                             $(this).addClass("dragging");
@@ -719,40 +743,32 @@ app.index_string = '''
                         stop: function(event, ui) {
                             $(this).removeClass("dragging");
                         }
-                    });
+                    };
 
-                    $("#place-summary-container").draggable({
-                        handle: "#summary-header",
-                        containment: "parent",
+                    // Common resize options
+                    const resizeOptions = {
+                        minWidth: 300,
+                        minHeight: 400,
+                        maxWidth: 800,
+                        maxHeight: 800,
+                        handles: 'e, s, se',
                         start: function(event, ui) {
-                            $(this).addClass("dragging");
+                            $(this).addClass("resizing");
                         },
                         stop: function(event, ui) {
-                            $(this).removeClass("dragging");
+                            $(this).removeClass("resizing");
+                            // Update the card body's max height
+                            const headerHeight = $(this).find('.card-header').outerHeight();
+                            $(this).find('.card-body').css('maxHeight', `calc(${ui.size.height}px - ${headerHeight}px)`);
                         }
-                    });
+                    };
 
-                    $("#corpus-controls-container").draggable({
-                        handle: "#corpus-header",
-                        containment: "parent",
-                        start: function(event, ui) {
-                            $(this).addClass("dragging");
-                        },
-                        stop: function(event, ui) {
-                            $(this).removeClass("dragging");
-                        }
-                    });
-
-                    $("#visualization-controls-container").draggable({
-                        handle: "#visualization-header",
-                        containment: "parent",
-                        start: function(event, ui) {
-                            $(this).addClass("dragging");
-                        },
-                        stop: function(event, ui) {
-                            $(this).removeClass("dragging");
-                        }
-                    });
+                    // Initialize each card
+                    $("#place-names-container").draggable(cardOptions).resizable(resizeOptions);
+                    $("#place-summary-container").draggable(cardOptions).resizable(resizeOptions);
+                    $("#corpus-controls-container").draggable(cardOptions).resizable(resizeOptions);
+                    $("#visualization-controls-container").draggable(cardOptions).resizable(resizeOptions);
+                    $("#place-similarity-dialog").draggable(cardOptions).resizable(resizeOptions);
                 }
 
                 // Initialize on document ready
@@ -771,7 +787,7 @@ app.index_string = '''
                 });
 
                 // Observe all draggable containers
-                ['#place-summary-container', '#place-names-container', '#corpus-controls-container', '#visualization-controls-container'].forEach(function(selector) {
+                ['#place-summary-container', '#place-names-container', '#corpus-controls-container', '#visualization-controls-container', '#place-similarity-dialog'].forEach(function(selector) {
                     var element = document.querySelector(selector);
                     if (element) {
                         observer.observe(element, { attributes: true });
@@ -2500,4 +2516,4 @@ def update_places_info(filters, n_clicks, max_places):
 
 # Run Server
 if __name__ == '__main__':
-    app.run(debug=True, port=8053)
+    app.run(debug=True, port=8054)
