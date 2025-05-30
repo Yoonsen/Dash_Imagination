@@ -793,6 +793,7 @@ app.index_string = '''
                     let isDragging = false;
                     let startX, startY;
                     let initialLeft, initialTop;
+                    let touchIdentifier = null;
                     
                     const header = element.querySelector('.card-header');
                     if (!header) return;
@@ -802,7 +803,7 @@ app.index_string = '''
                     document.addEventListener('mousemove', drag);
                     document.addEventListener('mouseup', stopDrag);
                     
-                    // Touch event handlers with improved handling
+                    // Enhanced touch event handlers
                     header.addEventListener('touchstart', handleTouchStart, { passive: false });
                     document.addEventListener('touchmove', handleTouchMove, { passive: false });
                     document.addEventListener('touchend', handleTouchEnd);
@@ -819,8 +820,10 @@ app.index_string = '''
                     }
                     
                     function handleTouchStart(e) {
+                        if (e.touches.length > 1) return; // Ignore multi-touch
                         e.preventDefault();
                         const touch = e.touches[0];
+                        touchIdentifier = touch.identifier;
                         isDragging = true;
                         element.classList.add('dragging');
                         startX = touch.clientX;
@@ -836,26 +839,38 @@ app.index_string = '''
                         const dx = e.clientX - startX;
                         const dy = e.clientY - startY;
                         
-                        element.style.left = `${initialLeft + dx}px`;
-                        element.style.top = `${initialTop + dy}px`;
+                        // Add bounds checking to keep element within viewport
+                        const newLeft = Math.max(0, Math.min(window.innerWidth - element.offsetWidth, initialLeft + dx));
+                        const newTop = Math.max(0, Math.min(window.innerHeight - element.offsetHeight, initialTop + dy));
+                        
+                        element.style.left = `${newLeft}px`;
+                        element.style.top = `${newTop}px`;
                     }
                     
                     function handleTouchMove(e) {
                         if (!isDragging) return;
                         e.preventDefault();
                         
-                        const touch = e.touches[0];
+                        // Find the touch that matches our identifier
+                        const touch = Array.from(e.touches).find(t => t.identifier === touchIdentifier);
+                        if (!touch) return;
+                        
                         const dx = touch.clientX - startX;
                         const dy = touch.clientY - startY;
                         
-                        element.style.left = `${initialLeft + dx}px`;
-                        element.style.top = `${initialTop + dy}px`;
+                        // Add bounds checking to keep element within viewport
+                        const newLeft = Math.max(0, Math.min(window.innerWidth - element.offsetWidth, initialLeft + dx));
+                        const newTop = Math.max(0, Math.min(window.innerHeight - element.offsetHeight, initialTop + dy));
+                        
+                        element.style.left = `${newLeft}px`;
+                        element.style.top = `${newTop}px`;
                     }
                     
                     function stopDrag() {
                         if (isDragging) {
                             isDragging = false;
                             element.classList.remove('dragging');
+                            touchIdentifier = null;
                         }
                     }
                     
@@ -863,92 +878,6 @@ app.index_string = '''
                         e.preventDefault();
                         stopDrag();
                     }
-                }
-                
-                function initializeResizable(element) {
-                    const handles = {
-                        e: { cursor: 'e-resize', x: true, y: false },
-                        w: { cursor: 'w-resize', x: true, y: false },
-                        s: { cursor: 's-resize', x: false, y: true },
-                        n: { cursor: 'n-resize', x: false, y: true },
-                        se: { cursor: 'se-resize', x: true, y: true },
-                        sw: { cursor: 'sw-resize', x: true, y: true },
-                        ne: { cursor: 'ne-resize', x: true, y: true },
-                        nw: { cursor: 'nw-resize', x: true, y: true }
-                    };
-                    
-                    let isResizing = false;
-                    let currentHandle = null;
-                    let startX, startY;
-                    let startWidth, startHeight;
-                    let startLeft, startTop;
-                    
-                    function startResize(e, handle) {
-                        isResizing = true;
-                        currentHandle = handle;
-                        element.classList.add('resizing');
-                        startX = e.clientX;
-                        startY = e.clientY;
-                        startWidth = element.offsetWidth;
-                        startHeight = element.offsetHeight;
-                        startLeft = parseInt(window.getComputedStyle(element).left);
-                        startTop = parseInt(window.getComputedStyle(element).top);
-                        e.preventDefault();
-                    }
-                    
-                    function doResize(e) {
-                        if (!isResizing) return;
-                        
-                        const dx = e.clientX - startX;
-                        const dy = e.clientY - startY;
-                        const handle = handles[currentHandle];
-                        
-                        if (handle.x) {
-                            if (currentHandle.includes('e')) {
-                                const newWidth = Math.max(300, Math.min(800, startWidth + dx));
-                                element.style.width = `${newWidth}px`;
-                            } else {
-                                const newWidth = Math.max(300, Math.min(800, startWidth - dx));
-                                element.style.width = `${newWidth}px`;
-                        }
-                        
-                        if (currentHandle === 's' || currentHandle === 'se') {
-                            const newHeight = Math.max(400, Math.min(800, startHeight + dy));
-                            element.style.height = `${newHeight}px`;
-                            
-                            // Update card body max height
-                            const headerHeight = element.querySelector('.card-header').offsetHeight;
-                            const cardBody = element.querySelector('.card-body');
-                            if (cardBody) {
-                                cardBody.style.maxHeight = `calc(${newHeight}px - ${headerHeight}px)`;
-                            }
-                        }
-                    }
-                    
-                    function stopResize() {
-                        if (isResizing) {
-                            isResizing = false;
-                            element.classList.remove('resizing');
-                            currentHandle = null;
-                        }
-                    }
-                    
-                    // Add resize handles
-                    const handleElements = {
-                        e: document.createElement('div'),
-                        s: document.createElement('div'),
-                        se: document.createElement('div')
-                    };
-                    
-                    Object.entries(handleElements).forEach(([key, el]) => {
-                        el.className = `resize-handle ${key}`;
-                        element.appendChild(el);
-                        
-                        el.addEventListener('mousedown', (e) => startResize(e, key));
-                    });
-                    
-                    document.addEventListener('mousemove', doResize);
-                    document.addEventListener('mouseup', stopResize);
                 }
                 
                 // Initialize all cards
@@ -964,7 +893,6 @@ app.index_string = '''
                     const element = document.querySelector(selector);
                     if (element) {
                         initializeDraggable(element);
-                        initializeResizable(element);
                     }
                 });
                 
@@ -975,7 +903,6 @@ app.index_string = '''
                             const element = mutation.target;
                             if (element.style.display === 'block' && !element.classList.contains('initialized')) {
                                 initializeDraggable(element);
-                                initializeResizable(element);
                                 element.classList.add('initialized');
                             }
                         }
