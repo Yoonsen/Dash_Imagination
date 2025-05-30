@@ -312,11 +312,13 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
             
             # Status message
             html.Div(id='download-status', className="mt-2")
-        ])
-    ], id='visualization-controls-container', className="position-absolute top-0 start-0 m-3", style={
+        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
+    ], id='visualization-controls-container', className="position-absolute", style={
         'width': '350px',
-        'maxHeight': '500px',
-        'overflowY': 'auto',
+        'height': '500px',
         'zIndex': 800,
-        'display': 'none'
+        'display': 'none',
+        'top': '100px',
+        'left': '20px',
+        'cursor': 'move'
     }) 
