@@ -161,7 +161,18 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                 html.H5("Corpus Information", className="mb-3"),
                 html.Div(id='corpus-controls-info', children=[
                     html.P("No corpus loaded", className="text-muted")
-                ])
+                ]),
+                html.Div([
+                    html.Div(id='total-places', style={'marginBottom': '5px'}),
+                    html.Div(id='sample-places', style={'marginBottom': '5px'}),
+                    html.Div(id='max-sample-size', style={'marginBottom': '5px'}),
+                    html.Div("Note: The slider is capped at 2,000 places for optimal map performance", 
+                            style={'fontSize': '0.8rem', 'color': '#666', 'marginBottom': '10px'}),
+                    html.Button([
+                        html.I(className="fas fa-random", style={'marginRight': '8px'}),
+                        "Resample Places"
+                    ], id='resample-places', className='btn btn-primary btn-sm')
+                ], id='resample-container', style={'display': 'none'})
             ], className="mt-4")
         ], style={
             'padding': '15px',
