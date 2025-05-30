@@ -11,34 +11,24 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
     if default_filters is None:
         default_filters = {'categories': [], 'titles': []}
 
-    return html.Div([
-        html.Div([
+    return dbc.Card([
+        dbc.CardHeader([
             html.Div([
-                html.I(className="fa fa-book", style={'marginRight': '8px'}),
-                html.H4("Corpus Controls", style={'marginBottom': '0', 'fontWeight': '400', 'flex': '1'}),
+                html.I(className="fa fa-book me-2"),
+                html.H4("Corpus Controls", className="mb-0"),
                 html.Button(
                     html.I(className="fa fa-times"),
                     id='close-corpus',
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'cursor': 'pointer',
-                        'fontSize': '16px'
-                    }
+                    className="btn-close"
                 )
-            ], style={
-                'display': 'flex',
-                'justifyContent': 'space-between',
-                'alignItems': 'center',
-                'marginBottom': '10px',
-                'cursor': 'move'
-            }, id='corpus-header'),
-            
+            ], className="d-flex justify-content-between align-items-center")
+        ], className="bg-primary text-white", id='corpus-header'),
+        dbc.CardBody([
             # Upload section
             dcc.Upload(
                 id='popup-upload-corpus',
                 children=html.Div([
-                    html.I(className="fas fa-upload mr-2"),
+                    html.I(className="fas fa-upload me-2"),
                     'Drag and Drop or ',
                     html.A('Select a Corpus File')
                 ]),
@@ -59,7 +49,7 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
             
             # Sample Size
             html.Div([
-                html.Label("Number of Books", className="block text-sm font-medium text-gray-700"),
+                html.Label("Number of Books", className="form-label"),
                 html.Div([
                     dcc.Input(
                         id='popup-sample-size',
@@ -68,36 +58,29 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                         min=0,
                         max=20000,
                         step=100,
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        className="form-control"
                     ),
-                    html.Div("0 means no limit - all books will be included", className="text-sm text-gray-500 mt-1")
+                    html.Div("0 means no limit - all books will be included", className="form-text")
                 ])
             ], className="mb-4"),
             
-            # Max Places
+            # Max Places Slider
             html.Div([
-                html.Label("Number of Places", className="block text-sm font-medium text-gray-700"),
-                html.Div([
-                    dcc.Slider(
-                        id='popup-max-places-slider',
-                        min=0,
-                        max=2000,
-                        step=100,
-                        value=0,
-                        marks={i: str(i) for i in range(0, 2001, 500)},
-                        className="mt-1"
-                    ),
-                    html.Div([
-                        html.Span("0 means no limit (up to 2000 places for performance)", className="text-sm text-gray-500"),
-                        html.Br(),
-                        html.Span("Higher values may affect map performance", className="text-sm text-gray-500")
-                    ], className="mt-1")
-                ])
+                html.Label("Maximum Places", className="form-label"),
+                dcc.Slider(
+                    id='popup-max-places-slider',
+                    min=100,
+                    max=2000,
+                    step=100,
+                    value=1500,
+                    marks={i: str(i) for i in range(100, 2001, 500)},
+                    className="mb-3"
+                )
             ], className="mb-4"),
             
-            # Year Range
+            # Year Range Slider
             html.Div([
-                html.Label("Year Range", className="block text-sm font-medium text-gray-700"),
+                html.Label("Year Range", className="form-label"),
                 dcc.RangeSlider(
                     id='year-range-slider',
                     min=1814,
@@ -105,7 +88,7 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                     step=1,
                     value=[1814, 1905],
                     marks={i: str(i) for i in range(1814, 1906, 10)},
-                    className="mt-1"
+                    className="mb-3"
                 )
             ], className="mb-4"),
             
@@ -136,7 +119,7 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
             # Apply Filters button
             dbc.Button(
                 [
-                    html.I(className="fas fa-check mr-2"),
+                    html.I(className="fas fa-check me-2"),
                     "Apply Filters"
                 ],
                 id='apply-filters',
@@ -147,7 +130,7 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
             # Reset button
             dbc.Button(
                 [
-                    html.I(className="fas fa-undo mr-2"),
+                    html.I(className="fas fa-undo me-2"),
                     "Clear Corpus"
                 ],
                 id='popup-reset-corpus',
@@ -155,42 +138,34 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                 className="w-100"
             ),
             
-            # Corpus Info Section
+            # Resampling section
             html.Div([
-                html.Hr(className="my-3"),
-                html.H5("Corpus Information", className="mb-3"),
-                html.Div(id='corpus-controls-info', children=[
-                    html.P("No corpus loaded", className="text-muted")
-                ]),
-                html.Div([
-                    html.Div(id='total-places', style={'marginBottom': '5px'}),
-                    html.Div(id='sample-places', style={'marginBottom': '5px'}),
-                    html.Div(id='max-sample-size', style={'marginBottom': '5px'}),
-                    html.Div("Note: The slider is capped at 2,000 places for optimal map performance", 
-                            style={'fontSize': '0.8rem', 'color': '#666', 'marginBottom': '10px'}),
-                    html.Button([
-                        html.I(className="fas fa-random", style={'marginRight': '8px'}),
+                html.Hr(),
+                html.H5("Resampling", className="mb-3"),
+                html.Div(id='corpus-controls-info', className="mb-2"),
+                html.Div(id='author-count', className="mb-2"),
+                html.Div(id='book-count', className="mb-2"),
+                html.Div(id='total-places', className="mb-2"),
+                html.Div(id='sample-places', className="mb-2"),
+                html.Div(id='max-sample-size', className="mb-3"),
+                dbc.Button(
+                    [
+                        html.I(className="fas fa-random me-2"),
                         "Resample Places"
-                    ], id='resample-places', className='btn btn-primary btn-sm')
-                ], id='resample-container', style={'display': 'none'})
-            ], className="mt-4")
-        ], style={
-            'padding': '15px',
-            'backgroundColor': 'white',
-            'borderRadius': '8px',
-            'boxShadow': '0 4px 15px rgba(0,0,0,0.15)',
-            'border': '1px solid rgba(0,0,0,0.05)'
-        })
-    ], id='corpus-controls-container', style={
-        'position': 'absolute',
-        'top': '80px',
-        'left': '20px',
+                    ],
+                    id='resample-places',
+                    color="info",
+                    className="w-100"
+                )
+            ], id='resample-container', style={'display': 'none'})
+        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
+    ], id='corpus-controls-container', className="position-absolute m-3", style={
         'width': '350px',
-        'maxHeight': '500px',
-        'overflowY': 'auto',
+        'height': '500px',
         'zIndex': 800,
         'display': 'none',
-        'cursor': 'auto'
+        'top': '60px',
+        'left': '10px'
     })
 
 def create_visualization_controls(categories_list=None, titles_list=None, default_filters=None):
@@ -202,36 +177,26 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
     if default_filters is None:
         default_filters = {'categories': [], 'titles': []}
 
-    return html.Div([
-        html.Div([
+    return dbc.Card([
+        dbc.CardHeader([
             html.Div([
-                html.I(className="fa fa-grip-horizontal"),
-                html.H4("Visualization Controls", style={'marginBottom': '0', 'fontWeight': '400', 'flex': '1'}),
+                html.I(className="fa fa-grip-horizontal me-2"),
+                html.H4("Visualization Controls", className="mb-0"),
                 html.Button(
                     html.I(className="fa fa-times"),
                     id='close-visualization',
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'cursor': 'pointer',
-                        'fontSize': '16px'
-                    }
+                    className="btn-close"
                 )
-            ], style={
-                'display': 'flex',
-                'justifyContent': 'space-between',
-                'alignItems': 'center',
-                'marginBottom': '10px',
-                'cursor': 'move'
-            }, id='visualization-header'),
-            
+            ], className="d-flex justify-content-between align-items-center")
+        ], className="bg-info text-white", id='visualization-header'),
+        dbc.CardBody([
             # Tabs for Map and Heatmap views
             dbc.Tabs([
                 # Map View Tab
                 dbc.Tab([
                     # Clustering toggle
                     html.Div([
-                        html.Label("Clustering", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                        html.Label("Clustering", className="form-label"),
                         dcc.Checklist(
                             id='top-cluster-toggle',
                             options=[{'label': 'Enable Clustering', 'value': 'cluster'}],
@@ -242,7 +207,7 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
                     
                     # Marker size slider
                     html.Div([
-                        html.Label("Place Marker Size", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                        html.Label("Place Marker Size", className="form-label"),
                         dcc.Slider(
                             id='marker-size-slider',
                             min=1,
@@ -256,7 +221,7 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
                     
                     # Cluster size slider
                     html.Div([
-                        html.Label("Cluster Marker Size", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                        html.Label("Cluster Marker Size", className="form-label"),
                         dcc.Slider(
                             id='cluster-size-slider',
                             min=1,
@@ -270,24 +235,52 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
                     
                     # Cluster radius slider
                     html.Div([
-                        html.Label("Cluster Radius (km)", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                        html.Label("Cluster Radius", className="form-label"),
                         dcc.Slider(
                             id='cluster-radius-slider',
                             min=10,
-                            max=200,
+                            max=100,
                             step=10,
                             value=50,
-                            marks={i: f"{i}km" for i in range(10, 201, 50)},
+                            marks={i: str(i) for i in range(10, 101, 20)},
                             className="mt-1"
                         )
-                    ], className="mb-4"),
-                ], label="Map View", tab_id="points"),
+                    ], className="mb-4")
+                ], label="Map View"),
                 
                 # Heatmap View Tab
                 dbc.Tab([
-                    # Heatmap settings
+                    # Heatmap intensity slider
                     html.Div([
-                        html.Label("Color Scheme", style={'fontWeight': '500', 'marginBottom': '5px'}),
+                        html.Label("Heatmap Intensity", className="form-label"),
+                        dcc.Slider(
+                            id='heatmap-intensity',
+                            min=1,
+                            max=10,
+                            step=1,
+                            value=5,
+                            marks={i: str(i) for i in range(1, 11)},
+                            className="mt-1"
+                        )
+                    ], className="mb-4"),
+                    
+                    # Heatmap radius slider
+                    html.Div([
+                        html.Label("Heatmap Radius", className="form-label"),
+                        dcc.Slider(
+                            id='heatmap-radius',
+                            min=5,
+                            max=50,
+                            step=5,
+                            value=20,
+                            marks={i: str(i) for i in range(5, 51, 5)},
+                            className="mt-1"
+                        )
+                    ], className="mb-4"),
+                    
+                    # Heatmap colorscale dropdown
+                    html.Div([
+                        html.Label("Heatmap Colorscale", className="form-label"),
                         dcc.Dropdown(
                             id='heatmap-colorscale',
                             options=[
@@ -297,110 +290,33 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
                                 {'label': 'Magma', 'value': 'Magma'},
                                 {'label': 'Blues', 'value': 'Blues'},
                                 {'label': 'Reds', 'value': 'Reds'},
-                                {'label': 'Greens', 'value': 'Greens'},
-                                {'label': 'Purples', 'value': 'Purples'},
-                                {'label': 'Oranges', 'value': 'Oranges'},
-                                {'label': 'Greys', 'value': 'Greys'}
+                                {'label': 'Greens', 'value': 'Greens'}
                             ],
                             value='Viridis',
-                            clearable=False,
-                            className="mb-4"
-                        )
-                    ], className="mb-4"),
-                    html.Div([
-                        html.Label("Intensity", style={'fontWeight': '500', 'marginBottom': '5px'}),
-                        dcc.Slider(
-                            id='heatmap-intensity',
-                            min=1,
-                            max=10,
-                            step=1,
-                            value=5,
-                            marks={i: str(i) for i in range(1, 11, 1)},
-                            className="mt-1"
-                        )
-                    ], className="mb-4"),
-                    html.Div([
-                        html.Label("Radius", style={'fontWeight': '500', 'marginBottom': '5px'}),
-                        dcc.Slider(
-                            id='heatmap-radius',
-                            min=1,
-                            max=10,
-                            step=1,
-                            value=5,
-                            marks={i: str(i) for i in range(1, 11, 1)},
-                            className="mt-1"
+                            clearable=False
                         )
                     ], className="mb-4")
-                ], label="Heatmap View", tab_id="heatmap")
-            ], id="view-tabs", active_tab="points"),
-
-            # Download Section
-            html.Div([
-                html.Hr(className="my-3"),
-                html.H5("Download Map", className="mb-3"),
-                html.Div([
-                    # Format selection
-                    html.Div([
-                        html.Label("Format", style={'fontWeight': '500', 'marginBottom': '5px'}),
-                        dcc.Dropdown(
-                            id='download-format',
-                            options=[
-                                {'label': 'PNG Image', 'value': 'png'},
-                                {'label': 'PDF Document', 'value': 'pdf'},
-                                {'label': 'SVG Vector', 'value': 'svg'}
-                            ],
-                            value='png',
-                            clearable=False,
-                            className="mb-3"
-                        )
-                    ]),
-                    
-                    # Resolution selection
-                    html.Div([
-                        html.Label("Resolution", style={'fontWeight': '500', 'marginBottom': '5px'}),
-                        dcc.Dropdown(
-                            id='download-resolution',
-                            options=[
-                                {'label': 'Standard (1920x1080)', 'value': 'standard'},
-                                {'label': 'High (3840x2160)', 'value': 'high'},
-                                {'label': 'Publication (6000x4000)', 'value': 'publication'}
-                            ],
-                            value='high',
-                            clearable=False,
-                            className="mb-3"
-                        )
-                    ]),
-                    
-                    # Download button
-                    dbc.Button(
-                        [
-                            html.I(className="fas fa-download mr-2"),
-                            "Download Map"
-                        ],
-                        id='download-map',
-                        color="primary",
-                        className="w-100"
-                    ),
-                    
-                    # Status message
-                    html.Div(id='download-status', className="mt-2")
-                ])
-            ], className="mt-4")
-        ], style={
-            'padding': '15px',
-            'backgroundColor': 'white',
-            'borderRadius': '8px',
-            'boxShadow': '0 4px 15px rgba(0,0,0,0.15)',
-            'border': '1px solid rgba(0,0,0,0.05)'
-        })
-    ], id='visualization-controls-container', style={
-        'position': 'absolute',
-        'top': '80px',
-        'left': '20px',
+                ], label="Heatmap View")
+            ], className="mt-4"),
+            
+            # Download button
+            dbc.Button(
+                [
+                    html.I(className="fas fa-download me-2"),
+                    "Download Map"
+                ],
+                id='download-map',
+                color="primary",
+                className="w-100"
+            ),
+            
+            # Status message
+            html.Div(id='download-status', className="mt-2")
+        ])
+    ], id='visualization-controls-container', className="position-absolute top-0 start-0 m-3", style={
         'width': '350px',
         'maxHeight': '500px',
         'overflowY': 'auto',
         'zIndex': 800,
-        'display': 'none',
-        'cursor': 'auto'
+        'display': 'none'
     }) 
