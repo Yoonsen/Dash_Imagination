@@ -10,7 +10,7 @@ import base64
 import io
 from dash.exceptions import PreventUpdate
 from dash_imagination.components.map import create_map_controls
-from dash_imagination.components.corpus import create_corpus_controls, create_visualization_controls
+from dash_imagination.components.corpus import create_corpus_controls, create_visualization_controls, create_corpus_builder_card
 from scipy.spatial import ConvexHull
 import math
 from dash_imagination.components.places.place_similarity import create_place_similarity_controls
@@ -211,8 +211,9 @@ def get_place_details(token, page=1, per_page=20):
         # Get current state
         books, _ = get_current_state()
         if not books:
-            return pd.DataFrame(), 0
+           return pd.DataFrame(), 0
 
+        
         # Query to get book details with pagination
         query = """
         WITH place_stats AS (
@@ -480,7 +481,7 @@ app.layout = html.Div([
             'zIndex': 1000,
             'pointerEvents': 'auto',
             'flexShrink': '0'  # Prevent container from shrinking
-        })
+        }),
     ], style={
         'position': 'fixed',
         'top': 0,
@@ -658,6 +659,9 @@ app.layout = html.Div([
 
     # Add this to the app layout, near the other Store components
     dcc.Store(id='current-dhlabids-store', data=[]),
+
+    # Add the new corpus builder card
+    create_corpus_builder_card(categories_list=categories_list),
 ], id='main-container')
 
 # Add custom CSS
@@ -2055,7 +2059,7 @@ def update_corpus_from_selections(n_clicks, selected_categories, selected_titles
 @app.callback(
     Output('corpus-controls-info', 'children'),
     [Input('current-filters', 'data'),
-     Input('apply-filters', 'n_clicks')],
+     Input('build-corpus-btn', 'n_clicks')],  # Changed from apply-filters to build-corpus-btn
     prevent_initial_call=True
 )
 def update_corpus_info(filters, n_clicks):
@@ -2081,7 +2085,6 @@ def update_corpus_info(filters, n_clicks):
         """
         
         info = pd.read_sql_query(query, conn, params=tuple(books)).iloc[0]
-        print(f"DEBUG: Corpus info - Book count: {info['book_count']}, Year range: {info['min_year']}-{info['max_year']}")
         
         return html.Div([
             html.P(f"Books in corpus: {info['book_count']:,}"),
@@ -2156,19 +2159,19 @@ def create_rotated_ellipse(center_lat, center_lon, radius_km, bearing, points=10
 # Add callback for loading state
 @app.callback(
     Output('loading-overlay', 'style'),
-    [Input('apply-filters', 'n_clicks'),
+    [Input('build-corpus-btn', 'n_clicks'),  # Changed from apply-filters to build-corpus-btn
      Input('main-map', 'figure')],
     [State('loading-overlay', 'style')]
 )
-def update_loading_state(apply_clicks, map_figure, current_style):
+def update_loading_state(build_clicks, map_figure, current_style):
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
     
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
-    # Show loading when apply button is clicked
-    if trigger_id == 'apply-filters' and apply_clicks:
+    # Show loading when build button is clicked
+    if trigger_id == 'build-corpus-btn' and build_clicks:
         new_style = dict(current_style)
         new_style['display'] = 'block'
         return new_style
@@ -2571,7 +2574,7 @@ def update_similar_places(search_term):
      Output('resample-container', 'style')],
     [Input('current-filters', 'data'),
      Input('resample-places', 'n_clicks')],
-    [State('popup-max-places-slider', 'value')],
+    [State('corpus-max-places-slider', 'value')],  # Changed from popup-max-places-slider
     prevent_initial_call=True
 )
 def update_places_info(filters, n_clicks, max_places):
