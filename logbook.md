@@ -144,3 +144,55 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Removed all references to `dash_virtualized` from the codebase and requirements.
 - Ensured that the app runs locally by either:
   - Running from the `src/` directory with `
+
+## UI Component Updates (2024-03-21)
+
+### Component Migration to dbc.Card
+- Converted dialog components to use `dbc.Card` for consistent styling and better integration with Bootstrap
+- Implemented proper card headers with icons and close buttons
+- Added scrollable card bodies with proper height calculations
+
+### Color Scheme Implementation
+- Added distinct color coding for different card types:
+  - Place Details card: `bg-danger-subtle` (red tint)
+  - Place Names card: `bg-warning-subtle` (yellow tint)
+  - Place Similarity dialog: `bg-info-subtle` (blue tint)
+- Colors help users distinguish between different functional areas of the interface
+
+### Resize Functionality Attempt
+- Attempted to implement modern resize functionality using native JavaScript
+- Added resize handles for all directions (n, s, e, w, ne, nw, se, sw)
+- Implemented size constraints (300-800px width, 400-800px height)
+- Note: Resize functionality is currently not working as expected and needs further investigation
+
+### Next Steps
+- Investigate and fix resize functionality
+- Consider alternative approaches for card resizing
+- Review Bootstrap's built-in resizing capabilities
+- Test cross-browser compatibility
+
+## 2024-03-19: Migrating Corpus Controls
+
+- Created new corpus builder card component to replace old corpus controls
+- Migrated key functionality:
+  * Max places slider (100-2000 places)
+  * Year range slider (1814-1905)
+  * Category selection
+  * Build corpus button
+  * Resampling functionality
+- Progress:
+  * Most UI controls successfully moved to new card
+  * Resampling button and container added
+  * Callbacks updated to use new component IDs
+  * Some issues with place registration to be resolved
+- Next steps:
+  * PRIORITY: Debug place plotting functionality
+    - Trace data flow from corpus builder to map
+    - Check if places are being properly sampled from database
+    - Verify current-filters and filtered-data store updates
+    - Ensure map callback receives and processes place data
+    - Add logging to track place data at each step
+  * Debug place registration in resampling
+  * Complete full testing of migrated controls
+  * Remove old corpus controls once migration is complete
+  * Make corpus builder card draggable (reuse existing card dragging code)
