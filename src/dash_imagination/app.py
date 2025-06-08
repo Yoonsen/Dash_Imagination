@@ -931,23 +931,16 @@ app.index_string = '''
     [Output('popup-upload-status', 'children'),
      Output('upload-state', 'data'),
      Output('current-filters', 'data', allow_duplicate=True)],
-    [Input('popup-upload-corpus', 'contents'),
-     Input('popup-reset-corpus', 'n_clicks')],
+    [Input('popup-upload-corpus', 'contents')],
     [State('popup-upload-corpus', 'filename'),
      State('current-filters', 'data')],
     prevent_initial_call=True
 )
-def update_state_and_filters(contents, reset_clicks, filename, current_filters):
+def update_state_and_filters(contents, filename, current_filters):
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
-    
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    
-    if trigger_id == 'popup-reset-corpus':
-        clear_state()
-        return '', {}, default_filters
-    
     if trigger_id == 'popup-upload-corpus' and contents:
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
@@ -955,7 +948,6 @@ def update_state_and_filters(contents, reset_clicks, filename, current_filters):
             df = pd.read_excel(io.BytesIO(decoded))
             if 'dhlabid' not in df.columns:
                 return html.Div('Error: File must contain a dhlabid column', style={'color': 'red'}), {}, current_filters
-            
             new_books = df['dhlabid'].tolist()
             conn = get_db_connection()
             try:
@@ -968,16 +960,13 @@ def update_state_and_filters(contents, reset_clicks, filename, current_filters):
                 new_places = places_df['token'].tolist()
             finally:
                 conn.close()
-            
             books, places = update_from_books(new_books, new_places)
             new_filters = current_filters.copy() if current_filters else default_filters.copy()
             new_filters['corpus_source'] = filename
             new_filters['selected_tokens'] = places
-            
             return html.Div(f'Successfully loaded {len(books)} books and {len(places)} places from {filename}', style={'color': 'green'}), {'uploaded': True, 'filename': filename}, new_filters
         except Exception as e:
             return html.Div(f'Error processing file: {str(e)}', style={'color': 'red'}), {}, current_filters
-    
     return html.Div('', style={'display': 'none'}), current_filters.get('upload_state', {}), current_filters
 
 # Add this callback to toggle the info modal
@@ -1029,21 +1018,15 @@ app.clientside_callback(
     [Output('filtered-data', 'data', allow_duplicate=True),
      Output('current-dhlabids-store', 'data')],
     [Input('current-filters', 'data'),
-     Input('upload-state', 'data'),
-     Input('popup-reset-corpus', 'n_clicks')],
+     Input('upload-state', 'data')],
     [State('popup-upload-corpus', 'filename')],
     prevent_initial_call=True
 )
-def update_filtered_data(filters, upload_state, reset_clicks, filename):
+def update_filtered_data(filters, upload_state, filename):
     ctx = callback_context
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
-    
-    if triggered_id == 'popup-reset-corpus' and reset_clicks:
-        return pd.DataFrame().to_json(date_format='iso', orient='split'), []
-    
     if not filters:
         return pd.DataFrame().to_json(date_format='iso', orient='split'), []
-    
     # Handle uploaded corpus data
     if triggered_id == 'upload-state' and upload_state:
         try:
@@ -1053,25 +1036,20 @@ def update_filtered_data(filters, upload_state, reset_clicks, filename):
                 return dash.no_update, dash.no_update
         except Exception as e:
             return dash.no_update, dash.no_update
-    
     try:
         # Get current state
         books, places = get_current_state()
-        
         if not books and not places:
             return pd.DataFrame().to_json(date_format='iso', orient='split'), []
-        
         # Get places for the map
         places_result = get_places_for_map(filters, selected_tokens=places)
         if isinstance(places_result, tuple):
             places_df = places_result[0]
         else:
             places_df = places_result
-        
         # Debug: Log the shape and content of places_df
         print(f"DEBUG: places_df shape: {places_df.shape}")
         print(f"DEBUG: places_df head: {places_df.head()}")
-        
         json_output = places_df.to_json(date_format='iso', orient='split')
         return json_output, books
     except Exception as e:
@@ -2057,47 +2035,7 @@ def update_corpus_from_selections(n_clicks, selected_categories, selected_titles
         print(f"Error in update_corpus_from_selections: {e}")
         return dash.no_update, dash.no_update
 
-# Add callback for corpus info
-@app.callback(
-    Output('corpus-controls-info', 'children'),
-    [Input('current-filters', 'data'),
-     Input('build-corpus-btn', 'n_clicks')],  # Changed from apply-filters to build-corpus-btn
-    prevent_initial_call=True
-)
-def update_corpus_info(filters, n_clicks):
-    if not filters:
-        return html.P("No corpus loaded", className="text-muted")
-    
-    # Get current state
-    books, places = get_current_state()
-    if not books:
-        return html.P("No corpus loaded", className="text-muted")
-    
-    conn = get_db_connection()
-    try:
-        # Get corpus information using current books
-        query = f"""
-        SELECT COUNT(DISTINCT dhlabid) as book_count,
-               COUNT(DISTINCT author) as author_count,
-               MIN(year) as min_year,
-               MAX(year) as max_year
-        FROM corpus
-        WHERE dhlabid IN ({','.join(['?'] * len(books))})
-        AND year IS NOT NULL
-        """
-        
-        info = pd.read_sql_query(query, conn, params=tuple(books)).iloc[0]
-        
-        return html.Div([
-            html.P(f"Books in corpus: {info['book_count']:,}"),
-            html.P(f"Authors: {info['author_count']:,}"),
-            html.P(f"Time period: {int(info['min_year'])}–{int(info['max_year'])}"),
-            html.P(f"Categories: {', '.join(filters['categories']) if filters.get('categories') else 'All'}"),
-            html.P(f"Sample size: {filters.get('sample_size', 'Not set')}"),
-            html.P(f"Max places: {filters.get('max_places', 'Not set')}")
-        ])
-    finally:
-        conn.close()
+
 
 def add_edge_points(points_array):
     """Add edge points to ensure the convex hull covers the entire cluster area."""
@@ -2243,8 +2181,7 @@ def download_map():
     [Output('download-map-file', 'data'),
      Output('download-status', 'children'),
      Output('clear-download-status-interval', 'disabled'),
-     Output('clear-download-status-interval', 'n_intervals'),
-     Output('download-map', 'disabled')],
+     Output('clear-download-status-interval', 'n_intervals')],
     [Input('download-map', 'n_clicks')],
     [State('download-format', 'value'),
      State('download-resolution', 'value'),
@@ -2289,12 +2226,12 @@ def trigger_download(n_clicks, format, resolution, figure):
             filename = 'imagination_map.svg'
             mime = 'image/svg+xml'
         else:
-            return None, html.Div('Invalid format selected', style={'color': 'red'}), True, 0, False
-        # Enable the interval to clear the message and disable the button
-        return dcc.send_bytes(lambda buf: buf.write(img_bytes), filename), html.Div('Download started...', style={'color': 'green', 'marginTop': '10px'}), False, 0, True
+            return None, html.Div('Invalid format selected', style={'color': 'red'}), True, 0
+        # Enable the interval to clear the message
+        return dcc.send_bytes(lambda buf: buf.write(img_bytes), filename), html.Div('Download started...', style={'color': 'green', 'marginTop': '10px'}), False, 0
     except Exception as e:
         print(f"Error generating download: {e}")
-        return None, html.Div(f'Error generating download: {e}', style={'color': 'red'}), True, 0, False
+        return None, html.Div(f'Error generating download: {e}', style={'color': 'red'}), True, 0
 
 @app.callback(
     Output('download-status', 'children', allow_duplicate=True),
@@ -2356,21 +2293,15 @@ def load_filtered_data(filters, books):
 @app.callback(
     Output('current-dhlabids-store', 'data', allow_duplicate=True),
     [Input('current-filters', 'data'),
-     Input('upload-state', 'data'),
-     Input('popup-reset-corpus', 'n_clicks')],
+     Input('upload-state', 'data')],
     [State('popup-upload-corpus', 'filename')],
     prevent_initial_call=True
 )
-def update_filtered_data(filters, upload_state, reset_clicks, filename):
+def update_filtered_data(filters, upload_state, filename):
     ctx = callback_context
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
-    
-    if triggered_id == 'popup-reset-corpus' and reset_clicks:
-        return []
-    
     if not filters:
         return []
-    
     # Handle uploaded corpus data
     if triggered_id == 'upload-state' and upload_state:
         try:
@@ -2380,14 +2311,11 @@ def update_filtered_data(filters, upload_state, reset_clicks, filename):
                 return dash.no_update
         except Exception as e:
             return dash.no_update
-    
     try:
         # Get current state
         books, places = get_current_state()
-        
         if not books and not places:
             return []
-        
         return books
     except Exception as e:
         print(f"Error in update_filtered_data: {e}")
@@ -2599,78 +2527,124 @@ def update_similar_places(search_term):
         return html.Div("Error searching for places", style={'color': 'red'})
 
 # Add callback for resampling places
-@app.callback(
-    [Output('total-places', 'children'),
-     Output('sample-places', 'children'),
-     Output('max-sample-size', 'children'),
-     Output('resample-container', 'style')],
-    [Input('current-filters', 'data'),
-     Input('resample-places', 'n_clicks')],
-    [State('corpus-max-places-slider', 'value')],  # Changed from popup-max-places-slider
-    prevent_initial_call=True
-)
-def update_places_info(filters, n_clicks, max_places):
-    if not filters:
-        return "No corpus loaded", "", "", {'display': 'none'}
-    
-    # Get current state
-    books, places = get_current_state()
-    if not books:
-        return "No corpus loaded", "", "", {'display': 'none'}
-    
-    conn = get_db_connection()
-    try:
-        # Get total places in corpus
-        total_places_query = f"""
-        SELECT COUNT(DISTINCT token) as total_places
-        FROM books
-        WHERE dhlabid IN ({','.join(['?'] * len(books))})
-        """
-        total_places = pd.read_sql_query(total_places_query, conn, params=tuple(books))['total_places'].iloc[0]
-        
-        # Get current sample size
-        current_sample = len(places) if places else 0
-        
-        # If resample button was clicked, resample places
-        ctx = callback_context
-        if ctx.triggered and ctx.triggered[0]['prop_id'] == 'resample-places.n_clicks':
-            if max_places > 0:
-                # Get all places and randomly sample
-                places_query = f"""
-                SELECT DISTINCT token
-                FROM books
-                WHERE dhlabid IN ({','.join(['?'] * len(books))})
-                ORDER BY RANDOM()
-                LIMIT ?
-                """
-                sampled_places = pd.read_sql_query(places_query, conn, params=tuple(books + [max_places]))['token'].tolist()
-                books, places = update_from_books(books, sampled_places)
-                current_sample = len(sampled_places)
-        elif max_places > 0 and current_sample > max_places:
-            # If we have more places than the max limit, resample
-            places_query = f"""
-            SELECT DISTINCT token
-            FROM books
-            WHERE dhlabid IN ({','.join(['?'] * len(books))})
-            ORDER BY RANDOM()
-            LIMIT ?
-            """
-            sampled_places = pd.read_sql_query(places_query, conn, params=tuple(books + [max_places]))['token'].tolist()
-            books, places = update_from_books(books, sampled_places)
-            current_sample = len(sampled_places)
-        
-        # Update display
-        total_places_text = f"Total places in corpus: {total_places:,}"
-        sample_places_text = f"Currently sampled: {current_sample:,} places"
-        max_sample_text = f"Maximum sample size: {max_places:,} places" if max_places > 0 else "No sample size limit"
-        
-        return total_places_text, sample_places_text, max_sample_text, {'display': 'block'}
-    except Exception as e:
-        print(f"Error in update_places_info: {e}")
-        return "Error loading places", "", "", {'display': 'none'}
-    finally:
-        conn.close()
+
 
 # Run Server
 if __name__ == '__main__':
     app.run(debug=True, port=8055)
+
+# Add a clientside callback for instant download status feedback
+app.clientside_callback(
+    """
+    function(n_clicks) {
+        if (n_clicks) {
+            return 'Download started...';
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output('download-status', 'children', allow_duplicate=True),
+    [Input('download-map', 'n_clicks')],
+    prevent_initial_call=True
+)
+
+
+
+@app.callback(
+    Output('test-info-output', 'children'),
+    [Input('test-info-btn', 'n_clicks')],
+    prevent_initial_call=True
+)
+def test_info_btn_callback(n_clicks):
+    print(f"[DEBUG] test_info_btn_callback triggered: n_clicks={n_clicks}")
+    return f"Button clicked {n_clicks} times."
+
+@app.callback(
+    [
+        Output('corpus-info-books', 'children'),
+        Output('corpus-info-authors', 'children'),
+        Output('corpus-info-places', 'children'),
+        Output('corpus-info-years', 'children'),
+        Output('corpus-browse-table', 'children'),
+    ],
+    [Input('current-filters', 'data'), Input('build-corpus-btn', 'n_clicks')],
+    prevent_initial_call=True
+)
+def update_corpus_info_and_table(filters, n_clicks):
+    if not filters:
+        return "", "", "", "", html.Div("No corpus loaded.", style={'color': '#666'})
+    books, places = get_current_state()
+    if not books:
+        return "0", "0", "0", "", html.Div("No books in corpus.", style={'color': '#666'})
+    conn = get_db_connection()
+    try:
+        # Info section
+        query = f"""
+        SELECT COUNT(DISTINCT dhlabid) as book_count,
+               COUNT(DISTINCT author) as author_count,
+               MIN(year) as min_year,
+               MAX(year) as max_year
+        FROM corpus
+        WHERE dhlabid IN ({','.join(['?'] * len(books))})
+        AND year IS NOT NULL
+        """
+        info = pd.read_sql_query(query, conn, params=tuple(books)).iloc[0]
+        # Places count
+        places_query = f"""
+        SELECT COUNT(DISTINCT token) as place_count
+        FROM books
+        WHERE dhlabid IN ({','.join(['?'] * len(books))})
+        """
+        place_count = pd.read_sql_query(places_query, conn, params=tuple(books))['place_count'].iloc[0]
+        # Year range
+        if pd.notnull(info['min_year']) and pd.notnull(info['max_year']):
+            years = f"{int(info['min_year'])}–{int(info['max_year'])}"
+        else:
+            years = ""
+        # Browse table
+        table_query = f'''
+        SELECT c.title, c.author, c.category, c.year, c.urn,
+               (SELECT COUNT(DISTINCT b.token) FROM books b WHERE b.dhlabid = c.dhlabid) as placename_count
+        FROM corpus c
+        WHERE c.dhlabid IN ({','.join(['?'] * len(books))})
+        ORDER BY c.year DESC, c.title
+        LIMIT 100
+        '''
+        df = pd.read_sql_query(table_query, conn, params=tuple(books))
+        if df.empty:
+            table_section = html.Div("No books found in corpus.", style={'color': '#666'})
+        else:
+            rows = []
+            for _, row in df.iterrows():
+                title_link = html.A(
+                    row['title'],
+                    href=f"https://www.nb.no/items/{row['urn']}",
+                    target="_blank",
+                    style={"fontWeight": "500", "color": "#1a56db", "textDecoration": "none"}
+                )
+                rows.append(html.Tr([
+                    html.Td(title_link),
+                    html.Td(row['author']),
+                    html.Td(row['category']),
+                    html.Td(row['year']),
+                    html.Td(int(row['placename_count']))
+                ]))
+            header = html.Thead(html.Tr([
+                html.Th("Title"),
+                html.Th("Author"),
+                html.Th("Category"),
+                html.Th("Year"),
+                html.Th("Placenames")
+            ]))
+            body = html.Tbody(rows)
+            table_section = dbc.Table([header, body], bordered=True, hover=True, responsive=True, size="sm", style={"fontSize": "0.92rem"})
+        return (
+            f"{info['book_count']:,}",
+            f"{info['author_count']:,}",
+            f"{place_count:,}",
+            years,
+            table_section
+        )
+    finally:
+        conn.close()
+
