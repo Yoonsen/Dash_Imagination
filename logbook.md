@@ -196,3 +196,16 @@ This logbook tracks the development progress, decisions, and challenges of the I
   * Complete full testing of migrated controls
   * Remove old corpus controls once migration is complete
   * Make corpus builder card draggable (reuse existing card dragging code)
+
+### June 8, 2024
+**Progress**:
+- Made the corpus builder card draggable, matching the behavior of other cards (e.g., corpus controls, visualization controls).
+- Used the existing drag-and-drop logic in `assets/drag.js` for consistency.
+
+**Key Changes**:
+1. Updated `drag.js` to add drag-and-drop support for `#corpus-builder-card` using its header as the drag handle.
+2. Set the cursor style for the builder card header to `grab` for visual feedback.
+
+**Next Steps**:
+- Monitor user feedback on the new draggable builder card.
+- Consider adding resize functionality in the future if needed.

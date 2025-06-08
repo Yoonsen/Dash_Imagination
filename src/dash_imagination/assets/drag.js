@@ -102,6 +102,23 @@ $(document).ready(function() {
                 });
             }
 
+            // Initialize corpus-builder-card if it exists
+            if ($('#corpus-builder-card').length > 0) {
+                console.log("Found corpus-builder-card, making it draggable");
+                $('#corpus-builder-card').draggable({
+                    handle: '#corpus-builder-card .card-header',
+                    containment: 'window',
+                    start: function(event, ui) {
+                        $(this).addClass("dragging");
+                        console.log("Started dragging corpus builder card");
+                    },
+                    stop: function(event, ui) {
+                        $(this).removeClass("dragging");
+                        console.log("Stopped dragging corpus builder card at:", ui.position);
+                    }
+                });
+            }
+
             console.log("Draggable initialization attempt completed");
         } catch (error) {
             console.error("Error initializing draggable:", error);
@@ -188,7 +205,7 @@ $(document).ready(function() {
     }, 2000);
 
     // Set cursor styles
-    $("#summary-header, #place-names-header, #corpus-header, #visualization-header").css("cursor", "grab");
+    $("#summary-header, #place-names-header, #corpus-header, #visualization-header, #corpus-builder-card .card-header").css("cursor", "grab");
 
     // Add touch support for draggable elements
     function addTouchSupport() {
