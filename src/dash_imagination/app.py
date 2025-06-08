@@ -664,6 +664,8 @@ app.layout = html.Div([
     create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list),
     # Add interval for clearing download status
     dcc.Interval(id='clear-download-status-interval', interval=6000, n_intervals=0, disabled=True),
+    # TEMP: Add a test button for corpus-info-books
+    html.Button('Test Corpus Info', id='test-corpus-info-btn', n_clicks=0, style={'position': 'fixed', 'bottom': '20px', 'right': '20px', 'zIndex': 2000}),
 ], id='main-container')
 
 # Add custom CSS
@@ -2445,9 +2447,7 @@ def update_similar_places(search_term):
 # Add callback for resampling places
 
 
-# Run Server
-if __name__ == '__main__':
-    app.run(debug=True, port=8055)
+
 
 # Add a clientside callback for instant download status feedback
 app.clientside_callback(
@@ -2483,10 +2483,11 @@ def test_info_btn_callback(n_clicks):
         Output('corpus-info-years', 'children'),
         Output('corpus-browse-table', 'children'),
     ],
-    [Input('current-dhlabids-store', 'data')],
+    [Input('filtered-data', 'data'), Input('build-corpus-btn', 'n_clicks')],
     prevent_initial_call=True
 )
-def update_corpus_info_and_table(books):
+def update_corpus_info_and_table(_, __):
+    books, _ = get_current_state()
     if not books:
         return "0", "0", "0", "", html.Div("No books in corpus.", style={'color': '#666'})
     conn = get_db_connection()
@@ -2561,25 +2562,6 @@ def update_corpus_info_and_table(books):
     finally:
         conn.close()
 
-@app.callback(
-    [
-        Output('corpus-info-books', 'children'),
-        Output('corpus-info-authors', 'children'),
-        Output('corpus-info-places', 'children'),
-        Output('corpus-info-years', 'children'),
-        Output('corpus-browse-table', 'children'),
-    ],
-    [Input('test-info-btn', 'n_clicks')],
-    prevent_initial_call=True
-)
-def test_info_btn_callback(n_clicks):
-    if not n_clicks:
-        raise PreventUpdate
-    return (
-        'TEST BOOKS',
-        'TEST AUTHORS',
-        'TEST PLACES',
-        'TEST YEARS',
-        html.Div('TEST TABLE')
-    )
-
+# Run Server
+if __name__ == '__main__':
+    app.run(debug=True, port=8055)
