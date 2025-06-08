@@ -106,7 +106,7 @@ $(document).ready(function() {
             if ($('#corpus-builder-card').length > 0) {
                 console.log("Found corpus-builder-card, making it draggable");
                 $('#corpus-builder-card').draggable({
-                    handle: '#corpus-builder-card .card-header',
+                    handle: '#corpus-builder-header',
                     containment: 'window',
                     start: function(event, ui) {
                         $(this).addClass("dragging");
@@ -205,7 +205,7 @@ $(document).ready(function() {
     }, 2000);
 
     // Set cursor styles
-    $("#summary-header, #place-names-header, #corpus-header, #visualization-header, #corpus-builder-card .card-header").css("cursor", "grab");
+    $("#summary-header, #place-names-header, #corpus-header, #visualization-header, #corpus-builder-header").css("cursor", "grab");
 
     // Add touch support for draggable elements
     function addTouchSupport() {

@@ -26,7 +26,7 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                     size="sm",
                 ),
             ], className="d-flex justify-content-between align-items-center")
-        ], className="bg-primary-subtle text-dark"),
+        ], className="bg-primary-subtle text-dark", id="corpus-builder-header"),
         dbc.CardBody([
             dbc.Tabs([
                 dbc.Tab([
