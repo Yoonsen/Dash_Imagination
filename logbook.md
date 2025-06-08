@@ -209,3 +209,12 @@ This logbook tracks the development progress, decisions, and challenges of the I
 **Next Steps**:
 - Monitor user feedback on the new draggable builder card.
 - Consider adding resize functionality in the future if needed.
+
+**Environment Note:**
+- The `kaleido` package (required for Plotly image export) cannot be reliably installed via PDM due to its binary-only distribution.
+- **Workaround:** Remove `kaleido` from `pyproject.toml` and `pdm.lock`. After running `pdm install`, manually install it in the virtual environment with:
+  
+  ```
+  .venv/bin/pip install kaleido
+  ```
+- This ensures image export features work as expected.

@@ -661,7 +661,9 @@ app.layout = html.Div([
     dcc.Store(id='current-dhlabids-store', data=[]),
 
     # Add the new corpus builder card
-    create_corpus_builder_card(categories_list=categories_list),
+    create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list),
+    # Add interval for clearing download status
+    dcc.Interval(id='clear-download-status-interval', interval=6000, n_intervals=0, disabled=True),
 ], id='main-container')
 
 # Add custom CSS
@@ -2237,9 +2239,12 @@ def download_map():
         print(f"Error generating download: {e}")
         return str(e), 500
 
-# Add download callback
 @app.callback(
-    Output('download-status', 'children'),
+    [Output('download-map-file', 'data'),
+     Output('download-status', 'children'),
+     Output('clear-download-status-interval', 'disabled'),
+     Output('clear-download-status-interval', 'n_intervals'),
+     Output('download-map', 'disabled')],
     [Input('download-map', 'n_clicks')],
     [State('download-format', 'value'),
      State('download-resolution', 'value'),
@@ -2247,44 +2252,71 @@ def download_map():
     prevent_initial_call=True
 )
 def trigger_download(n_clicks, format, resolution, figure):
+    import dash
+    from dash import dcc, html
+    import plotly.graph_objects as go
+    import io
     if not n_clicks:
-        raise PreventUpdate
-    
+        raise dash.exceptions.PreventUpdate
     # Set resolution based on selection
     resolution_map = {
         'standard': {'width': 1920, 'height': 1080},
         'high': {'width': 3840, 'height': 2160},
         'publication': {'width': 6000, 'height': 4000}
     }
-    
     # Get the selected resolution
     dimensions = resolution_map.get(resolution, resolution_map['standard'])
-    
-    # Prepare download data
-    download_data = {
-        'figure': figure,
-        'format': format,
-        'width': dimensions['width'],
-        'height': dimensions['height'],
-        'scale': 2 if resolution in ['high', 'publication'] else 1
-    }
-    
-    # Create download URL
-    download_url = f'/download-map?data={json.dumps(download_data)}'
-    
-    # Return a link that will be clicked by JavaScript
-    return html.Div([
-        html.A(
-            "Download Map",
-            href=download_url,
-            id="download-link",
-            style={'display': 'none'}
-        ),
-        html.Script("""
-            document.getElementById('download-link').click();
-        """),
-        html.Div("Download started...", style={'color': 'green', 'marginTop': '10px'})
-    ])
+    try:
+        # Create figure from JSON
+        fig = go.Figure(figure)
+        fig.update_layout(
+            width=dimensions['width'],
+            height=dimensions['height'],
+            margin=dict(l=0, r=0, t=0, b=0),
+            showlegend=False
+        )
+        # Generate image bytes
+        if format == 'png':
+            img_bytes = fig.to_image(format='png', scale=2 if resolution in ['high', 'publication'] else 1)
+            filename = 'imagination_map.png'
+            mime = 'image/png'
+        elif format == 'pdf':
+            img_bytes = fig.to_image(format='pdf', scale=2 if resolution in ['high', 'publication'] else 1)
+            filename = 'imagination_map.pdf'
+            mime = 'application/pdf'
+        elif format == 'svg':
+            img_bytes = fig.to_image(format='svg', scale=2 if resolution in ['high', 'publication'] else 1)
+            filename = 'imagination_map.svg'
+            mime = 'image/svg+xml'
+        else:
+            return None, html.Div('Invalid format selected', style={'color': 'red'}), True, 0, False
+        # Enable the interval to clear the message and disable the button
+        return dcc.send_bytes(lambda buf: buf.write(img_bytes), filename), html.Div('Download started...', style={'color': 'green', 'marginTop': '10px'}), False, 0, True
+    except Exception as e:
+        print(f"Error generating download: {e}")
+        return None, html.Div(f'Error generating download: {e}', style={'color': 'red'}), True, 0, False
+
+@app.callback(
+    Output('download-status', 'children', allow_duplicate=True),
+    [Input('clear-download-status-interval', 'n_intervals')],
+    [State('clear-download-status-interval', 'disabled')],
+    prevent_initial_call=True
+)
+def clear_download_status(n_intervals, disabled):
+    if not disabled and n_intervals > 0:
+        return ''
+    raise dash.exceptions.PreventUpdate
+
+@app.callback(
+    Output('clear-download-status-interval', 'disabled', allow_duplicate=True),
+    [Input('download-status', 'children')],
+    prevent_initial_call=True
+)
+def disable_interval_on_clear(status):
+    # Disable the interval if the status is cleared
+    if not status:
+        return True
+    raise dash.exceptions.PreventUpdate
 
 # Add new callback for data loading
 @app.callback(
@@ -2641,4 +2673,4 @@ def update_places_info(filters, n_clicks, max_places):
 
 # Run Server
 if __name__ == '__main__':
-    app.run(debug=True, port=8054)
+    app.run(debug=True, port=8055)
