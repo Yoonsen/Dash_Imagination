@@ -1456,7 +1456,7 @@ def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius
                 
                 if len(x) < 2:
                     fig.add_trace(go.Densitymap(
-                        lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap'
+                        lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap', showscale=False
                     ))
                 else:
                     heatmap_actual_radius = (heatmap_radius ** 0.5) * 10
@@ -1467,17 +1467,17 @@ def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius
                         radius=heatmap_actual_radius,
                         colorscale=heatmap_colorscale,
                         opacity=0.8 * (heatmap_intensity / 10),
-                        showscale=True,
+                        showscale=False,
                         visible=True,
                         name='Heatmap'
                     ))
             except Exception as e:
                 print(f"Heatmap error: {e}")
                 fig.add_trace(go.Densitymap(
-                    lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap'
+                    lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap', showscale=False
                 ))
         else:
-            fig.add_trace(go.Densitymap(visible=False, name='Heatmap'))
+            fig.add_trace(go.Densitymap(visible=False, name='Heatmap', showscale=False))
         
         # Update layout
         fig.update_layout(
