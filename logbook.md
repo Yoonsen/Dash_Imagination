@@ -60,6 +60,24 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Add proper error handling and user feedback
 - Consider alternative download approaches if needed
 
+### May 20, 2024 (2)
+**Progress**:
+- Implemented robust Excel download for current corpus (with URL column for NB.no)
+- Fixed callback registration order bug (all callbacks now registered before app.run)
+- Added XlsxWriter to requirements for Excel export
+- Confirmed full download/upload/reset round-trip workflow for user testing
+
+**Key Changes**:
+1. Download button now exports corpus as Excel (.xlsx) with columns: dhlabid, title, author, year, category, url
+2. Upload and reset work seamlessly, allowing users to save, restore, and iterate on corpora
+3. All callback registration issues resolved (no more silent failures)
+4. Ready for real user testing and feedback
+
+**Next Steps**:
+- Deploy to production
+- Gather user feedback on corpus management workflow
+- Adjust download/upload features as needed based on real usage
+
 ### May 17, 2024 (2)
 **Progress**:
 - Fixed syntax error in map update function
