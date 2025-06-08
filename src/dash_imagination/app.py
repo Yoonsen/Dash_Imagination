@@ -664,6 +664,34 @@ app.layout = html.Div([
     create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list),
     # Add interval for clearing download status
     dcc.Interval(id='clear-download-status-interval', interval=6000, n_intervals=0, disabled=True),
+    # Add debug button for corpus info in a fixed top-right position
+    html.Div([
+        html.Button('Show Corpus Info', id='test-info-btn', n_clicks=0, style={
+            'position': 'fixed',
+            'top': '20px',
+            'right': '20px',
+            'zIndex': 2000,
+            'padding': '10px 18px',
+            'backgroundColor': '#1e293b',
+            'color': 'white',
+            'border': 'none',
+            'borderRadius': '8px',
+            'fontWeight': 'bold',
+            'boxShadow': '0 2px 8px rgba(0,0,0,0.15)',
+            'cursor': 'pointer',
+        }),
+        html.Div(id='test-info-output', style={
+            'position': 'fixed',
+            'top': '60px',
+            'right': '20px',
+            'zIndex': 2000,
+            'backgroundColor': 'white',
+            'padding': '8px 16px',
+            'borderRadius': '8px',
+            'boxShadow': '0 2px 8px rgba(0,0,0,0.10)',
+            'minWidth': '180px',
+        })
+    ]),
 ], id='main-container')
 
 # Add custom CSS
@@ -937,37 +965,42 @@ app.index_string = '''
     prevent_initial_call=True
 )
 def update_state_and_filters(contents, filename, current_filters):
-    ctx = callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    if trigger_id == 'popup-upload-corpus' and contents:
-        content_type, content_string = contents.split(',')
-        decoded = base64.b64decode(content_string)
+    import pandas as pd
+    import io
+    import base64
+    from dash_imagination.utils.global_state import update_from_books
+    if not contents:
+        return html.Div('', style={'display': 'none'}), {}, current_filters
+    content_type, content_string = contents.split(',')
+    decoded = base64.b64decode(content_string)
+    try:
+        df = pd.read_excel(io.BytesIO(decoded))
+        if 'dhlabid' not in df.columns:
+            return html.Div('Error: File must contain a dhlabid column', style={'color': 'red'}), {}, current_filters
+        new_books = [int(x) for x in df['dhlabid'].dropna().tolist()]
+        if not new_books:
+            return html.Div('No valid dhlabids found in file.', style={'color': 'red'}), {}, current_filters
+        # Query DB for valid places for these books
+        conn = get_db_connection()
         try:
-            df = pd.read_excel(io.BytesIO(decoded))
-            if 'dhlabid' not in df.columns:
-                return html.Div('Error: File must contain a dhlabid column', style={'color': 'red'}), {}, current_filters
-            new_books = df['dhlabid'].tolist()
-            conn = get_db_connection()
-            try:
-                query = """
-                SELECT DISTINCT token
-                FROM books
-                WHERE dhlabid IN ({})
-                """.format(','.join(['?'] * len(new_books)))
-                places_df = pd.read_sql_query(query, conn, params=tuple(new_books))
-                new_places = places_df['token'].tolist()
-            finally:
-                conn.close()
-            books, places = update_from_books(new_books, new_places)
-            new_filters = current_filters.copy() if current_filters else default_filters.copy()
-            new_filters['corpus_source'] = filename
-            new_filters['selected_tokens'] = places
-            return html.Div(f'Successfully loaded {len(books)} books and {len(places)} places from {filename}', style={'color': 'green'}), {'uploaded': True, 'filename': filename}, new_filters
-        except Exception as e:
-            return html.Div(f'Error processing file: {str(e)}', style={'color': 'red'}), {}, current_filters
-    return html.Div('', style={'display': 'none'}), current_filters.get('upload_state', {}), current_filters
+            query = f"""
+            SELECT DISTINCT token
+            FROM books
+            WHERE dhlabid IN ({','.join(['?'] * len(new_books))})
+            """
+            places_df = pd.read_sql_query(query, conn, params=tuple(new_books))
+            new_places = places_df['token'].tolist()
+        finally:
+            conn.close()
+        # Update global state using the same logic as the builder
+        books, places = update_from_books(new_books, new_places)
+        # Update filters to reflect new corpus source
+        new_filters = current_filters.copy() if current_filters else default_filters.copy()
+        new_filters['corpus_source'] = filename
+        new_filters['selected_tokens'] = places
+        return html.Div(f'Successfully loaded {len(books)} books and {len(places)} places from {filename}', style={'color': 'green'}), {'uploaded': True, 'filename': filename}, new_filters
+    except Exception as e:
+        return html.Div(f'Error processing file: {str(e)}', style={'color': 'red'}), {}, current_filters
 
 # Add this callback to toggle the info modal
 
@@ -1953,8 +1986,7 @@ def update_button_styles(corpus_style, places_style, viz_style, corpus_btn_style
 
 # Add callback for category and title selection
 @app.callback(
-    [Output('current-filters', 'data', allow_duplicate=True),
-     Output('filtered-data', 'data', allow_duplicate=True)],
+    [Output('current-filters', 'data', allow_duplicate=True)],
     [Input('apply-filters', 'n_clicks')],
     [State('category-dropdown', 'value'),
      State('title-dropdown', 'value'),
@@ -1967,10 +1999,8 @@ def update_button_styles(corpus_style, places_style, viz_style, corpus_btn_style
 def update_corpus_from_selections(n_clicks, selected_categories, selected_titles, sample_size, max_places, year_range, current_filters):
     if not n_clicks:
         raise PreventUpdate
-    
     if current_filters is None:
         current_filters = {}
-    
     # Update filters with new selections
     new_filters = {
         'categories': selected_categories or [],
@@ -1979,61 +2009,7 @@ def update_corpus_from_selections(n_clicks, selected_categories, selected_titles
         'max_places': max_places or 0,
         'year_range': year_range or [1814, 1905]  # Default to full range if not set
     }
-    
-    try:
-        # Get dhlabids for the selected filters
-        conn = get_db_connection()
-        try:
-            query_parts = []
-            params = []
-            
-            if selected_categories:
-                query_parts.append("category IN ({})".format(','.join(['?'] * len(selected_categories))))
-                params.extend(selected_categories)
-            
-            if selected_titles:
-                query_parts.append("title IN ({})".format(','.join(['?'] * len(selected_titles))))
-                params.extend(selected_titles)
-            
-            # Always apply year range filter
-            min_year, max_year = new_filters['year_range']
-            query_parts.append("year BETWEEN ? AND ?")
-            params.extend([min_year, max_year])
-            
-            where_clause = " AND ".join(query_parts) if query_parts else "1=1"
-            query = f"""
-            SELECT DISTINCT dhlabid
-            FROM corpus
-            WHERE {where_clause}
-            """
-            
-            print(f"DEBUG: Applying filters - Categories: {selected_categories}, Year range: {min_year}-{max_year}")
-            dhlabids = pd.read_sql_query(query, conn, params=tuple(params))['dhlabid'].tolist()
-            print(f"DEBUG: Found {len(dhlabids)} books matching filters")
-            
-            # Get places for these books
-            places_query = """
-            SELECT DISTINCT token
-            FROM books
-            WHERE dhlabid IN ({})
-            """.format(','.join(['?'] * len(dhlabids)))
-            places = pd.read_sql_query(places_query, conn, params=tuple(dhlabids))['token'].tolist()
-            
-            # Update state with new books and places
-            books, places = update_from_books(dhlabids, places)
-            
-        finally:
-            conn.close()
-        
-        # Get filtered data
-        places_df = get_places_for_map(new_filters, selected_tokens=places)
-        if isinstance(places_df, tuple):
-            places_df = places_df[0]
-        
-        return new_filters, places_df.to_json(date_format='iso', orient='split')
-    except Exception as e:
-        print(f"Error in update_corpus_from_selections: {e}")
-        return dash.no_update, dash.no_update
+    return new_filters
 
 
 
@@ -2289,38 +2265,6 @@ def load_filtered_data(filters, books):
         print(f"Error in load_filtered_data: {e}")
         return dash.no_update
 
-# Update update_filtered_data to only handle dhlabids
-@app.callback(
-    Output('current-dhlabids-store', 'data', allow_duplicate=True),
-    [Input('current-filters', 'data'),
-     Input('upload-state', 'data')],
-    [State('popup-upload-corpus', 'filename')],
-    prevent_initial_call=True
-)
-def update_filtered_data(filters, upload_state, filename):
-    ctx = callback_context
-    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
-    if not filters:
-        return []
-    # Handle uploaded corpus data
-    if triggered_id == 'upload-state' and upload_state:
-        try:
-            if isinstance(upload_state, dict) and 'uploaded' in upload_state:
-                pass
-            else:
-                return dash.no_update
-        except Exception as e:
-            return dash.no_update
-    try:
-        # Get current state
-        books, places = get_current_state()
-        if not books and not places:
-            return []
-        return books
-    except Exception as e:
-        print(f"Error in update_filtered_data: {e}")
-        return dash.no_update
-
 # Add new callback for global place search
 @app.callback(
     [Output('main-map', 'figure', allow_duplicate=True),
@@ -2567,13 +2511,10 @@ def test_info_btn_callback(n_clicks):
         Output('corpus-info-years', 'children'),
         Output('corpus-browse-table', 'children'),
     ],
-    [Input('current-filters', 'data'), Input('build-corpus-btn', 'n_clicks')],
+    [Input('current-dhlabids-store', 'data')],
     prevent_initial_call=True
 )
-def update_corpus_info_and_table(filters, n_clicks):
-    if not filters:
-        return "", "", "", "", html.Div("No corpus loaded.", style={'color': '#666'})
-    books, places = get_current_state()
+def update_corpus_info_and_table(books):
     if not books:
         return "0", "0", "0", "", html.Div("No books in corpus.", style={'color': '#666'})
     conn = get_db_connection()
@@ -2647,4 +2588,26 @@ def update_corpus_info_and_table(filters, n_clicks):
         )
     finally:
         conn.close()
+
+@app.callback(
+    [
+        Output('corpus-info-books', 'children'),
+        Output('corpus-info-authors', 'children'),
+        Output('corpus-info-places', 'children'),
+        Output('corpus-info-years', 'children'),
+        Output('corpus-browse-table', 'children'),
+    ],
+    [Input('test-info-btn', 'n_clicks')],
+    prevent_initial_call=True
+)
+def test_info_btn_callback(n_clicks):
+    if not n_clicks:
+        raise PreventUpdate
+    return (
+        'TEST BOOKS',
+        'TEST AUTHORS',
+        'TEST PLACES',
+        'TEST YEARS',
+        html.Div('TEST TABLE')
+    )
 
