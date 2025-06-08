@@ -77,8 +77,14 @@ def get_authors():
     conn = get_db_connection()
     df = pdquery(conn, "SELECT DISTINCT author FROM corpus WHERE author IS NOT NULL ORDER BY author")
     conn.close()
-    authors = [str(author) for author in df['author'].tolist() if author is not None]
-    return authors
+    # Split authors on '/', strip whitespace, flatten, deduplicate, and sort
+    authors = set()
+    for author_str in df['author'].dropna():
+        for author in str(author_str).split('/'):
+            author = author.strip()
+            if author:
+                authors.add(author)
+    return sorted(authors)
 
 def get_categories():
     conn = get_db_connection()
@@ -664,8 +670,6 @@ app.layout = html.Div([
     create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list),
     # Add interval for clearing download status
     dcc.Interval(id='clear-download-status-interval', interval=6000, n_intervals=0, disabled=True),
-    # TEMP: Add a test button for corpus-info-books
-    html.Button('Test Corpus Info', id='test-corpus-info-btn', n_clicks=0, style={'position': 'fixed', 'bottom': '20px', 'right': '20px', 'zIndex': 2000}),
 ], id='main-container')
 
 # Add custom CSS
@@ -1023,31 +1027,37 @@ app.clientside_callback(
 
 @app.callback(
     [Output('filtered-data', 'data', allow_duplicate=True),
-     Output('current-dhlabids-store', 'data')],
+     Output('current-dhlabids-store', 'data'),
+     Output('current-filters', 'data')],
     [Input('current-filters', 'data'),
-     Input('upload-state', 'data')],
+     Input('upload-state', 'data'),
+     Input('reset-corpus-btn-main', 'n_clicks')],
     [State('popup-upload-corpus', 'filename')],
     prevent_initial_call=True
 )
-def update_filtered_data(filters, upload_state, filename):
+def update_filtered_data(filters, upload_state, reset_n_clicks, filename):
     ctx = callback_context
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
+    if triggered_id == 'reset-corpus-btn-main' and reset_n_clicks:
+        from dash_imagination.utils.global_state import clear_state
+        clear_state()
+        return pd.DataFrame().to_json(date_format='iso', orient='split'), [], {}
     if not filters:
-        return pd.DataFrame().to_json(date_format='iso', orient='split'), []
+        return pd.DataFrame().to_json(date_format='iso', orient='split'), [], {}
     # Handle uploaded corpus data
     if triggered_id == 'upload-state' and upload_state:
         try:
             if isinstance(upload_state, dict) and 'uploaded' in upload_state:
                 pass
             else:
-                return dash.no_update, dash.no_update
+                return dash.no_update, dash.no_update, dash.no_update
         except Exception as e:
-            return dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update
     try:
         # Get current state
         books, places = get_current_state()
         if not books and not places:
-            return pd.DataFrame().to_json(date_format='iso', orient='split'), []
+            return pd.DataFrame().to_json(date_format='iso', orient='split'), [], {}
         # Get places for the map
         places_result = get_places_for_map(filters, selected_tokens=places)
         if isinstance(places_result, tuple):
@@ -1058,10 +1068,10 @@ def update_filtered_data(filters, upload_state, filename):
         print(f"DEBUG: places_df shape: {places_df.shape}")
         print(f"DEBUG: places_df head: {places_df.head()}")
         json_output = places_df.to_json(date_format='iso', orient='split')
-        return json_output, books
+        return json_output, books, filters
     except Exception as e:
         print(f"Error in update_filtered_data: {e}")
-        return dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update
 
 @app.callback(
     [Output('category-selection', 'data')] + [

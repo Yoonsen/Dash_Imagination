@@ -20,6 +20,7 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Implemented global `current_dhlabids` list as single source of truth for corpus management
 - Simplified corpus handling by removing redundant filtering logic
 - Improved consistency between map data and place details
+- Changed author handling: author lists are now split on '/' and deduplicated for dropdowns and stats. Filtering in the corpus builder uses substring matching (case-insensitive) so multi-author books are included. If performance becomes an issue, consider DB-side optimizations or new tables, but with ~20k books this is not expected to be a problem.
 
 ## Technical Challenges
 - Resolved inconsistency between book counts and displayed books in place details

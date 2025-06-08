@@ -70,7 +70,8 @@ class CorpusBuilder:
                                     (filtered_df['year'] <= end_year)]
         
         if author:
-            filtered_df = filtered_df[filtered_df['author'] == author]
+            # Use case-insensitive substring match for author
+            filtered_df = filtered_df[filtered_df['author'].str.contains(author, case=False, na=False)]
         
         if dhlabids:
             filtered_df = filtered_df[filtered_df['dhlabid'].isin(dhlabids)]
@@ -120,9 +121,17 @@ class CorpusBuilder:
         metadata = self.get_metadata()
         places = self.get_places(max_places=max_places)
         
+        # Count unique authors by splitting on '/'
+        author_set = set()
+        for author_str in metadata['author'].dropna():
+            for author in str(author_str).split('/'):
+                author = author.strip()
+                if author:
+                    author_set.add(author)
+
         return {
             'total_books': len(self._dhlabids),
-            'unique_authors': metadata['author'].nunique(),
+            'unique_authors': len(author_set),
             'categories': metadata['category'].value_counts().to_dict(),
             'year_range': (metadata['year'].min(), metadata['year'].max()),
             'total_places': places['place_token'].nunique(),

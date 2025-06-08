@@ -3,7 +3,7 @@ import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 
 def create_corpus_controls(categories_list=None, titles_list=None, default_filters=None):
-    """Create the corpus controls as a popup dialogue."""
+    """Create the corpus controls as a popup dialogue, with modern upload/download and info layout."""
     if categories_list is None:
         categories_list = []
     if titles_list is None:
@@ -24,141 +24,98 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
             ], className="d-flex justify-content-between align-items-center")
         ], className="bg-primary-subtle text-dark", id='corpus-header'),
         dbc.CardBody([
-            # Upload section
-            dcc.Upload(
-                id='popup-upload-corpus',
-                children=html.Div([
-                    html.I(className="fas fa-upload me-2"),
-                    'Drag and Drop or ',
-                    html.A('Select a Corpus File')
-                ]),
-                style={
-                    'width': '100%',
-                    'height': '60px',
-                    'lineHeight': '60px',
-                    'borderWidth': '1px',
-                    'borderStyle': 'dashed',
-                    'borderRadius': '5px',
-                    'textAlign': 'center',
-                    'margin': '10px 0',
-                    'cursor': 'pointer'
-                },
-                multiple=False
-            ),
-            html.Div(id='popup-upload-status', className="mb-4"),
-            
-            # Sample Size
+            # Upload/Download/Add Books row
             html.Div([
-                html.Label("Number of Books", className="form-label"),
-                html.Div([
-                    dcc.Input(
-                        id='popup-sample-size',
-                        type='number',
-                        value=0,
-                        min=0,
-                        max=20000,
-                        step=100,
-                        className="form-control"
-                    ),
-                    html.Div("0 means no limit - all books will be included", className="form-text")
-                ])
-            ], className="mb-4"),
-            
-            # Max Places Slider
+                dbc.Row([
+                    dbc.Col([
+                        dcc.Upload(
+                            id='popup-upload-corpus',
+                            children=html.Div([
+                                html.Div([
+                                    html.I(className="fas fa-upload fa-2x", style={"color": "#2563eb"})
+                                ], className="d-flex justify-content-center"),
+                                html.Small("Upload", className="d-block text-center mt-1")
+                            ]),
+                            style={
+                                'display': 'inline-block',
+                                'cursor': 'pointer',
+                                'border': 'none',
+                                'background': 'none',
+                                'padding': '0',
+                                'width': '60px'
+                            },
+                            multiple=False
+                        )
+                    ], width="auto", className="text-center"),
+                    dbc.Col([
+                        html.Button([
+                            html.I(className="fas fa-download fa-2x", style={"color": "#059669"})
+                        ], id='corpus-download-btn', n_clicks=0, className="btn btn-link p-0", style={'width': '60px'}),
+                        html.Small("Download", className="d-block text-center mt-1")
+                    ], width="auto", className="text-center"),
+                    dbc.Col([
+                        html.Button([
+                            html.I(className="fas fa-plus fa-2x", style={"color": "#d97706"})
+                        ], id='open-corpus-builder', n_clicks=0, className="btn btn-link p-0", style={'width': '60px'}),
+                        html.Small("Add Books", className="d-block text-center mt-1")
+                    ], width="auto", className="text-center"),
+                ], className="g-3 justify-content-center"),
+                html.Div(id='popup-upload-status', className="mb-2 text-center")
+            ], className="mb-3"),
+            # Corpus info stats row (4 columns)
             html.Div([
-                html.Label("Maximum Places", className="form-label"),
-                dcc.Slider(
-                    id='popup-max-places-slider',
-                    min=100,
-                    max=2000,
-                    step=100,
-                    value=1500,
-                    marks={i: str(i) for i in range(100, 2001, 500)},
-                    className="mb-3"
-                )
-            ], className="mb-4"),
-            
-            # Year Range Slider
+                dbc.Row([
+                    dbc.Col([
+                        html.Div([
+                            html.I(className="fas fa-book fa-lg", style={"color": "#2563eb"}),
+                            html.Div(id='corpus-info-books', className="fw-bold fs-5 mt-1"),
+                            html.Small("Books", className="text-muted")
+                        ], className="text-center")
+                    ], width=3),
+                    dbc.Col([
+                        html.Div([
+                            html.I(className="fas fa-user fa-lg", style={"color": "#059669"}),
+                            html.Div(id='corpus-info-authors', className="fw-bold fs-5 mt-1"),
+                            html.Small("Authors", className="text-muted")
+                        ], className="text-center")
+                    ], width=3),
+                    dbc.Col([
+                        html.Div([
+                            html.I(className="fas fa-map-marker-alt fa-lg", style={"color": "#f59e42"}),
+                            html.Div(id='corpus-info-places', className="fw-bold fs-5 mt-1"),
+                            html.Small("Places", className="text-muted")
+                        ], className="text-center")
+                    ], width=3),
+                    dbc.Col([
+                        html.Div([
+                            html.I(className="fas fa-calendar fa-lg", style={"color": "#d97706"}),
+                            html.Div(id='corpus-info-years', className="fw-bold fs-5 mt-1"),
+                            html.Small("Years", className="text-muted")
+                        ], className="text-center")
+                    ], width=3),
+                ], className="g-2 mb-3 justify-content-center")
+            ]),
+            html.Hr(style={'margin': '12px 0'}),
+            # Reset Corpus Button
             html.Div([
-                html.Label("Year Range", className="form-label"),
-                dcc.RangeSlider(
-                    id='year-range-slider',
-                    min=1814,
-                    max=1905,
-                    step=1,
-                    value=[1814, 1905],
-                    marks={i: str(i) for i in range(1814, 1906, 10)},
-                    className="mb-3"
-                )
-            ], className="mb-4"),
-            
-            # Category selection
+                html.Button([
+                    html.I(className="fas fa-trash-alt me-2", style={"color": "#dc2626"}),
+                    "Reset Corpus"
+                ], id='reset-corpus-btn-main', n_clicks=0, className="btn btn-outline-danger w-100 mb-3")
+            ]),
+            # Browse Table Section (always visible)
             html.Div([
-                html.H5("Select Categories", className="mb-3"),
-                dcc.Dropdown(
-                    id='category-dropdown',
-                    options=[{'label': cat, 'value': cat} for cat in categories_list],
-                    value=default_filters['categories'],
-                    multi=True,
-                    placeholder="Select categories..."
-                )
-            ], className="mb-4"),
-            
-            # Title selection
-            html.Div([
-                html.H5("Select Titles", className="mb-3"),
-                dcc.Dropdown(
-                    id='title-dropdown',
-                    options=[{'label': title, 'value': title} for title in titles_list],
-                    value=default_filters['titles'],
-                    multi=True,
-                    placeholder="Select titles..."
-                )
-            ], className="mb-4"),
-            
-            # Apply Filters button
-            dbc.Button(
-                [
-                    html.I(className="fas fa-check me-2"),
-                    "Apply Filters"
-                ],
-                id='apply-filters',
-                color="primary",
-                className="w-100 mb-3"
-            ),
-            
-            # Reset button
-            dbc.Button(
-                [
-                    html.I(className="fas fa-undo me-2"),
-                    "Clear Corpus"
-                ],
-                id='popup-reset-corpus',
-                color="secondary",
-                className="w-100"
-            ),
-            
-            # Resampling section
-            html.Div([
-                html.Hr(),
-                html.H5("Resampling", className="mb-3"),
-                html.Div(id='corpus-controls-info', className="mb-2"),
-                html.Div(id='author-count', className="mb-2"),
-                html.Div(id='book-count', className="mb-2"),
-                html.Div(id='total-places', className="mb-2"),
-                html.Div(id='sample-places', className="mb-2"),
-                html.Div(id='max-sample-size', className="mb-3"),
-                dbc.Button(
-                    [
-                        html.I(className="fas fa-random me-2"),
-                        "Resample Places"
-                    ],
-                    id='resample-places',
-                    color="info",
-                    className="w-100"
-                )
-            ], id='resample-container', style={'display': 'none'})
-        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
+                html.H5([
+                    html.I(className="fas fa-table me-2"),
+                    "Books in Current Corpus"
+                ], className="mb-3"),
+                html.Div(id='corpus-browse-table', style={'padding': '8px'})
+            ])
+        ], style={'height': '444px', 'overflowY': 'auto'}),
+        # Hidden resample-places button to suppress callback errors and allow future restoration
+        html.Button("Resample Places", id="resample-places", style={"display": "none"}),
+        # Hidden resample-container div to suppress callback errors
+        html.Div(id='resample-container', style={'display': 'none'})
     ], id='corpus-controls-container', className="position-absolute m-3", style={
         'width': '350px',
         'height': '500px',
@@ -299,6 +256,36 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
                 ], label="Heatmap View")
             ], className="mt-4"),
             
+            # Download format dropdown
+            html.Div([
+                html.Label("Download Format", className="form-label"),
+                dcc.Dropdown(
+                    id='download-format',
+                    options=[
+                        {'label': 'PNG (image)', 'value': 'png'},
+                        {'label': 'PDF (vector)', 'value': 'pdf'},
+                        {'label': 'SVG (vector)', 'value': 'svg'}
+                    ],
+                    value='png',
+                    clearable=False,
+                    className="mb-2"
+                )
+            ], className="mb-3"),
+            # Download resolution dropdown
+            html.Div([
+                html.Label("Resolution", className="form-label"),
+                dcc.Dropdown(
+                    id='download-resolution',
+                    options=[
+                        {'label': 'Standard (1920x1080)', 'value': 'standard'},
+                        {'label': 'High (3840x2160)', 'value': 'high'},
+                        {'label': 'Publication (6000x4000)', 'value': 'publication'}
+                    ],
+                    value='standard',
+                    clearable=False,
+                    className="mb-2"
+                )
+            ], className="mb-3"),
             # Download button
             dbc.Button(
                 [
@@ -309,7 +296,8 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
                 color="primary",
                 className="w-100"
             ),
-            
+            # Download component for Dash downloads
+            dcc.Download(id="download-map-file"),
             # Status message
             html.Div(id='download-status', className="mt-2")
         ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
