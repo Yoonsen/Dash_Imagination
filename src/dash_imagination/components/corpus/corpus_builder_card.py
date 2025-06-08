@@ -120,7 +120,8 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
         "zIndex": 800,
         "display": "none",
         "top": "60px",
-        "left": "400px",
+        "left": "50%",
+        "transform": "translateX(-50%)",
         "transition": "display 0.3s ease-in-out"
     })
 
@@ -147,7 +148,8 @@ def toggle_card_visibility(n1, n2, builder_style, controls_style):
     if button_id == "open-corpus-builder":
         # Show builder card and ensure controls stay visible
         builder_style["display"] = "block"
-        builder_style["left"] = "400px"
+        builder_style["left"] = "50%"
+        builder_style["transform"] = "translateX(-50%)"
         controls_style["display"] = "block"
         return builder_style, controls_style
     elif button_id == "close-corpus-builder":
