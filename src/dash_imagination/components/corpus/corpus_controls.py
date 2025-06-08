@@ -48,10 +48,11 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                         )
                     ], width="auto", className="text-center"),
                     dbc.Col([
-                        html.Button([
+                        dbc.Button([
                             html.I(className="fas fa-download fa-2x", style={"color": "#059669"})
-                        ], id='corpus-download-btn', n_clicks=0, className="btn btn-link p-0", style={'width': '60px'}),
-                        html.Small("Download", className="d-block text-center mt-1")
+                        ], id='corpus-download-btn-unique', n_clicks=0, color="link", className="p-0", style={'width': '60px'}),
+                        html.Small("Download", className="d-block text-center mt-1"),
+                        dcc.Download(id='corpus-download-unique')
                     ], width="auto", className="text-center"),
                     dbc.Col([
                         html.Button([

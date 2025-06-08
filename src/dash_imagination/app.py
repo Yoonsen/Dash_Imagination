@@ -2572,6 +2572,48 @@ def update_corpus_info_and_table(_, __):
     finally:
         conn.close()
 
+
+
+@app.callback(
+    Output('corpus-download-unique', 'data'),
+    [Input('corpus-download-btn-unique', 'n_clicks')],
+    [State('current-dhlabids-store', 'data')],
+    prevent_initial_call=True
+)
+def download_corpus_excel(n_clicks, dhlabids):
+    if not n_clicks or not dhlabids:
+        raise dash.exceptions.PreventUpdate
+    print(f"Download triggered, first 5 dhlabids: {dhlabids[:5]}")
+    import pandas as pd
+    import io
+    conn = get_db_connection()
+    try:
+        # Fetch metadata for current corpus
+        query = f'''
+        SELECT dhlabid, title, author, year, category, urn
+        FROM corpus
+        WHERE dhlabid IN ({','.join(['?'] * len(dhlabids))})
+        '''
+        df = pd.read_sql_query(query, conn, params=tuple(dhlabids))
+        if df.empty:
+            raise dash.exceptions.PreventUpdate
+        # Add URL column
+        df['url'] = df['urn'].apply(lambda urn: f"https://www.nb.no/items/{urn}" if pd.notnull(urn) else '')
+        # Reorder columns
+        df = df[['dhlabid', 'title', 'author', 'year', 'category', 'url']]
+        # Write to Excel in memory
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Corpus')
+        output.seek(0)
+        return dcc.send_bytes(lambda buf: buf.write(output.getvalue()), filename='imagination_corpus.xlsx')
+    except Exception as e:
+        print(f"Download error: {e}")
+        raise
+    finally:
+        conn.close()
+
+
 # Run Server
 if __name__ == '__main__':
     app.run(debug=True, port=8055)
