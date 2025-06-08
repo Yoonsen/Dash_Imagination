@@ -664,34 +664,6 @@ app.layout = html.Div([
     create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list),
     # Add interval for clearing download status
     dcc.Interval(id='clear-download-status-interval', interval=6000, n_intervals=0, disabled=True),
-    # Add debug button for corpus info in a fixed top-right position
-    html.Div([
-        html.Button('Show Corpus Info', id='test-info-btn', n_clicks=0, style={
-            'position': 'fixed',
-            'top': '20px',
-            'right': '20px',
-            'zIndex': 2000,
-            'padding': '10px 18px',
-            'backgroundColor': '#1e293b',
-            'color': 'white',
-            'border': 'none',
-            'borderRadius': '8px',
-            'fontWeight': 'bold',
-            'boxShadow': '0 2px 8px rgba(0,0,0,0.15)',
-            'cursor': 'pointer',
-        }),
-        html.Div(id='test-info-output', style={
-            'position': 'fixed',
-            'top': '60px',
-            'right': '20px',
-            'zIndex': 2000,
-            'backgroundColor': 'white',
-            'padding': '8px 16px',
-            'borderRadius': '8px',
-            'boxShadow': '0 2px 8px rgba(0,0,0,0.10)',
-            'minWidth': '180px',
-        })
-    ]),
 ], id='main-container')
 
 # Add custom CSS
