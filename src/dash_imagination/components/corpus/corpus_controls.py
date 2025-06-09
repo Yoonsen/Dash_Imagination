@@ -1,6 +1,8 @@
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
+from dash import callback, no_update
+import dash
 
 def create_corpus_controls(categories_list=None, titles_list=None, default_filters=None):
     """Create the corpus controls as a popup dialogue, with modern upload/download and info layout."""
@@ -24,7 +26,7 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
             ], className="d-flex justify-content-between align-items-center")
         ], className="bg-primary-subtle text-dark", id='corpus-header'),
         dbc.CardBody([
-            # Upload/Download/Add Books row
+            # Upload/Download/Add Books/Reset row
             html.Div([
                 dbc.Row([
                     dbc.Col([
@@ -59,6 +61,18 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                             html.I(className="fas fa-plus fa-2x", style={"color": "#d97706"})
                         ], id='open-corpus-builder', n_clicks=0, className="btn btn-link p-0", style={'width': '60px'}),
                         html.Small("Add Books", className="d-block text-center mt-1")
+                    ], width="auto", className="text-center"),
+                    dbc.Col([
+                        html.Button(
+                            html.I(className="far fa-trash-alt fa-2x", style={"color": "#dc2626"}),
+                            id='reset-corpus-btn-main',
+                            n_clicks=0,
+                            className="btn btn-outline-danger p-0",
+                            style={'width': '60px'},
+                            title="Reset Corpus (double-click to confirm)"
+                        ),
+                        dcc.Interval(id='reset-corpus-timer', interval=5000, n_intervals=0, disabled=True, max_intervals=1),
+                        dcc.Store(id='reset-corpus-confirm', data=False)
                     ], width="auto", className="text-center"),
                 ], className="g-3 justify-content-center"),
                 html.Div(id='popup-upload-status', className="mb-2 text-center")
@@ -97,13 +111,6 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                 ], className="g-2 mb-3 justify-content-center")
             ]),
             html.Hr(style={'margin': '12px 0'}),
-            # Reset Corpus Button
-            html.Div([
-                html.Button([
-                    html.I(className="fas fa-trash-alt me-2", style={"color": "#dc2626"}),
-                    "Reset Corpus"
-                ], id='reset-corpus-btn-main', n_clicks=0, className="btn btn-outline-danger w-100 mb-3")
-            ]),
             # Browse Table Section (always visible)
             html.Div([
                 html.H5([
@@ -311,3 +318,31 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
         'left': '20px',
         'cursor': 'move'
     }) 
+
+@callback(
+    [Output('reset-corpus-btn-main', 'className'),
+     Output('reset-corpus-btn-main', 'title'),
+     Output('reset-corpus-timer', 'disabled'),
+     Output('reset-corpus-timer', 'n_intervals'),
+     Output('reset-corpus-confirm', 'data')],
+    [Input('reset-corpus-btn-main', 'n_clicks'),
+     Input('reset-corpus-timer', 'n_intervals')],
+    [State('reset-corpus-btn-main', 'className'),
+     State('reset-corpus-timer', 'disabled'),
+     State('reset-corpus-confirm', 'data')],
+    prevent_initial_call=True
+)
+def confirm_reset_corpus(n_clicks, timer_intervals, className, timer_disabled, confirm_state):
+    ctx = dash.callback_context
+    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
+    if triggered_id == 'reset-corpus-btn-main':
+        # First click: warn (make solid red, enable timer, set confirm True)
+        if 'btn-danger' not in className:
+            return 'btn btn-danger p-0', 'Click again to confirm reset', False, 0, True
+        else:
+            # Second click: allow the actual reset action (handled elsewhere), reset timer and confirm
+            return 'btn btn-outline-danger p-0', 'Reset Corpus (double-click to confirm)', True, 0, False
+    elif triggered_id == 'reset-corpus-timer':
+        # Timer expired: revert to outline, reset confirm
+        return 'btn btn-outline-danger p-0', 'Reset Corpus (double-click to confirm)', True, 0, False
+    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update 

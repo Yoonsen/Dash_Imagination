@@ -1032,19 +1032,19 @@ app.clientside_callback(
     [Input('current-filters', 'data'),
      Input('upload-state', 'data'),
      Input('reset-corpus-btn-main', 'n_clicks')],
-    [State('popup-upload-corpus', 'filename')],
+    [State('popup-upload-corpus', 'filename'),
+     State('reset-corpus-confirm', 'data')],
     prevent_initial_call=True
 )
-def update_filtered_data(filters, upload_state, reset_n_clicks, filename):
+def update_filtered_data(filters, upload_state, reset_n_clicks, filename, reset_confirm):
     ctx = callback_context
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
     if triggered_id == 'reset-corpus-btn-main' and reset_n_clicks:
+        if not reset_confirm:
+            raise dash.exceptions.PreventUpdate
         from dash_imagination.utils.global_state import clear_state
         clear_state()
         return pd.DataFrame().to_json(date_format='iso', orient='split'), [], {}
-    if not filters:
-        return pd.DataFrame().to_json(date_format='iso', orient='split'), [], {}
-    # Handle uploaded corpus data
     if triggered_id == 'upload-state' and upload_state:
         try:
             if isinstance(upload_state, dict) and 'uploaded' in upload_state:
@@ -1053,6 +1053,8 @@ def update_filtered_data(filters, upload_state, reset_n_clicks, filename):
                 return dash.no_update, dash.no_update, dash.no_update
         except Exception as e:
             return dash.no_update, dash.no_update, dash.no_update
+    if not filters:
+        return pd.DataFrame().to_json(date_format='iso', orient='split'), [], {}
     try:
         # Get current state
         books, places = get_current_state()

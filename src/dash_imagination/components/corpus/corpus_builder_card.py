@@ -4,6 +4,7 @@ import pandas as pd
 from ...utils.corpus_build import corpus_builder, get_corpus_stats, count_words
 from ...utils.global_state import update_from_books
 import dhlab as dh
+from dash import dcc
 
 def create_corpus_builder_card(categories_list=None, authors_list=None, default_filters=None):
     """Creates a Bootstrap card component for corpus building."""
@@ -156,8 +157,6 @@ def toggle_card_visibility(n1, n2, builder_style, controls_style):
     """Toggle the visibility of the corpus builder card while keeping controls visible."""
     import dash
     from dash import no_update
-    import dash_html_components as html
-    import dash_core_components as dcc
     import dash_bootstrap_components as dbc
     import flask
     import os
