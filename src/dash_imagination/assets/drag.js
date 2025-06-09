@@ -248,4 +248,41 @@ $(document).ready(function() {
 
     // Add touch support when document is ready
     addTouchSupport();
+
+    // Add this function to center the corpus builder card in pixels
+    function centerCorpusBuilderCard() {
+        var card = document.getElementById('corpus-builder-card');
+        if (card && card.style.display === 'block') {
+            // Remove transform if present
+            card.style.transform = '';
+            // Set left in px to center
+            var windowWidth = window.innerWidth;
+            var cardWidth = card.offsetWidth || 350;
+            var leftPx = Math.max(0, Math.round((windowWidth - cardWidth) / 2));
+            card.style.left = leftPx + 'px';
+        }
+    }
+
+    // Observe style changes to the corpus builder card to trigger centering
+    var corpusBuilderCard = document.getElementById('corpus-builder-card');
+    if (corpusBuilderCard) {
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                    if (corpusBuilderCard.style.display === 'block') {
+                        centerCorpusBuilderCard();
+                    }
+                }
+            });
+        });
+        observer.observe(corpusBuilderCard, { attributes: true });
+    }
+
+    // Optionally, recenter on window resize if the card is visible and hasn't been dragged
+    window.addEventListener('resize', function() {
+        var card = document.getElementById('corpus-builder-card');
+        if (card && card.style.display === 'block' && !card.classList.contains('ui-draggable-dragging')) {
+            centerCorpusBuilderCard();
+        }
+    });
 });

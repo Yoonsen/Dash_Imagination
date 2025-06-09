@@ -21,21 +21,13 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                 html.I(className="fa fa-book me-2"),
                 html.H5("Build Corpus", className="mb-0 d-inline"),
                 dbc.Button(
-                    html.I(className="fas fa-eraser"),
-                    id="reset-corpus-btn",
-                    color="secondary",
-                    className="btn-sm ms-2",
-                    style={"marginLeft": "auto"},
-                    title="Clear Filters (double-click to confirm)"
-                ),
-                dbc.Button(
                     "×",
                     id="close-corpus-builder",
                     className="float-end btn-close",
                     size="sm",
                 ),
-            ], className="d-flex justify-content-between align-items-center")
-        ], className="bg-primary-subtle text-dark", id="corpus-builder-header"),
+            ], className="d-flex justify-content-between align-items-center", id="corpus-builder-header", style={"cursor": "grab", "userSelect": "none"})
+        ], className="bg-success-subtle text-dark"),
         dbc.CardBody([
             dbc.Tabs([
                 dbc.Tab([
@@ -51,8 +43,7 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                                 value=500,
                                 marks={i: str(i) for i in range(500, 2001, 500)},
                                 className="form-range"
-                            ),
-                            html.Div("Recommended range: 500-2000 places for optimal performance", className="form-text")
+                            )
                         ])
                     ], className="mb-4"),
                     html.Div([
@@ -139,9 +130,7 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
         "zIndex": 800,
         "display": "none",
         "top": "60px",
-        "left": "50%",
-        "transform": "translateX(-50%)",
-        "transition": "display 0.3s ease-in-out"
+        "left": "100px"
     })
 
 @callback(
@@ -176,20 +165,13 @@ def toggle_card_visibility(n1, n2, builder_style, controls_style):
     if button_id == "open-corpus-builder":
         # Show builder card and ensure controls stay visible
         builder_style["display"] = "block"
-        # Remove transform and set left in px to center
-        builder_style.pop("transform", None)
-        # Set left to center in px (assume card width 350px)
         builder_style["width"] = "350px"
         builder_style["height"] = "500px"
         builder_style["zIndex"] = 800
         builder_style["top"] = "60px"
-        # Calculate left in px: (window.innerWidth - 350) // 2
-        # Since we can't access window.innerWidth server-side, use a default (e.g., 1200px)
-        # The JS drag will correct this after first drag, but this avoids the jump
-        default_window_width = 1200
-        card_width = 350
-        left_px = (default_window_width - card_width) // 2
-        builder_style["left"] = f"{left_px}px"
+        builder_style["left"] = "100px"
+        # Remove transform if present
+        builder_style.pop("transform", None)
         controls_style["display"] = "block"
         return builder_style, controls_style
     elif button_id == "close-corpus-builder":
