@@ -513,22 +513,16 @@ app.layout = html.Div([
     # ImagiNation info button and modal
     html.Div([
         html.Button([
-            html.H3("ImagiNation v1.0.1", style={
+            html.H3("ImagiNation", style={
                 'margin': '0',
                 'fontWeight': '400',
                 'color': '#333',
                 'fontSize': '20px'
-            }),
-            html.Span("Click for info", style={
-                'fontSize': '11px',
-                'color': '#666',
-                'display': 'block',
-                'marginTop': '2px'
             })
         ], 
         id='info-button',
         style={
-            'background': 'white',
+            'background': 'rgba(255,255,255,0.6)',
             'border': 'none',
             'borderRadius': '4px',
             'boxShadow': '0 2px 4px rgba(0,0,0,0.2)',
@@ -2563,7 +2557,7 @@ def update_corpus_info_and_table(_, __):
                 html.Th("Placenames")
             ]))
             body = html.Tbody(rows)
-            table_section = dbc.Table([header, body], bordered=True, hover=True, responsive=True, size="sm", style={"fontSize": "0.92rem"})
+            table_section = dbc.Table([header, body], bordered=True, hover=True, responsive=True, size="sm", style={"fontSize": "0.8rem"})
         return (
             f"{info['book_count']:,}",
             f"{info['author_count']:,}",

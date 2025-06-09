@@ -29,6 +29,38 @@ This logbook tracks the development progress, decisions, and challenges of the I
 
 ## Development Log
 
+### June 10, 2024
+**Progress**:
+- Collaborative, iterative refinement of UI/UX and backend for the ImagiNation app, focusing on corpus builder, marker popups, clustering, and state management.
+- Improved drag behavior and visual polish for the corpus builder card.
+- Optimized marker popup generation for map responsiveness.
+- Added spinners and feedback for book/content addition actions.
+- Made corpus content search more intuitive for empty corpora.
+- Refactored SQLite access for thread safety and robustness.
+- Enhanced error handling and callback safety.
+- Refined reset/clear filter button logic for user safety.
+- Iteratively improved alignment, compactness, and visual consistency of UI controls and tables.
+- Reverted resizable card experiments after user feedback.
+- Managed branches and commits to keep main branch stable and up to date.
+
+**Key Changes**:
+1. Refactored card centering and drag logic for smoother UX.
+2. Marker popups are now generated on demand, improving map load times.
+3. Spinners and feedback messages added for all major corpus actions.
+4. Content tab now defaults to searching all books if corpus is empty.
+5. All database access now uses context managers to avoid threading errors.
+6. Reset button is now icon-only, top-aligned, and requires double-click confirmation.
+7. UI controls and tables are more compact, visually aligned, and free of unnecessary outlines.
+8. All major quirks and usability issues addressed through incremental improvements.
+
+**State Management Note**:
+- With the current design, frequent corpus resets and uploads may lead to confusing or inconsistent state, especially after deployment. This is a known area for future improvement. Next session will focus on reviewing and improving state management to ensure robust, predictable behavior for users.
+
+**Next Steps**:
+- Monitor user feedback after deployment, especially around corpus resets and uploads.
+- Review and improve state management logic to prevent confusion and ensure consistency.
+- Continue refining UI/UX based on real-world usage.
+
 ### May 20, 2024
 **Progress**:
 - Implemented custom download functionality for map visualization
