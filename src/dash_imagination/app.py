@@ -574,7 +574,7 @@ app.layout = html.Div([
         dbc.CardHeader([
             html.Div([
                 html.I(className="fa fa-grip-horizontal me-2"),
-                html.H5("Place Details", className="mb-0"),
+                html.H5("Place Details", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
                 html.Button(
                     html.I(className="fa fa-times"),
                     id='close-summary',
@@ -600,7 +600,7 @@ app.layout = html.Div([
         dbc.CardHeader([
             html.Div([
                 html.I(className="fa fa-map-marker me-2"),
-                html.H5("Place Names", className="mb-0"),
+                html.H5("Place Names", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
                 html.Button(
                     html.I(className="fa fa-times"),
                     id='close-place-names',

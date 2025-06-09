@@ -12,7 +12,7 @@ def create_place_similarity_dialog():
         dbc.CardHeader([
             html.Div([
                 html.I(className="fa fa-search me-2"),
-                html.H5("Find Similar Places", className="mb-0"),
+                html.H5("Place Similarity", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
                 html.Button(
                     html.I(className="fa fa-times"),
                     id='close-similarity',

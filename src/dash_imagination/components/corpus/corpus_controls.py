@@ -17,7 +17,7 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
         dbc.CardHeader([
             html.Div([
                 html.I(className="fa fa-book me-2"),
-                html.H5("Corpus Controls", className="mb-0"),
+                html.H5("Corpus Controls", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
                 html.Button(
                     html.I(className="fa fa-times"),
                     id='close-corpus',
@@ -30,50 +30,57 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
             html.Div([
                 dbc.Row([
                     dbc.Col([
-                        dcc.Upload(
-                            id='popup-upload-corpus',
-                            children=html.Div([
-                                html.Div([
-                                    html.I(className="fas fa-upload fa-2x", style={"color": "#2563eb"})
-                                ], className="d-flex justify-content-center"),
-                                html.Small("Upload", className="d-block text-center mt-1")
-                            ]),
-                            style={
-                                'display': 'inline-block',
-                                'cursor': 'pointer',
-                                'border': 'none',
-                                'background': 'none',
-                                'padding': '0',
-                                'width': '60px'
-                            },
-                            multiple=False
-                        )
-                    ], width="auto", className="text-center"),
+                        html.Div([
+                            dcc.Upload(
+                                id='popup-upload-corpus',
+                                children=html.Div([
+                                    html.I(className="fas fa-upload fa-lg d-block text-center", style={"color": "#2563eb"}),
+                                ]),
+                                style={
+                                    'display': 'inline-block',
+                                    'cursor': 'pointer',
+                                    'border': 'none',
+                                    'background': 'none',
+                                    'padding': '0',
+                                    'width': '60px'
+                                },
+                                multiple=False
+                            ),
+                            html.Small("Upload", className="d-block text-center mt-1")
+                        ], className="text-center")
+                    ], width="auto"),
                     dbc.Col([
-                        dbc.Button([
-                            html.I(className="fas fa-download fa-2x", style={"color": "#059669"})
-                        ], id='corpus-download-btn-unique', n_clicks=0, color="link", className="p-0", style={'width': '60px'}),
-                        html.Small("Download", className="d-block text-center mt-1"),
-                        dcc.Download(id='corpus-download-unique')
-                    ], width="auto", className="text-center"),
+                        html.Div([
+                            dbc.Button([
+                                html.I(className="fas fa-download fa-lg d-block text-center", style={"color": "#059669"})
+                            ], id='corpus-download-btn-unique', n_clicks=0, color="link", className="p-0", style={'width': '60px'}),
+                            html.Small("Download", className="d-block text-center mt-1"),
+                            dcc.Download(id='corpus-download-unique')
+                        ], className="text-center")
+                    ], width="auto"),
                     dbc.Col([
-                        html.Button([
-                            html.I(className="fas fa-plus fa-2x", style={"color": "#d97706"})
-                        ], id='open-corpus-builder', n_clicks=0, className="btn btn-link p-0", style={'width': '60px'}),
-                        html.Small("Add Books", className="d-block text-center mt-1")
-                    ], width="auto", className="text-center"),
+                        html.Div([
+                            html.Button([
+                                html.I(className="fas fa-plus fa-lg d-block text-center", style={"color": "#d97706"}),
+                            ], id='open-corpus-builder', n_clicks=0, className="btn btn-link p-0", style={'width': '60px', 'textDecoration': 'none', 'boxShadow': 'none', 'border': 'none'}),
+                            html.Small("Add Books", className="d-block text-center mt-1")
+                        ], className="text-center")
+                    ], width="auto"),
                     dbc.Col([
-                        html.Button(
-                            html.I(className="far fa-trash-alt fa-2x", style={"color": "#dc2626"}),
-                            id='reset-corpus-btn-main',
-                            n_clicks=0,
-                            className="btn btn-outline-danger p-0",
-                            style={'width': '60px'},
-                            title="Reset Corpus (double-click to confirm)"
-                        ),
-                        dcc.Interval(id='reset-corpus-timer', interval=5000, n_intervals=0, disabled=True, max_intervals=1),
-                        dcc.Store(id='reset-corpus-confirm', data=False)
-                    ], width="auto", className="text-center"),
+                        html.Div([
+                            html.Button(
+                                html.I(className="far fa-trash-alt fa-lg d-block text-center", style={"color": "#dc2626"}),
+                                id='reset-corpus-btn-main',
+                                n_clicks=0,
+                                className="btn btn-link p-0",
+                                style={'width': '60px'},
+                                title="Reset Corpus (double-click to confirm)"
+                            ),
+                            html.Small("Reset", className="d-block text-center mt-1"),
+                            dcc.Interval(id='reset-corpus-timer', interval=5000, n_intervals=0, disabled=True, max_intervals=1),
+                            dcc.Store(id='reset-corpus-confirm', data=False)
+                        ], className="text-center")
+                    ], width="auto"),
                 ], className="g-3 justify-content-center"),
                 html.Div(id='popup-upload-status', className="mb-2 text-center")
             ], className="mb-3"),
@@ -83,28 +90,28 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                     dbc.Col([
                         html.Div([
                             html.I(className="fas fa-book fa-lg", style={"color": "#2563eb"}),
-                            html.Div(id='corpus-info-books', className="fw-bold fs-5 mt-1"),
+                            html.Div(id='corpus-info-books', className="fw-bold mt-1", style={'fontSize': '1rem'}),
                             html.Small("Books", className="text-muted")
                         ], className="text-center")
                     ], width=3),
                     dbc.Col([
                         html.Div([
                             html.I(className="fas fa-user fa-lg", style={"color": "#059669"}),
-                            html.Div(id='corpus-info-authors', className="fw-bold fs-5 mt-1"),
+                            html.Div(id='corpus-info-authors', className="fw-bold mt-1", style={'fontSize': '1rem'}),
                             html.Small("Authors", className="text-muted")
                         ], className="text-center")
                     ], width=3),
                     dbc.Col([
                         html.Div([
                             html.I(className="fas fa-map-marker-alt fa-lg", style={"color": "#f59e42"}),
-                            html.Div(id='corpus-info-places', className="fw-bold fs-5 mt-1"),
+                            html.Div(id='corpus-info-places', className="fw-bold mt-1", style={'fontSize': '1rem'}),
                             html.Small("Places", className="text-muted")
                         ], className="text-center")
                     ], width=3),
                     dbc.Col([
                         html.Div([
                             html.I(className="fas fa-calendar fa-lg", style={"color": "#d97706"}),
-                            html.Div(id='corpus-info-years', className="fw-bold fs-5 mt-1"),
+                            html.Div(id='corpus-info-years', className="fw-bold mt-1", style={'fontSize': '1rem'}),
                             html.Small("Years", className="text-muted")
                         ], className="text-center")
                     ], width=3),
@@ -113,12 +120,12 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
             html.Hr(style={'margin': '12px 0'}),
             # Browse Table Section (always visible)
             html.Div([
-                html.H5([
+                html.H6([
                     html.I(className="fas fa-table me-2"),
                     "Books in Current Corpus"
-                ], className="mb-3"),
-                html.Div(id='corpus-browse-table', style={'padding': '8px'})
-            ])
+                ], className="mb-2", style={'fontSize': '1rem', 'fontWeight': 500}),
+                html.Div(id='corpus-browse-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto', 'fontSize': '0.8rem'})
+            ], style={'height': '100%', 'display': 'flex', 'flexDirection': 'column'})
         ], style={'height': '444px', 'overflowY': 'auto'}),
         # Hidden resample-places button to suppress callback errors and allow future restoration
         html.Button("Resample Places", id="resample-places", style={"display": "none"}),
@@ -146,7 +153,7 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
         dbc.CardHeader([
             html.Div([
                 html.I(className="fa fa-chart-bar me-2"),
-                html.H5("Visualization Controls", className="mb-0"),
+                html.H5("Visualization Controls", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
                 html.Button(
                     html.I(className="fa fa-times"),
                     id='close-visualization',
@@ -336,13 +343,13 @@ def confirm_reset_corpus(n_clicks, timer_intervals, className, timer_disabled, c
     ctx = dash.callback_context
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
     if triggered_id == 'reset-corpus-btn-main':
-        # First click: warn (make solid red, enable timer, set confirm True)
-        if 'btn-danger' not in className:
-            return 'btn btn-danger p-0', 'Click again to confirm reset', False, 0, True
+        # First click: highlight (add text-danger), enable timer, set confirm True
+        if 'text-danger' not in className:
+            return 'btn btn-link p-0 text-danger', 'Click again to confirm reset', False, 0, True
         else:
             # Second click: allow the actual reset action (handled elsewhere), reset timer and confirm
-            return 'btn btn-outline-danger p-0', 'Reset Corpus (double-click to confirm)', True, 0, False
+            return 'btn btn-link p-0', 'Reset Corpus (double-click to confirm)', True, 0, False
     elif triggered_id == 'reset-corpus-timer':
-        # Timer expired: revert to outline, reset confirm
-        return 'btn btn-outline-danger p-0', 'Reset Corpus (double-click to confirm)', True, 0, False
+        # Timer expired: revert to plain
+        return 'btn btn-link p-0', 'Reset Corpus (double-click to confirm)', True, 0, False
     return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update 
