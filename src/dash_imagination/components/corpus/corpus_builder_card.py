@@ -79,10 +79,17 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                         )
                     ], className="mb-4"),
                     html.Div([
-                        html.Button([
-                            html.I(className="fas fa-plus me-2"),
-                            "Add Books"
-                        ], id='build-corpus-btn', className="btn btn-primary w-100")
+                        dcc.Loading(
+                            id="build-corpus-loading",
+                            type="default",
+                            children=[
+                                html.Button([
+                                    html.I(className="fas fa-plus me-2"),
+                                    "Add Books"
+                                ], id='build-corpus-btn', className="btn btn-primary w-100"),
+                                html.Div(id="build-corpus-status", className="mt-2")
+                            ]
+                        )
                     ], className="mb-4"),
                     dbc.Button([
                         html.I(className="fas fa-eraser me-2"),
@@ -106,10 +113,17 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                             value=1,
                             className="form-control mb-3"
                         ),
-                        html.Button([
-                            html.I(className="fas fa-plus me-2"),
-                            "Add Books"
-                        ], id='build-content-corpus-btn', className="btn btn-primary w-100 mb-4"),
+                        dcc.Loading(
+                            id="build-content-corpus-loading",
+                            type="default",
+                            children=[
+                                html.Button([
+                                    html.I(className="fas fa-plus me-2"),
+                                    "Add Books"
+                                ], id='build-content-corpus-btn', className="btn btn-primary w-100 mb-4"),
+                                html.Div(id="build-content-corpus-status", className="mt-2")
+                            ]
+                        )
                     ])
                 ], label="Content", tab_id="content"),
             ], id="corpus-builder-tabs", active_tab="metadata"),
@@ -184,7 +198,8 @@ def toggle_card_visibility(n1, n2, builder_style, controls_style):
 
 # New simplified callback: only updates filters/global state for metadata tab
 @callback(
-    Output("current-filters", "data", allow_duplicate=True),
+    [Output("current-filters", "data", allow_duplicate=True),
+     Output("build-corpus-status", "children")],
     [Input("build-corpus-btn", "n_clicks")],
     [State("corpus-category-dropdown", "value"),
      State("corpus-author-dropdown", "value"),
@@ -194,10 +209,13 @@ def toggle_card_visibility(n1, n2, builder_style, controls_style):
     prevent_initial_call=True
 )
 def build_corpus_and_show_stats(n_clicks, categories, authors, year_range, max_places, current_filters):
+    import time
     if not n_clicks:
-        return dash.no_update
+        return dash.no_update, dash.no_update
     if current_filters is None:
         current_filters = {}
+    # Show spinner/message while building
+    status = dbc.Spinner("Preparing books...", color="primary", size="sm", fullscreen=False, spinner_style={"width": "1.5rem", "height": "1.5rem"})
     new_filters = current_filters.copy()
     new_filters['categories'] = categories if categories else []
     new_filters['authors'] = authors if authors else []
@@ -214,7 +232,9 @@ def build_corpus_and_show_stats(n_clicks, categories, authors, year_range, max_p
     places_df = corpus_builder.get_places(max_places=max_places)
     place_tokens = places_df['place_token'].tolist()
     update_from_books(dhlabids, place_tokens)
-    return new_filters
+    # Optionally, show a success message
+    status_done = html.Span("Books added!", style={"color": "#059669", "fontWeight": "500"})
+    return new_filters, status_done
 
 @callback(
     [Output("corpus-category-dropdown", "value"),
@@ -243,7 +263,8 @@ def reset_corpus_filters(n_clicks):
 
 # New simplified callback: only updates filters/global state
 @callback(
-    Output("current-filters", "data", allow_duplicate=True),
+    [Output("current-filters", "data", allow_duplicate=True),
+     Output("build-content-corpus-status", "children")],
     [Input("build-content-corpus-btn", "n_clicks")],
     [State("content-wordforms-input", "value"),
      State("content-min-count-input", "value"),
@@ -252,23 +273,25 @@ def reset_corpus_filters(n_clicks):
 )
 def build_content_corpus_and_show_stats(n_clicks, wordforms, min_count, current_filters):
     if not n_clicks:
-        return dash.no_update
+        return dash.no_update, dash.no_update
     from ...utils.global_state import get_current_state
     dhlabids, _ = get_current_state()
     if not dhlabids:
-        return dash.no_update
+        return dash.no_update, dash.no_update
     words = [w.strip() for w in (wordforms or '').split(',') if w.strip()]
     if not words:
-        return dash.no_update
+        return dash.no_update, dash.no_update
+    # Show spinner/message while building
+    status = dbc.Spinner("Preparing books...", color="primary", size="sm", fullscreen=False, spinner_style={"width": "1.5rem", "height": "1.5rem"})
     try:
         counts_df = count_words(dhlabids, words)
         print(f"[ContentTab] Counts dataframe shape: {counts_df.shape}")
         dhlabid_sums = counts_df.sum(axis=0)
         selected_dhlabids = [int(dhl) for dhl, total in dhlabid_sums.items() if total >= (min_count or 1)]
     except Exception as e:
-        return dash.no_update
+        return dash.no_update, dash.no_update
     if not selected_dhlabids:
-        return dash.no_update
+        return dash.no_update, dash.no_update
     places_df = corpus_builder.get_places(max_places=500)
     place_tokens = places_df['place_token'].tolist()
     update_from_books(selected_dhlabids, place_tokens)
@@ -276,4 +299,6 @@ def build_content_corpus_and_show_stats(n_clicks, wordforms, min_count, current_
     new_filters['content_words'] = words
     new_filters['content_min_count'] = min_count
     new_filters['corpus_source'] = 'Content'
-    return new_filters 
+    # Optionally, show a success message
+    status_done = html.Span("Books added!", style={"color": "#059669", "fontWeight": "500"})
+    return new_filters, status_done 
