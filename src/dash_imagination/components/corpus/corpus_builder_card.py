@@ -230,7 +230,7 @@ def build_corpus_and_show_stats(n_clicks, categories, authors, year_range, max_p
         author=author
     )
     places_df = corpus_builder.get_places(max_places=max_places)
-    place_tokens = places_df['place_token'].tolist()
+    place_tokens = places_df['place_token'].tolist() if 'place_token' in places_df.columns else []
     update_from_books(dhlabids, place_tokens)
     # Optionally, show a success message
     status_done = html.Span("Books added!", style={"color": "#059669", "fontWeight": "500"})
@@ -275,9 +275,19 @@ def build_content_corpus_and_show_stats(n_clicks, wordforms, min_count, current_
     if not n_clicks:
         return dash.no_update, dash.no_update
     from ...utils.global_state import get_current_state
+    from ...utils.corpus_build import corpus_builder
     dhlabids, _ = get_current_state()
+    # If corpus is empty, use all dhlabids from the database
     if not dhlabids:
-        return dash.no_update, dash.no_update
+        dhlabids = corpus_builder.get_corpus()
+        if not dhlabids:
+            # If still empty, fetch all from DB
+            import pandas as pd
+            from ...utils.db import get_db_connection
+            conn = get_db_connection()
+            df = pd.read_sql_query("SELECT dhlabid FROM corpus", conn)
+            dhlabids = df['dhlabid'].tolist()
+            conn.close()
     words = [w.strip() for w in (wordforms or '').split(',') if w.strip()]
     if not words:
         return dash.no_update, dash.no_update
@@ -293,7 +303,7 @@ def build_content_corpus_and_show_stats(n_clicks, wordforms, min_count, current_
     if not selected_dhlabids:
         return dash.no_update, dash.no_update
     places_df = corpus_builder.get_places(max_places=500)
-    place_tokens = places_df['place_token'].tolist()
+    place_tokens = places_df['place_token'].tolist() if 'place_token' in places_df.columns else []
     update_from_books(selected_dhlabids, place_tokens)
     new_filters = current_filters.copy() if current_filters else {}
     new_filters['content_words'] = words

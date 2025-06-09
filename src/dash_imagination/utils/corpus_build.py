@@ -11,34 +11,32 @@ class CorpusBuilder:
     
     def __init__(self):
         """Initialize the corpus builder with empty state."""
-        self._db_conn = None
+        # self._db_conn = None  # Remove persistent connection
         self._dhlabids: Set[int] = set()
         self._books_df = None
         self._places_df = None
     
     def _get_db_connection(self):
-        """Get database connection if not already established."""
-        if self._db_conn is None:
-            self._db_conn = get_db_connection()
-        return self._db_conn
+        """Get a new database connection."""
+        return get_db_connection()
     
     def _fetch_book_metadata(self) -> pd.DataFrame:
         """Fetch book metadata from the database."""
-        conn = self._get_db_connection()
-        query = """
-        SELECT dhlabid, urn, author, category, year
-        FROM corpus
-        """
-        return pd.read_sql_query(query, conn)
+        with self._get_db_connection() as conn:
+            query = """
+            SELECT dhlabid, urn, author, category, year
+            FROM corpus
+            """
+            return pd.read_sql_query(query, conn)
     
     def _fetch_places_data(self) -> pd.DataFrame:
         """Fetch places data from the database."""
-        conn = self._get_db_connection()
-        query = """
-        SELECT DISTINCT dhlabid, token as place_token
-        FROM books
-        """
-        return pd.read_sql_query(query, conn)
+        with self._get_db_connection() as conn:
+            query = """
+            SELECT DISTINCT dhlabid, token as place_token
+            FROM books
+            """
+            return pd.read_sql_query(query, conn)
     
     def build_corpus(self, dhlabids: Optional[List[int]] = None, 
                     category: Optional[str] = None, 
@@ -94,27 +92,19 @@ class CorpusBuilder:
         return self._books_df[self._books_df['dhlabid'].isin(self._dhlabids)]
     
     def get_places(self, max_places: Optional[int] = 2000) -> pd.DataFrame:
-        """Get the places data for the current corpus, with optional sampling.
-        
-        Args:
-            max_places: Maximum number of unique places to return. If None or 0, returns all places.
-                      Places are sampled based on frequency (most frequent places are kept).
-        """
-        if self._places_df is None:
-            self._places_df = self._fetch_places_data()
-        
-        # Get places for current corpus
-        places_df = self._places_df[self._places_df['dhlabid'].isin(self._dhlabids)]
-        
-        if max_places and max_places > 0:
-            # Count frequency of each place
-            place_counts = places_df['place_token'].value_counts()
-            # Keep only the top N most frequent places
-            top_places = place_counts.head(max_places).index
-            # Filter the dataframe to keep only these places
-            places_df = places_df[places_df['place_token'].isin(top_places)]
-        
-        return places_df
+        """Get places for the current corpus, limited by max_places."""
+        with self._get_db_connection() as conn:
+            query = """
+            SELECT DISTINCT token as place_token
+            FROM books
+            WHERE dhlabid IN ({})
+            LIMIT ?
+            """
+            if not self._dhlabids:
+                return pd.DataFrame()
+            q = query.format(','.join(['?'] * len(self._dhlabids)))
+            params = list(self._dhlabids) + [max_places]
+            return pd.read_sql_query(q, conn, params=params)
     
     def get_corpus_stats(self, max_places: Optional[int] = 2000) -> Dict:
         """Get statistics about the current corpus."""
