@@ -136,6 +136,17 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
 )
 def toggle_card_visibility(n1, n2, builder_style, controls_style):
     """Toggle the visibility of the corpus builder card while keeping controls visible."""
+    import dash
+    from dash import no_update
+    import dash_html_components as html
+    import dash_core_components as dcc
+    import dash_bootstrap_components as dbc
+    import flask
+    import os
+    import sys
+    import math
+    import json
+    from dash import ctx
     if not ctx.triggered:
         return dash.no_update, dash.no_update
     
@@ -148,8 +159,20 @@ def toggle_card_visibility(n1, n2, builder_style, controls_style):
     if button_id == "open-corpus-builder":
         # Show builder card and ensure controls stay visible
         builder_style["display"] = "block"
-        builder_style["left"] = "50%"
-        builder_style["transform"] = "translateX(-50%)"
+        # Remove transform and set left in px to center
+        builder_style.pop("transform", None)
+        # Set left to center in px (assume card width 350px)
+        builder_style["width"] = "350px"
+        builder_style["height"] = "500px"
+        builder_style["zIndex"] = 800
+        builder_style["top"] = "60px"
+        # Calculate left in px: (window.innerWidth - 350) // 2
+        # Since we can't access window.innerWidth server-side, use a default (e.g., 1200px)
+        # The JS drag will correct this after first drag, but this avoids the jump
+        default_window_width = 1200
+        card_width = 350
+        left_px = (default_window_width - card_width) // 2
+        builder_style["left"] = f"{left_px}px"
         controls_style["display"] = "block"
         return builder_style, controls_style
     elif button_id == "close-corpus-builder":
