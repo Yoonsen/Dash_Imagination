@@ -1,0 +1,29 @@
+.place-similarity-controls {
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    margin-bottom: 1rem;
+}
+
+.similar-places-list {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 1rem;
+}
+
+.similar-place-item {
+    padding: 0.5rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.similar-place-item:last-child {
+    border-bottom: none;
+}
+
+.place-name {
+    font-weight: 500;
+}
+
+.similarity-score {
+    color: #6c757d;
+    font-size: 0.875rem;
+} 
