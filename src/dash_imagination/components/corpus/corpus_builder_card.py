@@ -19,7 +19,7 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
         dbc.CardHeader([
             html.Div([
                 html.I(className="fa fa-book me-2"),
-                html.H5("Build Corpus", className="mb-0 d-inline"),
+                html.H5("Build Corpus", className="mb-0 d-inline", style={"fontSize": "14px", "fontWeight": 500}),
                 dbc.Button(
                     "×",
                     id="close-corpus-builder",

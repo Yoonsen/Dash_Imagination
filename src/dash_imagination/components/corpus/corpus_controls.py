@@ -89,30 +89,30 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                 dbc.Row([
                     dbc.Col([
                         html.Div([
-                            html.I(className="fas fa-book fa-lg", style={"color": "#2563eb"}),
-                            html.Div(id='corpus-info-books', className="fw-bold mt-1", style={'fontSize': '1rem'}),
-                            html.Small("Books", className="text-muted")
+                            html.I(className="fas fa-book fa-lg", style={"color": "#2563eb", "fontSize": "1.1rem"}),
+                            html.Div(id='corpus-info-books', className="fw-bold mt-1", style={'fontSize': '0.95rem'}),
+                            html.Small("Books", className="text-muted", style={"fontSize": "0.8rem"})
                         ], className="text-center")
                     ], width=3),
                     dbc.Col([
                         html.Div([
-                            html.I(className="fas fa-user fa-lg", style={"color": "#059669"}),
-                            html.Div(id='corpus-info-authors', className="fw-bold mt-1", style={'fontSize': '1rem'}),
-                            html.Small("Authors", className="text-muted")
+                            html.I(className="fas fa-user fa-lg", style={"color": "#059669", "fontSize": "1.1rem"}),
+                            html.Div(id='corpus-info-authors', className="fw-bold mt-1", style={'fontSize': '0.95rem'}),
+                            html.Small("Authors", className="text-muted", style={"fontSize": "0.8rem"})
                         ], className="text-center")
                     ], width=3),
                     dbc.Col([
                         html.Div([
-                            html.I(className="fas fa-map-marker-alt fa-lg", style={"color": "#f59e42"}),
-                            html.Div(id='corpus-info-places', className="fw-bold mt-1", style={'fontSize': '1rem'}),
-                            html.Small("Places", className="text-muted")
+                            html.I(className="fas fa-map-marker-alt fa-lg", style={"color": "#f59e42", "fontSize": "1.1rem"}),
+                            html.Div(id='corpus-info-places', className="fw-bold mt-1", style={'fontSize': '0.95rem'}),
+                            html.Small("Places", className="text-muted", style={"fontSize": "0.8rem"})
                         ], className="text-center")
                     ], width=3),
                     dbc.Col([
                         html.Div([
-                            html.I(className="fas fa-calendar fa-lg", style={"color": "#d97706"}),
-                            html.Div(id='corpus-info-years', className="fw-bold mt-1", style={'fontSize': '1rem'}),
-                            html.Small("Years", className="text-muted")
+                            html.I(className="fas fa-calendar fa-lg", style={"color": "#d97706", "fontSize": "1.1rem"}),
+                            html.Div(id='corpus-info-years', className="fw-bold mt-1", style={'fontSize': '0.95rem'}),
+                            html.Small("Years", className="text-muted", style={"fontSize": "0.8rem"})
                         ], className="text-center")
                     ], width=3),
                 ], className="g-2 mb-3 justify-content-center")
@@ -120,10 +120,6 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
             html.Hr(style={'margin': '12px 0'}),
             # Browse Table Section (always visible)
             html.Div([
-                html.H6([
-                    html.I(className="fas fa-table me-2"),
-                    "Books in Current Corpus"
-                ], className="mb-2", style={'fontSize': '1rem', 'fontWeight': 500}),
                 html.Div(id='corpus-browse-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto', 'fontSize': '0.8rem'})
             ], style={'height': '100%', 'display': 'flex', 'flexDirection': 'column'})
         ], style={'height': '444px', 'overflowY': 'auto'}),
@@ -132,7 +128,7 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
         # Hidden resample-container div to suppress callback errors
         html.Div(id='resample-container', style={'display': 'none'})
     ], id='corpus-controls-container', className="position-absolute m-3", style={
-        'width': '350px',
+        'width': '450px',
         'height': '500px',
         'zIndex': 800,
         'display': 'none',

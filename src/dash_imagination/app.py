@@ -20,6 +20,7 @@ from dash_imagination.utils.global_state import get_current_state, update_from_b
 import plotly.express as px
 import json
 from flask import request, send_file
+from dash import dash_table
 
 #=== initialize
 
@@ -1649,88 +1650,139 @@ def handle_place_click(n_clicks, ids, lats, lons, hovers):
 @app.callback(
     [Output('place-summary-container', 'style'),
      Output('place-summary', 'children')],
-    [Input('main-map', 'clickData')],
+    [Input('main-map', 'clickData'),
+     Input('selected-place', 'data')],
     [State('place-summary-container', 'style')],
     prevent_initial_call=True
 )
-def update_place_summary(click_data, current_style):
-    if not click_data:
-        return dash.no_update, dash.no_update
-    
-    try:
-        # Get the clicked place
-        point = click_data['points'][0]
-        token = point['customdata']
-        
-        # Get the hover text from the point
-        hover_text = point.get('text', '')
-        parts = hover_text.split('<br>')
-        
-        token_part = parts[0]
-        modern_part = ""
-        frequency = 0
-        book_count = 0
-        
-        # Parse the hover text to get additional information
-        for part in parts:
-            if 'Modern name:' in part:
-                modern_part = part.split('Modern name: ')[1].strip()
-            elif 'Mentions:' in part:
-                try:
-                    frequency = int(part.split('Mentions: ')[1].strip())
-                except (ValueError, IndexError):
-                    print("Could not parse frequency")
-            elif 'Books:' in part:
-                try:
-                    book_count = int(part.split('Books: ')[1].strip())
-                except (ValueError, IndexError):
-                    print("Could not parse book count")
-        
-        # Get current state
-        books, places = get_current_state()
-        if not books:
-            return dash.no_update, dash.no_update
-        
-        # Get book details for the place
-        books_df, total_books = get_place_details(token)
-        print(f"Got {len(books_df)} books for place {token}")
-        
-        # Get total counts from the first row (they're the same for all rows)
-        total_books = int(books_df['total_books'].iloc[0]) if not books_df.empty else 0
-        total_mentions = int(books_df['total_mentions'].iloc[0]) if not books_df.empty else 0
-        
-        summary = html.Div([
-            html.Div([
-                html.H5(token_part, style={'marginBottom': '5px'}),
-                html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
-                html.P(f"Appears in {total_books:,} books with {total_mentions:,} total mentions", style={'marginTop': '5px'}),
-                html.Hr(style={'margin': '10px 0'})
-            ]),
-            html.Div([
-                html.H6(f"Books mentioning this place (showing {len(books_df):,} of {total_books:,}):", style={'marginBottom': '10px'}),
+def update_place_summary(click_data, selected_place, current_style):
+    ctx = callback_context
+    triggered = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
+    # If triggered by map click
+    if triggered == 'main-map':
+        try:
+            if not click_data or 'points' not in click_data or not click_data['points']:
+                return current_style, dash.no_update
+            point = click_data['points'][0]
+            token = point.get('customdata') or point.get('text')
+            # Try to extract modern name and hover text if available
+            hover_text = point.get('text', '')
+            modern_part = ''
+            frequency = 0
+            book_count = 0
+            # Parse hover_text for modern name, frequency, and book count
+            if '<br>' in hover_text:
+                parts = hover_text.split('<br>')
+                if len(parts) > 0:
+                    token_part = parts[0]
+                    if '(' in token_part and ')' in token_part:
+                        token = token_part.split('(')[0].strip()
+                        modern_part = token_part.split('(')[1].split(')')[0].strip()
+                if len(parts) > 1 and 'Mentions:' in parts[1] and 'Books:' in parts[2]:
+                    try:
+                        frequency = int(parts[1].replace('Mentions:', '').strip())
+                        book_count = int(parts[2].replace('Books:', '').strip())
+                    except Exception:
+                        pass
+            # Get book details for the place
+            books_df, total_books = get_place_details(token)
+            if not books_df.empty:
+                if 'total_mentions' in books_df.columns:
+                    frequency = int(books_df.iloc[0]['total_mentions'])
+                if 'total_books' in books_df.columns:
+                    book_count = int(books_df.iloc[0]['total_books'])
+                else:
+                    book_count = len(books_df)
+            summary = html.Div([
                 html.Div([
+                    html.H5(token, style={'marginBottom': '5px'}),
+                    html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
+                    html.P(f"Appears in {book_count:,} books with {frequency:,} total mentions", style={'marginTop': '5px'}),
+                    html.Hr(style={'margin': '10px 0'})
+                ]),
+                html.Div([
+                    html.H6(f"Books mentioning this place (showing {len(books_df):,} of {book_count:,}):", style={'marginBottom': '10px'}),
                     html.Div([
-                        html.A(
-                            f"{row['title']} ({row['year']})",
-                            href=f"https://www.nb.no/items/{row['urn']}?searchText={token}",
-                            target="_blank",
-                            style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
-                        ),
                         html.Div([
-                            html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
-                            html.Span(f" • {int(row['mention_count']):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
-                        ], style={'display': 'flex', 'justifyContent': 'space-between'})
-                    ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
-                    for i, row in books_df.iterrows() if pd.notna(row['title'])
-                ]) if not books_df.empty else html.Div("No book details available")
+                            html.A(
+                                f"{row['title']} ({row['year']})",
+                                href=f"https://www.nb.no/items/{row['urn']}?searchText={token}",
+                                target="_blank",
+                                style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
+                            ),
+                            html.Div([
+                                html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
+                                html.Span(f" • {int(row.get('mention_count', 1)):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                            ], style={'display': 'flex', 'justifyContent': 'space-between'})
+                        ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
+                        for i, row in books_df.iterrows() if pd.notna(row['title'])
+                    ]) if not books_df.empty else html.Div("No book details available")
+                ])
             ])
-        ])
-        
-        new_style = dict(current_style)
-        new_style['display'] = 'block'
-        return new_style, summary
-    except Exception as e:
-        print(f"Error updating place summary: {e}")
+            new_style = dict(current_style)
+            new_style['display'] = 'block'
+            return new_style, summary
+        except Exception as e:
+            print(f"Error updating place summary (map): {e}")
+            return dash.no_update, dash.no_update
+    # If triggered by list click
+    elif triggered == 'selected-place':
+        try:
+            if not selected_place:
+                return current_style, dash.no_update
+            # Use selected_place (token) to fetch and display the place info
+            token = selected_place
+            # Get book details for the place
+            books_df, total_books = get_place_details(token)
+            # Fallbacks for summary info
+            modern_part = ""
+            frequency = 0
+            book_count = 0
+            # Try to get modern name, frequency, and book count from books_df if available
+            if not books_df.empty:
+                # Try to get modern name from the first row if present
+                if 'modern' in books_df.columns:
+                    modern_part = books_df.iloc[0]['modern']
+                # Try to get total mentions and books from the columns if present
+                if 'total_mentions' in books_df.columns:
+                    frequency = int(books_df.iloc[0]['total_mentions'])
+                if 'total_books' in books_df.columns:
+                    book_count = int(books_df.iloc[0]['total_books'])
+                else:
+                    book_count = len(books_df)
+            summary = html.Div([
+                html.Div([
+                    html.H5(token, style={'marginBottom': '5px'}),
+                    html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
+                    html.P(f"Appears in {book_count:,} books with {frequency:,} total mentions", style={'marginTop': '5px'}),
+                    html.Hr(style={'margin': '10px 0'})
+                ]),
+                html.Div([
+                    html.H6(f"Books mentioning this place (showing {len(books_df):,} of {book_count:,}):", style={'marginBottom': '10px'}),
+                    html.Div([
+                        html.Div([
+                            html.A(
+                                f"{row['title']} ({row['year']})",
+                                href=f"https://www.nb.no/items/{row['urn']}?searchText={token}",
+                                target="_blank",
+                                style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
+                            ),
+                            html.Div([
+                                html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
+                                html.Span(f" • {int(row.get('mention_count', 1)):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                            ], style={'display': 'flex', 'justifyContent': 'space-between'})
+                        ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
+                        for i, row in books_df.iterrows() if pd.notna(row['title'])
+                    ]) if not books_df.empty else html.Div("No book details available")
+                ])
+            ])
+            new_style = dict(current_style)
+            new_style['display'] = 'block'
+            return new_style, summary
+        except Exception as e:
+            print(f"Error updating place summary (list): {e}")
+            return dash.no_update, dash.no_update
+    else:
         return dash.no_update, dash.no_update
 
 # Callback for the close button on place summary
@@ -2534,30 +2586,64 @@ def update_corpus_info_and_table(_, __):
         if df.empty:
             table_section = html.Div("No books found in corpus.", style={'color': '#666'})
         else:
-            rows = []
-            for _, row in df.iterrows():
-                title_link = html.A(
-                    row['title'],
-                    href=f"https://www.nb.no/items/{row['urn']}",
-                    target="_blank",
-                    style={"fontWeight": "500", "color": "#1a56db", "textDecoration": "none"}
+            # Wrap DataTable in a div to move horizontal scrollbar to the top
+            table_section = html.Div([
+                dash_table.DataTable(
+                    columns=[
+                        {"name": "Title", "id": "title", "presentation": "markdown"},
+                        {"name": "👤", "id": "author"},
+                        {"name": "📚", "id": "category"},
+                        {"name": "📅", "id": "year"},
+                        {"name": "📍", "id": "placename_count"}
+                    ],
+                    data=[{
+                        **row.to_dict(),
+                        "title": f"[ {(row['title'] or '')[:20] + ('…' if row['title'] and len(row['title']) > 20 else '')} ](https://www.nb.no/items/{row['urn']})",
+                        "author": (row['author'] or '')[:20] + ('…' if row['author'] and len(row['author']) > 20 else ''),
+                        "_title_full": row['title'] or '',
+                        "_author_full": row['author'] or ''
+                    } for _, row in df.iterrows()],
+                    style_table={
+                        "maxHeight": "350px",
+                        "overflowY": "auto",
+                        "overflowX": "hidden",
+                        "minWidth": "100%"
+                    },
+                    style_cell={
+                        "fontSize": "0.75rem",
+                        "padding": "2px 4px",
+                        "whiteSpace": "pre-line",
+                        "overflow": "hidden",
+                        "textOverflow": "ellipsis",
+                        "maxWidth": "90px",
+                        "minWidth": "40px",
+                        "wordBreak": "break-word"
+                    },
+                    style_cell_conditional=[
+                        {"if": {"column_id": "title"}, "maxWidth": "110px", "minWidth": "60px"},
+                        {"if": {"column_id": "author"}, "maxWidth": "80px", "minWidth": "40px"},
+                        {"if": {"column_id": "category"}, "maxWidth": "60px", "minWidth": "40px", "textAlign": "center"},
+                        {"if": {"column_id": "year"}, "maxWidth": "40px", "minWidth": "30px", "textAlign": "center"},
+                        {"if": {"column_id": "placename_count"}, "maxWidth": "40px", "minWidth": "30px", "textAlign": "center"}
+                    ],
+                    style_header={"fontWeight": "bold", "backgroundColor": "#f8fafc", "position": "sticky", "top": 0, "zIndex": 1, "fontSize": "0.8rem"},
+                    style_data_conditional=[
+                        {"if": {"row_index": "odd"}, "backgroundColor": "#f6f6f6"}
+                    ],
+                    markdown_options={"link_target": "_blank"},
+                    page_action="none",
+                    fixed_rows={"headers": True},
+                    sort_action="native",
+                    fill_width=True,
+                    id="corpus-browse-datatable",
+                    tooltip_data=[
+                        {"title": {"value": row['title'] or '', "type": "markdown"}, "author": {"value": row['author'] or '', "type": "text"}} for _, row in df.iterrows()
+                    ],
+                    tooltip_duration=None
                 )
-                rows.append(html.Tr([
-                    html.Td(title_link),
-                    html.Td(row['author']),
-                    html.Td(row['category']),
-                    html.Td(row['year']),
-                    html.Td(int(row['placename_count']))
-                ]))
-            header = html.Thead(html.Tr([
-                html.Th("Title"),
-                html.Th("Author"),
-                html.Th("Category"),
-                html.Th("Year"),
-                html.Th("Placenames")
-            ]))
-            body = html.Tbody(rows)
-            table_section = dbc.Table([header, body], bordered=True, hover=True, responsive=True, size="sm", style={"fontSize": "0.8rem"})
+            ], style={
+                "width": "100%"
+            })
         return (
             f"{info['book_count']:,}",
             f"{info['author_count']:,}",
@@ -2565,6 +2651,9 @@ def update_corpus_info_and_table(_, __):
             years,
             table_section
         )
+    except Exception as e:
+        print(f"Error in update_corpus_info_and_table: {e}")
+        return "0", "0", "0", "", html.Div("Error displaying corpus table.", style={'color': 'red'})
     finally:
         conn.close()
 
