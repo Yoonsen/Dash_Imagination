@@ -3,6 +3,7 @@ import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 from dash import callback, no_update
 import dash
+from dash import ALL
 
 def create_corpus_controls(categories_list=None, titles_list=None, default_filters=None):
     """Create the corpus controls as a popup dialogue, with modern upload/download and info layout."""
@@ -120,7 +121,9 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
             html.Hr(style={'margin': '12px 0'}),
             # Browse Table Section (always visible)
             html.Div([
-                html.Div(id='corpus-browse-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto', 'fontSize': '0.8rem'})
+                filter_bar,
+                html.Div(id='corpus-browse-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto', 'fontSize': '0.8rem'}),
+                dcc.Store(id='corpus-table-filter', data={'column': None, 'value': None, 'direction': None})
             ], style={'height': '100%', 'display': 'flex', 'flexDirection': 'column'})
         ], style={'height': '444px', 'overflowY': 'auto'}),
         # Hidden resample-places button to suppress callback errors and allow future restoration
@@ -349,3 +352,61 @@ def confirm_reset_corpus(n_clicks, timer_intervals, className, timer_disabled, c
         # Timer expired: revert to plain
         return 'btn btn-link p-0', 'Reset Corpus (double-click to confirm)', True, 0, False
     return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update 
+
+# Remove old filter bars and input
+# Add new filter bar and modal
+filter_bar = html.Div(
+    [
+        html.Div(
+            html.Span("\u2699", style={"fontSize": "1.3rem"}),
+            id="corpus-filter-bar",
+            title="Filter corpus…",
+            style={
+                "width": "400px",
+                "height": "18px",
+                "margin": "0 auto 10px auto",
+                "background": "#e0e7ef",
+                "borderRadius": "6px",
+                "display": "flex",
+                "alignItems": "center",
+                "justifyContent": "center",
+                "fontSize": "0.9rem",
+                "fontWeight": 500,
+                "color": "#4B6CB7",
+                "cursor": "pointer",
+                "boxShadow": "0 1px 2px rgba(0,0,0,0.04)",
+                "transition": "background 0.2s"
+            }
+        ),
+        dbc.Modal(
+            [
+                dbc.ModalHeader("Filter Corpus (coming soon)"),
+                dbc.ModalBody("Filter options will appear here."),
+                dbc.ModalFooter(
+                    dbc.Button("Confirm", id="corpus-filter-modal-confirm", color="primary", n_clicks=0)
+                )
+            ],
+            id="corpus-filter-modal",
+            is_open=False,
+            centered=True,
+            backdrop=True,
+        )
+    ]
+) 
+
+@callback(
+    Output('corpus-filter-modal', 'is_open'),
+    [Input('corpus-filter-bar', 'n_clicks'), Input('corpus-filter-modal-confirm', 'n_clicks')],
+    [State('corpus-filter-modal', 'is_open')],
+    prevent_initial_call=True
+)
+def toggle_filter_modal(bar_click, confirm_click, is_open):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return is_open
+    trigger = ctx.triggered[0]['prop_id'].split('.')[0]
+    if trigger == 'corpus-filter-bar' and bar_click:
+        return True
+    elif trigger == 'corpus-filter-modal-confirm' and confirm_click:
+        return False
+    return is_open 

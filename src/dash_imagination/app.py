@@ -2541,13 +2541,14 @@ def test_info_btn_callback(n_clicks):
         Output('corpus-info-years', 'children'),
         Output('corpus-browse-table', 'children'),
     ],
-    [Input('filtered-data', 'data'), Input('build-corpus-btn', 'n_clicks')],
+    [Input('filtered-data', 'data'), Input('build-corpus-btn', 'n_clicks'), Input('corpus-table-filter', 'data')],
     prevent_initial_call=True
 )
-def update_corpus_info_and_table(_, __):
+def update_corpus_info_and_table(_, __, filter_data):
     books, _ = get_current_state()
     if not books:
         return "0", "0", "0", "", html.Div("No books in corpus.", style={'color': '#666'})
+    import pandas as pd
     conn = get_db_connection()
     try:
         # Info section
@@ -2573,16 +2574,35 @@ def update_corpus_info_and_table(_, __):
             years = f"{int(info['min_year'])}–{int(info['max_year'])}"
         else:
             years = ""
-        # Browse table
+        # --- Build SQL filter for the table ---
+        where_clauses = [f"c.dhlabid IN ({','.join(['?'] * len(books))})"]
+        params = list(books)
+        if filter_data and filter_data.get('column') and filter_data.get('value') is not None:
+            col = filter_data['column']
+            val = filter_data['value']
+            if col == 'year':
+                where_clauses.append("c.year <= ?")
+                params.append(val)
+            elif col == 'placename_count':
+                # placename_count is a subquery, so filter after fetch
+                pass
+            elif col in ['title', 'author', 'category']:
+                where_clauses.append(f"LOWER(c.{col}) LIKE ?")
+                params.append(f"%{str(val).lower()}%")
+        where_sql = ' AND '.join(where_clauses)
         table_query = f'''
         SELECT c.title, c.author, c.category, c.year, c.urn,
                (SELECT COUNT(DISTINCT b.token) FROM books b WHERE b.dhlabid = c.dhlabid) as placename_count
         FROM corpus c
-        WHERE c.dhlabid IN ({','.join(['?'] * len(books))})
+        WHERE {where_sql}
         ORDER BY c.year DESC, c.title
         LIMIT 100
         '''
-        df = pd.read_sql_query(table_query, conn, params=tuple(books))
+        df = pd.read_sql_query(table_query, conn, params=tuple(params))
+        # placename_count filter (must be applied after fetch)
+        if filter_data and filter_data.get('column') == 'placename_count' and filter_data.get('value') is not None:
+            val = filter_data['value']
+            df = df[df['placename_count'] <= val]
         if df.empty:
             table_section = html.Div("No books found in corpus.", style={'color': '#666'})
         else:
@@ -2633,8 +2653,8 @@ def update_corpus_info_and_table(_, __):
                         {"if": {"column_id": "title"}, "maxWidth": "110px", "minWidth": "60px"},
                         {"if": {"column_id": "author"}, "maxWidth": "80px", "minWidth": "40px"},
                         {"if": {"column_id": "category"}, "maxWidth": "60px", "minWidth": "40px", "textAlign": "center"},
-                        {"if": {"column_id": "year"}, "maxWidth": "40px", "minWidth": "30px", "textAlign": "center"},
-                        {"if": {"column_id": "placename_count"}, "maxWidth": "40px", "minWidth": "30px", "textAlign": "center"}
+                        {"if": {"column_id": "year"}, "maxWidth": "36px", "minWidth": "26px", "textAlign": "center"},
+                        {"if": {"column_id": "placename_count"}, "maxWidth": "36px", "minWidth": "26px", "textAlign": "center"}
                     ],
                     style_data_conditional=[
                         {"if": {"row_index": "odd"}, "backgroundColor": "#f6f6f6"}
