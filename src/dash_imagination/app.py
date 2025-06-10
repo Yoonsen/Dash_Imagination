@@ -2591,10 +2591,10 @@ def update_corpus_info_and_table(_, __):
                 dash_table.DataTable(
                     columns=[
                         {"name": "Title", "id": "title", "presentation": "markdown"},
-                        {"name": "👤", "id": "author"},
-                        {"name": "📚", "id": "category"},
-                        {"name": "📅", "id": "year"},
-                        {"name": "📍", "id": "placename_count"}
+                        {"name": "Author", "id": "author"},
+                        {"name": "≡", "id": "category"},
+                        {"name": "📅\ufe0e", "id": "year"},
+                        {"name": "◆", "id": "placename_count"}
                     ],
                     data=[{
                         **row.to_dict(),
@@ -2603,6 +2603,16 @@ def update_corpus_info_and_table(_, __):
                         "_title_full": row['title'] or '',
                         "_author_full": row['author'] or ''
                     } for _, row in df.iterrows()],
+                    tooltip_data=[
+                        {"title": {"value": row['title'] or '', "type": "markdown"}, "author": {"value": row['author'] or '', "type": "markdown"}} for _, row in df.iterrows()
+                    ],
+                    style_header={
+                        'backgroundColor': '#f8fafc',
+                        'color': '#4B6CB7',
+                        'fontWeight': '500',
+                        'fontSize': '0.85rem',
+                        'borderBottom': '1px solid #e5e7eb',
+                    },
                     style_table={
                         "maxHeight": "350px",
                         "overflowY": "auto",
@@ -2626,7 +2636,6 @@ def update_corpus_info_and_table(_, __):
                         {"if": {"column_id": "year"}, "maxWidth": "40px", "minWidth": "30px", "textAlign": "center"},
                         {"if": {"column_id": "placename_count"}, "maxWidth": "40px", "minWidth": "30px", "textAlign": "center"}
                     ],
-                    style_header={"fontWeight": "bold", "backgroundColor": "#f8fafc", "position": "sticky", "top": 0, "zIndex": 1, "fontSize": "0.8rem"},
                     style_data_conditional=[
                         {"if": {"row_index": "odd"}, "backgroundColor": "#f6f6f6"}
                     ],
@@ -2636,9 +2645,6 @@ def update_corpus_info_and_table(_, __):
                     sort_action="native",
                     fill_width=True,
                     id="corpus-browse-datatable",
-                    tooltip_data=[
-                        {"title": {"value": row['title'] or '', "type": "markdown"}, "author": {"value": row['author'] or '', "type": "text"}} for _, row in df.iterrows()
-                    ],
                     tooltip_duration=None
                 )
             ], style={

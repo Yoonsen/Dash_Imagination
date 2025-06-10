@@ -34,7 +34,7 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                             dcc.Upload(
                                 id='popup-upload-corpus',
                                 children=html.Div([
-                                    html.I(className="fas fa-upload fa-lg d-block text-center", style={"color": "#2563eb"}),
+                                    html.I(className="fas fa-upload", style={"color": "#4B6CB7", "fontSize": "1rem"}),
                                 ]),
                                 style={
                                     'display': 'inline-block',
@@ -42,80 +42,80 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                                     'border': 'none',
                                     'background': 'none',
                                     'padding': '0',
-                                    'width': '60px'
+                                    'width': '40px'
                                 },
                                 multiple=False
                             ),
-                            html.Small("Upload", className="d-block text-center mt-1")
                         ], className="text-center")
                     ], width="auto"),
                     dbc.Col([
                         html.Div([
                             dbc.Button([
-                                html.I(className="fas fa-download fa-lg d-block text-center", style={"color": "#059669"})
-                            ], id='corpus-download-btn-unique', n_clicks=0, color="link", className="p-0", style={'width': '60px'}),
-                            html.Small("Download", className="d-block text-center mt-1"),
+                                html.I(className="fas fa-download", style={"color": "#4B6CB7", "fontSize": "1rem"})
+                            ], id='corpus-download-btn-unique', n_clicks=0, color="link", className="p-0", style={'width': '40px'}),
                             dcc.Download(id='corpus-download-unique')
                         ], className="text-center")
                     ], width="auto"),
                     dbc.Col([
                         html.Div([
                             html.Button([
-                                html.I(className="fas fa-plus fa-lg d-block text-center", style={"color": "#d97706"}),
-                            ], id='open-corpus-builder', n_clicks=0, className="btn btn-link p-0", style={'width': '60px', 'textDecoration': 'none', 'boxShadow': 'none', 'border': 'none'}),
-                            html.Small("Add Books", className="d-block text-center mt-1")
+                                html.I(className="fas fa-plus", style={"color": "#4B6CB7", "fontSize": "1rem"}),
+                            ], id='open-corpus-builder', n_clicks=0, className="btn btn-link p-0", style={'width': '40px', 'textDecoration': 'none', 'boxShadow': 'none', 'border': 'none'})
                         ], className="text-center")
                     ], width="auto"),
                     dbc.Col([
                         html.Div([
                             html.Button(
-                                html.I(className="far fa-trash-alt fa-lg d-block text-center", style={"color": "#dc2626"}),
+                                html.I(className="far fa-trash-alt", style={"color": "#dc2626", "fontSize": "1rem"}),
                                 id='reset-corpus-btn-main',
                                 n_clicks=0,
                                 className="btn btn-link p-0",
-                                style={'width': '60px'},
+                                style={'width': '40px'},
                                 title="Reset Corpus (double-click to confirm)"
                             ),
-                            html.Small("Reset", className="d-block text-center mt-1"),
                             dcc.Interval(id='reset-corpus-timer', interval=5000, n_intervals=0, disabled=True, max_intervals=1),
                             dcc.Store(id='reset-corpus-confirm', data=False)
                         ], className="text-center")
                     ], width="auto"),
                 ], className="g-3 justify-content-center"),
                 html.Div(id='popup-upload-status', className="mb-2 text-center")
-            ], className="mb-3"),
+            ], style={'marginBottom': '12px'}),
             # Corpus info stats row (4 columns)
             html.Div([
                 dbc.Row([
                     dbc.Col([
                         html.Div([
-                            html.I(className="fas fa-book fa-lg", style={"color": "#2563eb", "fontSize": "1.1rem"}),
-                            html.Div(id='corpus-info-books', className="fw-bold mt-1", style={'fontSize': '0.95rem'}),
-                            html.Small("Books", className="text-muted", style={"fontSize": "0.8rem"})
+                            html.Div([
+                                html.I(className="fas fa-book", style={"color": "#4B6CB7", "fontSize": "0.95rem", 'marginRight': '6px'}),
+                                html.Span(id='corpus-info-books', style={'fontSize': '0.7rem', 'fontWeight': '400', 'verticalAlign': 'middle'})
+                            ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center'})
                         ], className="text-center")
                     ], width=3),
                     dbc.Col([
                         html.Div([
-                            html.I(className="fas fa-user fa-lg", style={"color": "#059669", "fontSize": "1.1rem"}),
-                            html.Div(id='corpus-info-authors', className="fw-bold mt-1", style={'fontSize': '0.95rem'}),
-                            html.Small("Authors", className="text-muted", style={"fontSize": "0.8rem"})
+                            html.Div([
+                                html.I(className="fas fa-user", style={"color": "#4B6CB7", "fontSize": "0.95rem", 'marginRight': '6px'}),
+                                html.Span(id='corpus-info-authors', style={'fontSize': '0.7rem', 'fontWeight': '400', 'verticalAlign': 'middle'})
+                            ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center'})
                         ], className="text-center")
                     ], width=3),
                     dbc.Col([
                         html.Div([
-                            html.I(className="fas fa-map-marker-alt fa-lg", style={"color": "#f59e42", "fontSize": "1.1rem"}),
-                            html.Div(id='corpus-info-places', className="fw-bold mt-1", style={'fontSize': '0.95rem'}),
-                            html.Small("Places", className="text-muted", style={"fontSize": "0.8rem"})
+                            html.Div([
+                                html.I(className="fas fa-map-marker-alt", style={"color": "#4B6CB7", "fontSize": "0.95rem", 'marginRight': '6px'}),
+                                html.Span(id='corpus-info-places', style={'fontSize': '0.7rem', 'fontWeight': '400', 'verticalAlign': 'middle'})
+                            ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center'})
                         ], className="text-center")
                     ], width=3),
                     dbc.Col([
                         html.Div([
-                            html.I(className="fas fa-calendar fa-lg", style={"color": "#d97706", "fontSize": "1.1rem"}),
-                            html.Div(id='corpus-info-years', className="fw-bold mt-1", style={'fontSize': '0.95rem'}),
-                            html.Small("Years", className="text-muted", style={"fontSize": "0.8rem"})
+                            html.Div([
+                                html.I(className="fas fa-calendar", style={"color": "#4B6CB7", "fontSize": "0.95rem", 'marginRight': '6px'}),
+                                html.Span(id='corpus-info-years', style={'fontSize': '0.7rem', 'fontWeight': '400', 'verticalAlign': 'middle'})
+                            ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center'})
                         ], className="text-center")
                     ], width=3),
-                ], className="g-2 mb-3 justify-content-center")
+                ], className="g-2 mb-2 justify-content-center")
             ]),
             html.Hr(style={'margin': '12px 0'}),
             # Browse Table Section (always visible)
