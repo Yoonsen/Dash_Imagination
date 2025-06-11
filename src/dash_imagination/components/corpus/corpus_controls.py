@@ -72,10 +72,17 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                                 n_clicks=0,
                                 className="btn btn-link p-0",
                                 style={'width': '40px'},
-                                title="Reset Corpus (double-click to confirm)"
+                                title="Reset Corpus"
                             ),
-                            dcc.Interval(id='reset-corpus-timer', interval=5000, n_intervals=0, disabled=True, max_intervals=1),
-                            dcc.Store(id='reset-corpus-confirm', data=False)
+                            # Remove timer and store, add modal
+                            dbc.Modal([
+                                dbc.ModalHeader("Confirm Reset Corpus"),
+                                dbc.ModalBody("Are you sure you want to reset the corpus? This will clear your current selection."),
+                                dbc.ModalFooter([
+                                    dbc.Button("Cancel", id="reset-corpus-cancel", color="secondary", className="me-2"),
+                                    dbc.Button("Confirm Reset", id="reset-corpus-confirm-modal", color="danger")
+                                ])
+                            ], id="reset-corpus-modal", is_open=False, centered=True)
                         ], className="text-center")
                     ], width="auto"),
                 ], className="g-3 justify-content-center"),
@@ -324,32 +331,23 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
     }) 
 
 @callback(
-    [Output('reset-corpus-btn-main', 'className'),
-     Output('reset-corpus-btn-main', 'title'),
-     Output('reset-corpus-timer', 'disabled'),
-     Output('reset-corpus-timer', 'n_intervals'),
-     Output('reset-corpus-confirm', 'data')],
+    Output('reset-corpus-modal', 'is_open'),
     [Input('reset-corpus-btn-main', 'n_clicks'),
-     Input('reset-corpus-timer', 'n_intervals')],
-    [State('reset-corpus-btn-main', 'className'),
-     State('reset-corpus-timer', 'disabled'),
-     State('reset-corpus-confirm', 'data')],
+     Input('reset-corpus-cancel', 'n_clicks'),
+     Input('reset-corpus-confirm-modal', 'n_clicks')],
+    [State('reset-corpus-modal', 'is_open')],
     prevent_initial_call=True
 )
-def confirm_reset_corpus(n_clicks, timer_intervals, className, timer_disabled, confirm_state):
+def toggle_reset_modal(reset_btn, cancel_btn, confirm_btn, is_open):
     ctx = dash.callback_context
-    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
-    if triggered_id == 'reset-corpus-btn-main':
-        # First click: highlight (add text-danger), enable timer, set confirm True
-        if 'text-danger' not in className:
-            return 'btn btn-link p-0 text-danger', 'Click again to confirm reset', False, 0, True
-        else:
-            # Second click: allow the actual reset action (handled elsewhere), reset timer and confirm
-            return 'btn btn-link p-0', 'Reset Corpus (double-click to confirm)', True, 0, False
-    elif triggered_id == 'reset-corpus-timer':
-        # Timer expired: revert to plain
-        return 'btn btn-link p-0', 'Reset Corpus (double-click to confirm)', True, 0, False
-    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update 
+    if not ctx.triggered:
+        return is_open
+    trigger = ctx.triggered[0]['prop_id'].split('.')[0]
+    if trigger == 'reset-corpus-btn-main':
+        return True
+    elif trigger in ['reset-corpus-cancel', 'reset-corpus-confirm-modal']:
+        return False
+    return is_open
 
 # Remove old filter bars and input
 # Add new filter bar and modal

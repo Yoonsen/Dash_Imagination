@@ -1027,17 +1027,14 @@ app.clientside_callback(
      Output('current-filters', 'data')],
     [Input('current-filters', 'data'),
      Input('upload-state', 'data'),
-     Input('reset-corpus-btn-main', 'n_clicks')],
-    [State('popup-upload-corpus', 'filename'),
-     State('reset-corpus-confirm', 'data')],
+     Input('reset-corpus-confirm-modal', 'n_clicks')],
+    [State('popup-upload-corpus', 'filename')],
     prevent_initial_call=True
 )
-def update_filtered_data(filters, upload_state, reset_n_clicks, filename, reset_confirm):
+def update_filtered_data(filters, upload_state, reset_confirm_clicks, filename):
     ctx = callback_context
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
-    if triggered_id == 'reset-corpus-btn-main' and reset_n_clicks:
-        if not reset_confirm:
-            raise dash.exceptions.PreventUpdate
+    if triggered_id == 'reset-corpus-confirm-modal' and reset_confirm_clicks:
         from dash_imagination.utils.global_state import clear_state
         clear_state()
         return pd.DataFrame().to_json(date_format='iso', orient='split'), [], {}
@@ -2780,18 +2777,21 @@ def update_all_places_store(book_ids, upload_state, reset_n_clicks, current_data
 
 @app.callback(
     Output('filtered-data', 'data', allow_duplicate=True),
-    [Input('resample-places', 'n_clicks')],
-    [State('all-places-store', 'data'),
-     State('current-filters', 'data')],
+    [Input('all-places-store', 'data'),
+     Input('current-filters', 'data'),
+     Input('resample-places', 'n_clicks')],
+    [State('filtered-data', 'data')],
     prevent_initial_call=True
 )
-def resample_places_callback(n_clicks, all_places_json, filters):
+def update_filtered_data_auto_resample(all_places_json, filters, resample_clicks, prev_filtered_data):
     import pandas as pd
     import io
+    ctx = dash.callback_context
     if not all_places_json:
         return pd.DataFrame().to_json(date_format='iso', orient='split')
     all_places_df = pd.read_json(io.StringIO(all_places_json), orient='split')
     n = filters.get('max_places', 2000) if filters else 2000
+    # Always resample on any change
     sampled_df = sample_places(all_places_df, n=n)
     return sampled_df.to_json(date_format='iso', orient='split')
 
