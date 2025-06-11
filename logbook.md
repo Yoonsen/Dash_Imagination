@@ -1,5 +1,8 @@
 # ImagiNation Development Logbook
 
+> **Note (June 2024): Refactor in progress**
+> We are currently refactoring the place sampling logic to ensure that all places for a selected corpus are extracted before any sampling or display limits are applied. This will improve accuracy and consistency when refining or displaying places. The reintroduction of a 'resample places' button is also under consideration.
+
 ## Overview
 This logbook tracks the development progress, decisions, and challenges of the ImagiNation project. It serves as a living document to maintain continuity between development sessions and track the evolution of the project.
 

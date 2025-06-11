@@ -126,8 +126,6 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                 dcc.Store(id='corpus-table-filter', data={'column': None, 'value': None, 'direction': None})
             ], style={'height': '100%', 'display': 'flex', 'flexDirection': 'column'})
         ], style={'height': '444px', 'overflowY': 'auto'}),
-        # Hidden resample-places button to suppress callback errors and allow future restoration
-        html.Button("Resample Places", id="resample-places", style={"display": "none"}),
         # Hidden resample-container div to suppress callback errors
         html.Div(id='resample-container', style={'display': 'none'})
     ], id='corpus-controls-container', className="position-absolute m-3", style={

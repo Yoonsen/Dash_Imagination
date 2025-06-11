@@ -620,9 +620,9 @@ app.layout = html.Div([
                     className="form-control mb-3"
                 ),
                 html.Button([
-                    html.I(className="fas fa-search me-2"),
-                    "Find Similar Places"
-                ], id='find-similar-places', className="btn btn-primary w-100")
+                    html.I(className="fas fa-sync-alt me-2"),
+                    "Resample Places"
+                ], id='resample-places', className="btn btn-primary w-100")
             ], className="mb-4"),
             
             # Place list
@@ -665,6 +665,7 @@ app.layout = html.Div([
     create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list),
     # Add interval for clearing download status
     dcc.Interval(id='clear-download-status-interval', interval=6000, n_intervals=0, disabled=True),
+    dcc.Store(id='all-places-store'),  # Store for caching all places for current corpus
 ], id='main-container')
 
 # Add custom CSS
@@ -2724,6 +2725,75 @@ def download_corpus_excel(n_clicks, dhlabids):
     finally:
         conn.close()
 
+def get_all_places_for_corpus(book_ids):
+    """Return all valid places for a list of book IDs (no sampling, no limit)."""
+    import pandas as pd
+    if not book_ids:
+        return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+    conn = get_db_connection()
+    try:
+        query = f'''
+        SELECT 
+            b.token,
+            p.modern as name,
+            p.latitude,
+            p.longitude,
+            SUM(b.book_count) as frequency,
+            COUNT(DISTINCT b.dhlabid) as book_count
+        FROM books b
+        JOIN places p ON b.token = p.token
+        WHERE b.dhlabid IN ({','.join(['?'] * len(book_ids))})
+          AND p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+          AND p.latitude != '0' AND p.longitude != '0'
+        GROUP BY b.token, p.modern, p.latitude, p.longitude
+        '''
+        df = pd.read_sql_query(query, conn, params=tuple(book_ids))
+        df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
+        df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+        return df
+    finally:
+        conn.close()
+
+def sample_places(places_df, n=2000):
+    """Return a random sample of n places from a DataFrame."""
+    import pandas as pd
+    if places_df is None or places_df.empty:
+        return places_df
+    n = min(n, len(places_df))
+    return places_df.sample(n=n, random_state=None).reset_index(drop=True)
+
+@app.callback(
+    Output('all-places-store', 'data'),
+    [Input('current-dhlabids-store', 'data'),
+     Input('upload-state', 'data'),
+     Input('reset-corpus-btn-main', 'n_clicks')],
+    [State('all-places-store', 'data')],
+    prevent_initial_call=True
+)
+def update_all_places_store(book_ids, upload_state, reset_n_clicks, current_data):
+    import pandas as pd
+    import io
+    if not book_ids:
+        return pd.DataFrame().to_json(date_format='iso', orient='split')
+    df = get_all_places_for_corpus(book_ids)
+    return df.to_json(date_format='iso', orient='split')
+
+@app.callback(
+    Output('filtered-data', 'data', allow_duplicate=True),
+    [Input('resample-places', 'n_clicks')],
+    [State('all-places-store', 'data'),
+     State('current-filters', 'data')],
+    prevent_initial_call=True
+)
+def resample_places_callback(n_clicks, all_places_json, filters):
+    import pandas as pd
+    import io
+    if not all_places_json:
+        return pd.DataFrame().to_json(date_format='iso', orient='split')
+    all_places_df = pd.read_json(io.StringIO(all_places_json), orient='split')
+    n = filters.get('max_places', 2000) if filters else 2000
+    sampled_df = sample_places(all_places_df, n=n)
+    return sampled_df.to_json(date_format='iso', orient='split')
 
 # Run Server
 if __name__ == '__main__':
