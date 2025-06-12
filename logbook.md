@@ -1,5 +1,12 @@
 # ImagiNation Development Logbook
 
+## June 12, 2024: Design Decision – Orthogonal Book/Place Operations
+- Discussed and agreed to treat book and place set operations (add, filter, subtract) as orthogonal, allowing users to manipulate books and places independently.
+- The app will not force synchronization between books and places after every operation. Users can perform operations in any order, with the understanding that some places may not be represented in the current corpus if the related books are removed, and vice versa.
+- If a user wants to ensure consistency, they can perform additional operations (e.g., filter places after changing books, or vice versa).
+- In the future, advanced options may be added to allow pairwise operations on (books, places) together (e.g., "remove all books and places related to Hamsun").
+- UI/UX will include tooltips or help text to explain this behavior and guide users.
+
 > **Note (June 2024): Refactor in progress**
 > We are currently refactoring the place sampling logic to ensure that all places for a selected corpus are extracted before any sampling or display limits are applied. This will improve accuracy and consistency when refining or displaying places. The reintroduction of a 'resample places' button is also under consideration.
 
