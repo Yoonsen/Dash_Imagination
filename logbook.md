@@ -5,6 +5,8 @@
 
 > **Note (June 2024):** Currently, the heatmap visualization uses the sampled set of places (as shown on the map/list). In the future, an option will be added to the visualization tool to allow users to compute the heatmap using either the sampled set or the full set of places in the corpus. This will provide more flexibility for exploring density and distribution.
 
+> **Planned (June 2024):** The place summary/info card will be redesigned to match the corpus card. It will include upload, download, and add (+) buttons, so users can define, upload, and manage places using different NLP techniques or manual curation. This will make place management as flexible and user-friendly as corpus management.
+
 ## Overview
 This logbook tracks the development progress, decisions, and challenges of the ImagiNation project. It serves as a living document to maintain continuity between development sessions and track the evolution of the project.
 

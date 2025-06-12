@@ -123,7 +123,7 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                             ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center'})
                         ], className="text-center")
                     ], width=3),
-                ], className="g-2 mb-2 justify-content-center")
+                ], className="g-2 mb-2 justify-content-center"),
             ]),
             html.Hr(style={'margin': '12px 0'}),
             # Browse Table Section (always visible)

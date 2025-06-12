@@ -1518,8 +1518,9 @@ def update_place_list(filtered_data_json, search_term, selected_place):
         ]
     
     # Create hover text before creating place items
+    print("DEBUG columns:", places_df.columns)
     places_df['hover_text'] = places_df.apply(
-        lambda row: f"{row['token']} ({row['name']})<br>Modern name: {row['name']}<br>Mentions: {int(row['frequency'])}<br>Books: {int(row['book_count'])}",
+        lambda row: f"{row.get('token', '')} ({row.get('name', '')})<br>Modern name: {row.get('name', '')}<br>Mentions: {int(row.get('frequency', 0))}<br>Books: {int(row.get('book_count', 0))}",
         axis=1
     )
     
@@ -1704,7 +1705,7 @@ def update_place_summary(click_data, selected_place, current_style):
                         html.Div([
                             html.A(
                                 f"{row['title']} ({row['year']})",
-                                href=f"https://www.nb.no/items/{row['urn']}?searchText={token}",
+                                href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{token}\"",
                                 target="_blank",
                                 style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
                             ),
@@ -1761,7 +1762,7 @@ def update_place_summary(click_data, selected_place, current_style):
                         html.Div([
                             html.A(
                                 f"{row['title']} ({row['year']})",
-                                href=f"https://www.nb.no/items/{row['urn']}?searchText={token}",
+                                href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{token}\"",
                                 target="_blank",
                                 style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
                             ),
@@ -2371,7 +2372,7 @@ def handle_global_search(search_term, current_figure):
                         html.Div([
                             html.A(
                                 f"{row['title']} ({row['year']})",
-                                href=f"https://www.nb.no/items/{row['urn']}?searchText={place['token']}",
+                                href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{place['token']}\"",
                                 target="_blank",
                                 style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
                             ),
