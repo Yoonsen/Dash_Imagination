@@ -1158,9 +1158,22 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
             )
         ])
 
+    match_df_raw = pd.DataFrame(matching_places)
+
+    def merge_tokens(token_series):
+        pieces = []
+        for entry in token_series:
+            pieces.extend([p.strip() for p in entry.split(',') if p.strip()])
+        return ", ".join(sorted(set(pieces)))
+
     match_df = (
-        pd.DataFrame(matching_places)
-        .drop_duplicates()
+        match_df_raw
+        .groupby('Place', as_index=False)
+        .agg({
+            'Tokens': merge_tokens,
+            'Total count': 'sum',
+            'Token': 'first'
+        })
         .sort_values(by='Total count', ascending=False)
         .head(50)
     )
