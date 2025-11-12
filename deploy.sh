@@ -18,7 +18,7 @@ echo "🚀 Starting deployment pipeline for $APP_NAME"
 
 # Build the Docker image
 echo "📦 Building Docker image..."
-docker build -t $APP_NAME . --no-cache
+docker build --no-cache -t $APP_NAME .
 
 # Tag the image for Google Container Registry
 echo "🏷️ Tagging image for GCR..."

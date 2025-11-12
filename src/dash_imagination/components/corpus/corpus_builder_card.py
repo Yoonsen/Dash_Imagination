@@ -130,6 +130,55 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                         )
                     ])
                 ], label="Content", tab_id="content"),
+                dbc.Tab([
+                    html.Div([
+                        html.Label("Keywords (comma-separated)", className="form-label"),
+                        dbc.Input(
+                            id='collocation-words-input',
+                            type='text',
+                            placeholder='e.g. krig, krigen',
+                            size='sm',
+                            className="mb-3"
+                        ),
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Label("Words before", className="form-label"),
+                                dbc.Input(
+                                    id='collocation-before-input',
+                                    type='number',
+                                    min=1,
+                                    max=200,
+                                    step=1,
+                                    value=50,
+                                    size='sm'
+                                )
+                            ], width=6),
+                            dbc.Col([
+                                dbc.Label("Words after", className="form-label"),
+                                dbc.Input(
+                                    id='collocation-after-input',
+                                    type='number',
+                                    min=1,
+                                    max=200,
+                                    step=1,
+                                    value=50,
+                                    size='sm'
+                                )
+                            ], width=6),
+                        ], className="g-2 mb-3"),
+                        dbc.Button(
+                            "Find collocations",
+                            id='run-collocations',
+                            color='secondary',
+                            size='sm',
+                            className="w-100 mb-3"
+                        ),
+                        dcc.Loading(
+                            html.Div(id='collocation-results', style={'maxHeight': '200px', 'overflowY': 'auto'}),
+                            type='default'
+                        )
+                    ])
+                ], label="Collocations", tab_id="collocations"),
             ], id="corpus-builder-tabs", active_tab="metadata"),
         ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'}),
     ], id="corpus-builder-card", className="shadow position-absolute m-3", style={
@@ -281,10 +330,11 @@ def reset_corpus_filters(n_clicks_timestamp, n_clicks, color, title):
     [Input("build-content-corpus-btn", "n_clicks")],
     [State("content-wordforms-input", "value"),
      State("content-min-count-input", "value"),
-     State("current-filters", "data")],
+     State("current-filters", "data"),
+     State("corpus-operation", "data")],
     prevent_initial_call=True
 )
-def build_content_corpus_and_show_stats(n_clicks, wordforms, min_count, current_filters):
+def build_content_corpus_and_show_stats(n_clicks, wordforms, min_count, current_filters, operation):
     if not n_clicks:
         return dash.no_update, dash.no_update
     from ...utils.global_state import get_current_state
@@ -317,11 +367,13 @@ def build_content_corpus_and_show_stats(n_clicks, wordforms, min_count, current_
         return dash.no_update, dash.no_update
     places_df = corpus_builder.get_places(max_places=500)
     place_tokens = places_df['place_token'].tolist() if 'place_token' in places_df.columns else []
-    update_from_books(selected_dhlabids, place_tokens)
+    op = (operation or "intersection").lower()
+    update_from_books(selected_dhlabids, place_tokens, operation=op)
     new_filters = current_filters.copy() if current_filters else {}
     new_filters['content_words'] = words
     new_filters['content_min_count'] = min_count
     new_filters['corpus_source'] = 'Content'
+    new_filters['last_operation'] = op
     # Optionally, show a success message
     status_done = html.Span("Books added!", style={"color": "#059669", "fontWeight": "500"})
     return new_filters, status_done 

@@ -18,6 +18,8 @@ from dash_imagination.components.places.place_similarity_dialog import create_pl
 from dash_imagination.utils.db import get_db_connection
 from dash_imagination.utils.global_state import get_current_state, update_from_books, clear_state
 import plotly.express as px
+import dhlab as dh
+import re
 import json
 from flask import request, send_file
 from dash import dash_table
@@ -1052,6 +1054,135 @@ def style_corpus_operation_builder(operation):
     c_intersection, o_intersection = _operation_button_styles(operation, 'intersection')
     c_diff, o_diff = _operation_button_styles(operation, 'difference')
     return c_union, c_intersection, c_diff, o_union, o_intersection, o_diff
+
+
+@app.callback(
+    Output('collocation-results', 'children'),
+    Input('run-collocations', 'n_clicks'),
+    State('collocation-words-input', 'value'),
+    State('collocation-before-input', 'value'),
+    State('collocation-after-input', 'value'),
+    State('current-dhlabids-store', 'data'),
+    State('all-places-store', 'data'),
+    prevent_initial_call=True
+)
+def run_collocation_search(n_clicks, words_value, before, after, current_books, all_places_json):
+    if not n_clicks:
+        raise PreventUpdate
+    if not words_value:
+        return html.Div("Enter one or more keywords to analyse collocations.", style={'color': '#dc2626', 'fontSize': '0.8rem'})
+    if not current_books:
+        return html.Div("Corpus is empty. Build or upload a corpus first.", style={'color': '#dc2626', 'fontSize': '0.8rem'})
+
+    words = [w.strip() for w in words_value.split(',') if w.strip()]
+    if not words:
+        return html.Div("No valid keywords provided.", style={'color': '#dc2626', 'fontSize': '0.8rem'})
+
+    before = int(before or 50)
+    after = int(after or 50)
+
+    conn = get_db_connection()
+    try:
+        placeholders = ",".join(["?"] * len(current_books))
+        query = f"""
+            SELECT urn
+            FROM corpus
+            WHERE dhlabid IN ({placeholders})
+              AND urn IS NOT NULL
+        """
+        urns = pd.read_sql_query(query, conn, params=tuple(current_books))['urn'].dropna().tolist()
+    finally:
+        conn.close()
+
+    if not urns:
+        return html.Div("No URNs found for the current corpus; collocations require identifiable texts.", style={'color': '#dc2626', 'fontSize': '0.8rem'})
+
+    sample_size = min(len(urns), 5000)
+
+    try:
+        coll = dh.Collocations(urns, words, before=before, after=after, samplesize=sample_size)
+        coll_df = coll.frame.copy()
+    except Exception as err:
+        return html.Div(f"Error retrieving collocations: {err}", style={'color': '#dc2626', 'fontSize': '0.8rem'})
+
+    if coll_df is None or coll_df.empty:
+        return html.Div("No collocations found for the selected keywords.", style={'color': '#475569', 'fontSize': '0.8rem'})
+
+    coll_df = coll_df.reset_index()
+    if 'index' in coll_df.columns:
+        coll_df = coll_df.rename(columns={'index': 'word'})
+    if 'counts' in coll_df.columns:
+        coll_df = coll_df.rename(columns={'counts': 'count'})
+    elif 'total' in coll_df.columns:
+        coll_df = coll_df.rename(columns={'total': 'count'})
+
+    coll_df['word'] = coll_df['word'].astype(str)
+    coll_df['lower_word'] = coll_df['word'].str.lower()
+
+    word_counts = coll_df.groupby('lower_word')['count'].sum().to_dict()
+    collocate_tokens = set(word_counts.keys())
+
+    if all_places_json:
+        places_df = pd.read_json(io.StringIO(all_places_json), orient='split')
+    else:
+        places_df = get_all_places_for_corpus(current_books)
+
+    matching_places = []
+    for _, row in places_df[['token', 'name']].dropna().drop_duplicates().iterrows():
+        place_name = str(row['name'])
+        tokens = re.findall(r"[0-9A-Za-zÀ-ÖØ-öø-ÿ]+", place_name.lower())
+        tokens = [tok for tok in tokens if tok]
+        if not tokens:
+            continue
+        if all(tok in collocate_tokens for tok in tokens):
+            total_count = int(sum(word_counts[tok] for tok in tokens))
+            matching_places.append({
+                'Place': place_name,
+                'Tokens': ", ".join(tokens),
+                'Total count': total_count,
+                'Token': row['token']
+            })
+
+    if not matching_places:
+        top = coll_df.sort_values(by='count', ascending=False).head(20)
+        return html.Div([
+            html.Div("No place matches found. Showing top collocations instead:", style={'color': '#475569', 'fontSize': '0.8rem', 'marginBottom': '0.5rem'}),
+            dash_table.DataTable(
+                columns=[{'name': 'Word', 'id': 'word'}, {'name': 'Count', 'id': 'count'}],
+                data=top[['word', 'count']].to_dict('records'),
+                style_table={'overflowX': 'auto', 'fontSize': '0.75rem'},
+                style_cell={'padding': '4px'},
+                page_action='none',
+                fixed_rows={'headers': True},
+                sort_action='native'
+            )
+        ])
+
+    match_df = pd.DataFrame(matching_places).sort_values(by='Total count', ascending=False).head(50)
+    return dash_table.DataTable(
+        columns=[
+            {'name': 'Place', 'id': 'Place'},
+            {'name': 'Tokens', 'id': 'Tokens'},
+            {'name': 'Total count', 'id': 'Total count'},
+            {'name': 'Token', 'id': 'Token'}
+        ],
+        data=match_df.to_dict('records'),
+        style_table={'overflowX': 'auto', 'fontSize': '0.75rem'},
+        style_cell={
+            'padding': '4px',
+            'whiteSpace': 'pre-line',
+            'textAlign': 'left'
+        },
+        style_data_conditional=[
+            {
+                'if': {'column_id': 'Token'},
+                'display': 'none'
+            }
+        ],
+        page_action='none',
+        fixed_rows={'headers': True},
+        sort_action='native'
+    )
 
 # Add this callback to toggle the info modal
 
