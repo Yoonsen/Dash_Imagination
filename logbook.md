@@ -48,10 +48,12 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Restored local environment alignment by running the Dash app through the PDM-managed virtualenv (`pdm run env PYTHONPATH=src python -m dash_imagination.app`) so Plotly 6 is available and `go.Scattermap` renders correctly.
 - Fixed corpus resampling default by setting `default_filters['max_places']` to 500, preventing the resample callback from returning empty datasets after filter resets or uploads.
 - Added `todo.md` to track follow-up tasks (React lifecycle warning, safeguard filter defaults, helper launch script).
+- Added union/intersection/difference controls for corpus uploads and builder output; state updates now respect the selected set operation and automatically recompute place tokens to match.
 
 **Notes**:
 - Heatmap and map views now stay in sync after uploads and resampling; baseline limit of 500 keeps the UI responsive while allowing manual adjustment.
 - Consider enhancing the heatmap to optionally use all places from `all-places-store` to better visualize large corpora without overwhelming the scatter view.
+ - Future: introduce stop-place list upload to filter spurious tokens.
 
 ### June 10, 2024
 **Progress**:

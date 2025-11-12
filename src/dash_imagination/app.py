@@ -21,6 +21,7 @@ import plotly.express as px
 import json
 from flask import request, send_file
 from dash import dash_table
+from typing import Tuple
 
 #=== initialize
 
@@ -660,6 +661,7 @@ app.layout = html.Div([
 
     # Add this to the app layout, near the other Store components
     dcc.Store(id='current-dhlabids-store', data=[]),
+    dcc.Store(id='corpus-operation', data='intersection'),
 
     # Add the new corpus builder card
     create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list),
@@ -935,10 +937,11 @@ app.index_string = '''
      Output('current-filters', 'data', allow_duplicate=True)],
     [Input('popup-upload-corpus', 'contents')],
     [State('popup-upload-corpus', 'filename'),
-     State('current-filters', 'data')],
+     State('current-filters', 'data'),
+     State('corpus-operation', 'data')],
     prevent_initial_call=True
 )
-def update_state_and_filters(contents, filename, current_filters):
+def update_state_and_filters(contents, filename, current_filters, operation):
     import pandas as pd
     import io
     import base64
@@ -967,14 +970,88 @@ def update_state_and_filters(contents, filename, current_filters):
         finally:
             conn.close()
         # Update global state using the same logic as the builder
-        books, places = update_from_books(new_books, new_places)
+        books, places = update_from_books(new_books, new_places, operation=operation or "intersection")
         # Update filters to reflect new corpus source
         new_filters = current_filters.copy() if current_filters else default_filters.copy()
         new_filters['corpus_source'] = filename
+        new_filters['last_operation'] = operation or "intersection"
         new_filters['selected_tokens'] = places
-        return html.Div(f'Successfully loaded {len(books)} books and {len(places)} places from {filename}', style={'color': 'green'}), {'uploaded': True, 'filename': filename}, new_filters
+        return html.Div('', style={'display': 'none'}), {'uploaded': True, 'filename': filename}, new_filters
     except Exception as e:
         return html.Div(f'Error processing file: {str(e)}', style={'color': 'red'}), {}, current_filters
+
+
+@app.callback(
+    Output('corpus-operation', 'data'),
+    Input('corpus-op-union-controls', 'n_clicks'),
+    Input('corpus-op-intersection-controls', 'n_clicks'),
+    Input('corpus-op-diff-controls', 'n_clicks'),
+    Input('corpus-op-union-builder', 'n_clicks'),
+    Input('corpus-op-intersection-builder', 'n_clicks'),
+    Input('corpus-op-diff-builder', 'n_clicks'),
+    State('corpus-operation', 'data'),
+    prevent_initial_call=True
+)
+def set_corpus_operation(
+    union_controls,
+    intersection_controls,
+    diff_controls,
+    union_builder,
+    intersection_builder,
+    diff_builder,
+    current_operation,
+):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    triggered = ctx.triggered[0]['prop_id'].split('.')[0]
+    mapping = {
+        'corpus-op-union-controls': 'union',
+        'corpus-op-intersection-controls': 'intersection',
+        'corpus-op-diff-controls': 'difference',
+        'corpus-op-union-builder': 'union',
+        'corpus-op-intersection-builder': 'intersection',
+        'corpus-op-diff-builder': 'difference',
+    }
+    return mapping.get(triggered, (current_operation or 'intersection'))
+
+
+def _operation_button_styles(selected: str, target: str) -> Tuple[str, bool]:
+    op = (selected or 'intersection').lower()
+    active = op == target
+    return ('primary' if active else 'secondary', not active)
+
+
+@app.callback(
+    Output('corpus-op-union-controls', 'color'),
+    Output('corpus-op-intersection-controls', 'color'),
+    Output('corpus-op-diff-controls', 'color'),
+    Output('corpus-op-union-controls', 'outline'),
+    Output('corpus-op-intersection-controls', 'outline'),
+    Output('corpus-op-diff-controls', 'outline'),
+    Input('corpus-operation', 'data')
+)
+def style_corpus_operation_controls(operation):
+    c_union, o_union = _operation_button_styles(operation, 'union')
+    c_intersection, o_intersection = _operation_button_styles(operation, 'intersection')
+    c_diff, o_diff = _operation_button_styles(operation, 'difference')
+    return c_union, c_intersection, c_diff, o_union, o_intersection, o_diff
+
+
+@app.callback(
+    Output('corpus-op-union-builder', 'color'),
+    Output('corpus-op-intersection-builder', 'color'),
+    Output('corpus-op-diff-builder', 'color'),
+    Output('corpus-op-union-builder', 'outline'),
+    Output('corpus-op-intersection-builder', 'outline'),
+    Output('corpus-op-diff-builder', 'outline'),
+    Input('corpus-operation', 'data')
+)
+def style_corpus_operation_builder(operation):
+    c_union, o_union = _operation_button_styles(operation, 'union')
+    c_intersection, o_intersection = _operation_button_styles(operation, 'intersection')
+    c_diff, o_diff = _operation_button_styles(operation, 'difference')
+    return c_union, c_intersection, c_diff, o_union, o_intersection, o_diff
 
 # Add this callback to toggle the info modal
 
@@ -2540,10 +2617,10 @@ def test_info_btn_callback(n_clicks):
         Output('corpus-info-years', 'children'),
         Output('corpus-browse-table', 'children'),
     ],
-    [Input('filtered-data', 'data'), Input('build-corpus-btn', 'n_clicks'), Input('corpus-table-filter', 'data')],
+    [Input('filtered-data', 'data'), Input('corpus-table-filter', 'data')],
     prevent_initial_call=True
 )
-def update_corpus_info_and_table(_, __, filter_data):
+def update_corpus_info_and_table(_, filter_data):
     books, _ = get_current_state()
     if not books:
         return "0", "0", "0", "", html.Div("No books in corpus.", style={'color': '#666'})

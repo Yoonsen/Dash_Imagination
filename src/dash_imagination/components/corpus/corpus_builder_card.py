@@ -79,6 +79,14 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                         )
                     ], className="mb-4"),
                     html.Div([
+                        html.Label("Combine with existing corpus", className="form-label mb-1"),
+                        dbc.ButtonGroup([
+                            dbc.Button("+", id='corpus-op-union-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Add to current corpus"),
+                            dbc.Button("&", id='corpus-op-intersection-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Keep only overlap"),
+                            dbc.Button("-", id='corpus-op-diff-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Remove from current corpus"),
+                        ], size="sm")
+                    ], className="mb-4"),
+                    html.Div([
                         dcc.Loading(
                             id="build-corpus-loading",
                             type="default",
@@ -190,10 +198,19 @@ def toggle_card_visibility(n1, n2, builder_style, controls_style):
      State("corpus-author-dropdown", "value"),
      State("corpus-year-range", "value"),
      State("corpus-max-places-slider", "value"),
-     State("current-filters", "data")],
+     State("current-filters", "data"),
+     State("corpus-operation", "data")],
     prevent_initial_call=True
 )
-def build_corpus_and_show_stats(n_clicks, categories, authors, year_range, max_places, current_filters):
+def build_corpus_and_show_stats(
+    n_clicks,
+    categories,
+    authors,
+    year_range,
+    max_places,
+    current_filters,
+    operation,
+):
     import time
     if not n_clicks:
         return dash.no_update, dash.no_update
@@ -207,6 +224,8 @@ def build_corpus_and_show_stats(n_clicks, categories, authors, year_range, max_p
     new_filters['year_range'] = year_range if year_range else [1814, 1905]
     new_filters['max_places'] = max_places
     new_filters['corpus_source'] = 'Corpus Builder'
+    op = (operation or "intersection").lower()
+    new_filters['last_operation'] = op
     category = categories[0] if categories else None
     author = authors[0] if authors else None
     dhlabids = corpus_builder.build_corpus(
@@ -216,7 +235,7 @@ def build_corpus_and_show_stats(n_clicks, categories, authors, year_range, max_p
     )
     places_df = corpus_builder.get_places(max_places=max_places)
     place_tokens = places_df['place_token'].tolist() if 'place_token' in places_df.columns else []
-    update_from_books(dhlabids, place_tokens)
+    update_from_books(dhlabids, place_tokens, operation=op)
     # Optionally, show a success message
     status_done = html.Span("Books added!", style={"color": "#059669", "fontWeight": "500"})
     return new_filters, status_done

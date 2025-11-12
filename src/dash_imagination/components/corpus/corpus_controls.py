@@ -88,6 +88,41 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                 ], className="g-3 justify-content-center"),
                 html.Div(id='popup-upload-status', className="mb-2 text-center")
             ], style={'marginBottom': '12px'}),
+            dbc.Row([
+                dbc.Col([
+                    dbc.Button(
+                        html.Span("+", className="fw-bold"),
+                        id='corpus-op-union-controls',
+                        n_clicks=0,
+                        color='secondary',
+                        outline=True,
+                        size="sm",
+                        title="Add uploaded corpus to current selection"
+                    )
+                ], width="auto"),
+                dbc.Col([
+                    dbc.Button(
+                        html.Span("&", className="fw-bold"),
+                        id='corpus-op-intersection-controls',
+                        n_clicks=0,
+                        color='secondary',
+                        outline=True,
+                        size="sm",
+                        title="Keep only overlap with current selection"
+                    )
+                ], width="auto"),
+                dbc.Col([
+                    dbc.Button(
+                        html.Span("-", className="fw-bold"),
+                        id='corpus-op-diff-controls',
+                        n_clicks=0,
+                        color='secondary',
+                        outline=True,
+                        size="sm",
+                        title="Remove uploaded corpus from current selection"
+                    )
+                ], width="auto"),
+            ], className="g-2 justify-content-center mb-2"),
             # Corpus info stats row (4 columns)
             html.Div([
                 dbc.Row([
