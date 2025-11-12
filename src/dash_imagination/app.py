@@ -1158,7 +1158,12 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
             )
         ])
 
-    match_df = pd.DataFrame(matching_places).sort_values(by='Total count', ascending=False).head(50)
+    match_df = (
+        pd.DataFrame(matching_places)
+        .drop_duplicates()
+        .sort_values(by='Total count', ascending=False)
+        .head(50)
+    )
     return dash_table.DataTable(
         columns=[
             {'name': 'Place', 'id': 'Place'},

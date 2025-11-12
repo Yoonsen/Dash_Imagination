@@ -179,7 +179,7 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                         )
                     ])
                 ], label="Collocations", tab_id="collocations"),
-            ], id="corpus-builder-tabs", active_tab="metadata"),
+            ], id="corpus-builder-tabs", active_tab="metadata", mobile_breakpoint=0),
         ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'}),
     ], id="corpus-builder-card", className="shadow position-absolute m-3", style={
         "width": "350px",
