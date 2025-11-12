@@ -112,7 +112,7 @@ default_filters = {
     'categories': [],
     'titles': [],
     'sample_size': 0,
-    'max_places': 0,
+    'max_places': 500,
     'year_range': [1814, 1905]
 }
 
