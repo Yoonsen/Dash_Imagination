@@ -670,6 +670,8 @@ app.layout = html.Div([
     # Add interval for clearing download status
     dcc.Interval(id='clear-download-status-interval', interval=6000, n_intervals=0, disabled=True),
     dcc.Store(id='all-places-store'),  # Store for caching all places for current corpus
+    dcc.Store(id='collocation-place-tokens', data=[]),
+    dcc.Store(id='collocation-highlight', data=[]),
 ], id='main-container')
 
 # Add custom CSS
@@ -1058,6 +1060,7 @@ def style_corpus_operation_builder(operation):
 
 @app.callback(
     Output('collocation-results', 'children'),
+    Output('collocation-place-tokens', 'data'),
     Input('run-collocations', 'n_clicks'),
     State('collocation-words-input', 'value'),
     State('collocation-before-input', 'value'),
@@ -1070,13 +1073,13 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
     if not n_clicks:
         raise PreventUpdate
     if not words_value:
-        return html.Div("Enter one or more keywords to analyse collocations.", style={'color': '#dc2626', 'fontSize': '0.8rem'})
+        return html.Div("Enter one or more keywords to analyse collocations.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
     if not current_books:
-        return html.Div("Corpus is empty. Build or upload a corpus first.", style={'color': '#dc2626', 'fontSize': '0.8rem'})
+        return html.Div("Corpus is empty. Build or upload a corpus first.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
 
     words = [w.strip() for w in words_value.split(',') if w.strip()]
     if not words:
-        return html.Div("No valid keywords provided.", style={'color': '#dc2626', 'fontSize': '0.8rem'})
+        return html.Div("No valid keywords provided.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
 
     before = int(before or 50)
     after = int(after or 50)
@@ -1095,7 +1098,7 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
         conn.close()
 
     if not urns:
-        return html.Div("No URNs found for the current corpus; collocations require identifiable texts.", style={'color': '#dc2626', 'fontSize': '0.8rem'})
+        return html.Div("No URNs found for the current corpus; collocations require identifiable texts.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
 
     sample_size = min(len(urns), 5000)
 
@@ -1103,10 +1106,10 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
         coll = dh.Collocations(urns, words, before=before, after=after, samplesize=sample_size)
         coll_df = coll.frame.copy()
     except Exception as err:
-        return html.Div(f"Error retrieving collocations: {err}", style={'color': '#dc2626', 'fontSize': '0.8rem'})
+        return html.Div(f"Error retrieving collocations: {err}", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
 
     if coll_df is None or coll_df.empty:
-        return html.Div("No collocations found for the selected keywords.", style={'color': '#475569', 'fontSize': '0.8rem'})
+        return html.Div("No collocations found for the selected keywords.", style={'color': '#475569', 'fontSize': '0.8rem'}), []
 
     coll_df = coll_df.reset_index()
     if 'index' in coll_df.columns:
@@ -1156,7 +1159,7 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
                 fixed_rows={'headers': True},
                 sort_action='native'
             )
-        ])
+        ]), []
 
     match_df_raw = pd.DataFrame(matching_places)
 
@@ -1177,7 +1180,7 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
         .sort_values(by='Total count', ascending=False)
         .head(50)
     )
-    return dash_table.DataTable(
+    table = dash_table.DataTable(
         columns=[
             {'name': 'Place', 'id': 'Place'},
             {'name': 'Tokens', 'id': 'Tokens'},
@@ -1201,6 +1204,26 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
         fixed_rows={'headers': True},
         sort_action='native'
     )
+    tokens = match_df['Token'].dropna().astype(str).unique().tolist()
+    return table, tokens
+
+@app.callback(
+    Output('collocation-highlight', 'data'),
+    Input('apply-collocation-highlight', 'n_clicks'),
+    Input('clear-collocation-highlight', 'n_clicks'),
+    State('collocation-place-tokens', 'data'),
+    prevent_initial_call=True
+)
+def set_collocation_highlight(apply_clicks, clear_clicks, tokens):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    triggered = ctx.triggered[0]['prop_id'].split('.')[0]
+    if triggered == 'apply-collocation-highlight':
+        return tokens or []
+    if triggered == 'clear-collocation-highlight':
+        return []
+    return dash.no_update
 
 # Add this callback to toggle the info modal
 
@@ -1336,11 +1359,12 @@ def update_category_selection(*args):
      Input('main-map', 'clickData'),
      Input('marker-size-slider', 'value'),
      Input('cluster-size-slider', 'value'),
-     Input('cluster-radius-slider', 'value')],
+     Input('cluster-radius-slider', 'value'),
+     Input('collocation-highlight', 'data')],
     [State('view-type', 'data')],
     prevent_initial_call=True
 )
-def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius, heatmap_colorscale, cluster_toggle, selected_place, click_data, marker_size, cluster_size, cluster_radius, current_view_type):
+def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius, heatmap_colorscale, cluster_toggle, selected_place, click_data, marker_size, cluster_size, cluster_radius, collocation_highlight, current_view_type):
     try:
         ctx = callback_context
         if not ctx.triggered:
@@ -1413,6 +1437,9 @@ def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius
             sizes = base_size + (sizes - min_size) / (max_size - min_size) * size_range
         else:
             sizes = [base_size] * len(sizes)
+
+        if not isinstance(sizes, pd.Series):
+            sizes = pd.Series(sizes, index=places_df.index)
         
         # Aggregate data for tooltips
         places_df['hover_text'] = places_df.apply(
@@ -1614,6 +1641,7 @@ def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius
                 print("No valid data for clustering")
         
         # Add individual markers if not clustering or if clustering failed
+        highlight_tokens = {str(t) for t in (collocation_highlight or []) if t}
         if not use_clustering or clustered.empty:
             if selected_place:
                 selected_df = places_df[places_df['token'] == selected_place]
@@ -1658,6 +1686,22 @@ def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius
                     customdata=places_df['token'].tolist(),
                     visible=(view_type == 'points'),
                     name='Places'
+                ))
+                highlight_tokens = {str(t) for t in (collocation_highlight or []) if t}
+        if highlight_tokens:
+            highlight_df = places_df[places_df['token'].astype(str).isin(highlight_tokens)]
+            if not highlight_df.empty:
+                highlight_sizes = (sizes.loc[highlight_df.index] * 1.4).tolist()
+                fig.add_trace(go.Scattermap(
+                    lat=highlight_df['latitude'],
+                    lon=highlight_df['longitude'],
+                    mode='markers',
+                    marker=dict(size=highlight_sizes, color='#ec4899', opacity=0.95, sizemode='diameter'),
+                    text=highlight_df['hover_text'],
+                    hoverinfo='text',
+                    customdata=highlight_df['token'].tolist(),
+                    visible=(view_type == 'points'),
+                    name='Collocation places'
                 ))
         
         heatmap_visible = view_type == 'heatmap'

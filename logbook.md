@@ -50,6 +50,7 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Added `todo.md` to track follow-up tasks (React lifecycle warning, safeguard filter defaults, helper launch script).
 - Added union/intersection/difference controls for corpus uploads and builder output; state updates now respect the selected set operation and automatically recompute place tokens to match.
 - Introduced collocation explorer in the corpus builder (via `dh.Collocations`), mapping dhlabids to URNs and intersecting collocates with place names to surface relevant locations for keywords like “krig”.
+- Added highlight workflow to paint collocation-matched places on the map (button-triggered overlay).
 
 **Notes**:
 - Heatmap and map views now stay in sync after uploads and resampling; baseline limit of 500 keeps the UI responsive while allowing manual adjustment.

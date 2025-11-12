@@ -176,7 +176,9 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                         dcc.Loading(
                             html.Div(id='collocation-results', style={'maxHeight': '200px', 'overflowY': 'auto'}),
                             type='default'
-                        )
+                        ),
+                        dbc.Button("Highlight places", id='apply-collocation-highlight', color='danger', size='sm', className="w-100 mb-2"),
+                        dbc.Button("Clear highlight", id='clear-collocation-highlight', color='secondary', outline=True, size='sm', className="w-100 mb-3")
                     ])
                 ], label="Collocations", tab_id="collocations"),
             ], id="corpus-builder-tabs", active_tab="metadata"),
