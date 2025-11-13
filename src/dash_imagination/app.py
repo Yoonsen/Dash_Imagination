@@ -9,12 +9,8 @@ import os
 import base64
 import io
 from dash.exceptions import PreventUpdate
-from dash_imagination.components.map import create_map_controls
-from dash_imagination.components.corpus import create_corpus_controls, create_visualization_controls, create_corpus_builder_card
 from scipy.spatial import ConvexHull
 import math
-from dash_imagination.components.places.place_similarity import create_place_similarity_controls
-from dash_imagination.components.places.place_similarity_dialog import create_place_similarity_dialog
 from dash_imagination.utils.db import get_db_connection
 import plotly.express as px
 import dhlab as dh
@@ -71,6 +67,11 @@ else:
     )
 
 server = app.server
+
+from dash_imagination.components.map import create_map_controls
+from dash_imagination.components.corpus import create_corpus_controls, create_visualization_controls, create_corpus_builder_card
+from dash_imagination.components.places.place_similarity import create_place_similarity_controls
+from dash_imagination.components.places.place_similarity_dialog import create_place_similarity_dialog
 
 # Database Connection & Queries
 def pdquery(conn, query, params=()):
