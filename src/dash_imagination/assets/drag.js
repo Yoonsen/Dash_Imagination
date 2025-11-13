@@ -5,8 +5,38 @@ $(document).ready(function() {
     let highestZ = 1000;
 
     function bringToFront($element) {
+        if (!$element || $element.length === 0) {
+            return;
+        }
         highestZ += 1;
         $element.css('z-index', highestZ);
+    }
+
+    function monitorVisibilityElement($element) {
+        if (!$element || $element.length === 0) {
+            return;
+        }
+        if ($element.data('visibilityObserver')) {
+            return;
+        }
+
+        // If already visible when initialized, bring to front
+        if ($element.is(':visible')) {
+            bringToFront($element);
+        }
+
+        const element = $element.get(0);
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.attributeName === 'style' || mutation.attributeName === 'class') {
+                    if ($element.is(':visible')) {
+                        bringToFront($element);
+                    }
+                }
+            });
+        });
+        observer.observe(element, { attributes: true, attributeFilter: ['style', 'class'] });
+        $element.data('visibilityObserver', observer);
     }
 
     // Function to initialize draggable behavior
@@ -40,6 +70,7 @@ $(document).ready(function() {
                 }).on('mousedown', function() {
                     bringToFront($(this));
                 });
+                monitorVisibilityElement($summary);
             }
 
             // Initialize place-names-container if it exists
@@ -62,6 +93,7 @@ $(document).ready(function() {
                 }).on('mousedown', function() {
                     bringToFront($(this));
                 });
+                monitorVisibilityElement($places);
             }
 
             // Initialize place-similarity-dialog if it exists
@@ -84,6 +116,7 @@ $(document).ready(function() {
                 }).on('mousedown', function() {
                     bringToFront($(this));
                 });
+                monitorVisibilityElement($similarity);
             }
 
             // Initialize corpus-controls-container if it exists
@@ -106,6 +139,7 @@ $(document).ready(function() {
                 }).on('mousedown', function() {
                     bringToFront($(this));
                 });
+                monitorVisibilityElement($corpusControls);
             }
 
             // Initialize visualization-controls-container if it exists
@@ -128,6 +162,7 @@ $(document).ready(function() {
                 }).on('mousedown', function() {
                     bringToFront($(this));
                 });
+                monitorVisibilityElement($visualization);
             }
 
             // Initialize corpus-builder-card if it exists
@@ -149,6 +184,7 @@ $(document).ready(function() {
                 }).on('mousedown', function() {
                     bringToFront($(this));
                 });
+                monitorVisibilityElement($builder);
             }
 
             console.log("Draggable initialization attempt completed");
