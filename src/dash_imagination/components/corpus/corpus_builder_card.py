@@ -71,20 +71,6 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                 dbc.Tab([
                     # Metadata Tab Content
                     html.Div([
-                        html.Label("Maximum Places", className="form-label"),
-                        html.Div([
-                            dcc.Slider(
-                                id='corpus-max-places-slider',
-                                min=100,
-                                max=2000,
-                                step=100,
-                                value=500,
-                                marks={i: str(i) for i in range(500, 2001, 500)},
-                                className="form-range"
-                            )
-                        ])
-                    ], className="mb-4"),
-                    html.Div([
                         html.Label("Year Range", className="form-label"),
                         dcc.RangeSlider(
                             id='corpus-year-range',

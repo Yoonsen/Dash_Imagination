@@ -643,6 +643,16 @@ app.layout = html.Div([
                     placeholder='Type to search...',
                     className="form-control mb-3"
                 ),
+                html.Label("Maximum Places", className="form-label"),
+                dcc.Slider(
+                    id='corpus-max-places-slider',
+                    min=100,
+                    max=2000,
+                    step=100,
+                    value=500,
+                    marks={i: str(i) for i in range(500, 2001, 500)},
+                    className="mb-3"
+                ),
                 html.Button([
                     html.I(className="fas fa-sync-alt me-2"),
                     "Resample Places"
