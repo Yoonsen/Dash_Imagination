@@ -8,8 +8,15 @@ $(document).ready(function() {
         if (!$element || $element.length === 0) {
             return;
         }
+        if ($element.data('raising')) {
+            return;
+        }
+        $element.data('raising', true);
         highestZ += 1;
         $element.css('z-index', highestZ);
+        requestAnimationFrame(() => {
+            $element.removeData('raising');
+        });
     }
 
     function monitorVisibilityElement($element) {
@@ -21,19 +28,27 @@ $(document).ready(function() {
         }
 
         // If already visible when initialized, bring to front
-        if ($element.is(':visible')) {
+        let lastVisible = $element.is(':visible');
+        if (lastVisible) {
             bringToFront($element);
         }
 
         const element = $element.get(0);
         const observer = new MutationObserver(function(mutations) {
+            let visibilityChanged = false;
             mutations.forEach(function(mutation) {
                 if (mutation.attributeName === 'style' || mutation.attributeName === 'class') {
-                    if ($element.is(':visible')) {
-                        bringToFront($element);
-                    }
+                    visibilityChanged = true;
                 }
             });
+            if (!visibilityChanged) {
+                return;
+            }
+            const isVisible = $element.is(':visible');
+            if (isVisible && !lastVisible) {
+                bringToFront($element);
+            }
+            lastVisible = isVisible;
         });
         observer.observe(element, { attributes: true, attributeFilter: ['style', 'class'] });
         $element.data('visibilityObserver', observer);
