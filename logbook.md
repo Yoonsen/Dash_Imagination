@@ -47,6 +47,8 @@ This logbook tracks the development progress, decisions, and challenges of the I
 **Progress**:
 - Replaced the remaining reference to the global `CorpusState` with session-local data from `current-dhlabids-store`, preventing corpus changes from bleeding across users on Cloud Run.
 - Verified the Dash app runs via `pdm run env PYTHONPATH=src python src/dash_imagination/app.py`, ensuring Plotly 6 trace classes (`go.Scattermap`, `go.Densitymap`) are available in local debugging sessions.
+- Let the heatmap render from the full corpus stored in `all-places-store` while keeping scatter markers sampled, so users get dense overviews without overwhelming mobile devices.
+- Moved component imports (corpus/map/place dialogs) below the Dash app instantiation to guarantee callback registration on Cloud Run and other WSGI hosts.
 
 **Notes**:
 - Follow-up: monitor other callbacks for accidental imports of `dash_imagination.utils.global_state`; none remain after updating `app.py`.
