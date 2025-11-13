@@ -1,6 +1,14 @@
 $(document).ready(function() {
     console.log("Document ready, setting up drag functionality");
 
+    // Track highest z-index so active card floats on top
+    let highestZ = 1000;
+
+    function bringToFront($element) {
+        highestZ += 1;
+        $element.css('z-index', highestZ);
+    }
+
     // Function to initialize draggable behavior
     function initializeDraggable() {
         console.log("Initializing draggable elements");
@@ -16,10 +24,12 @@ $(document).ready(function() {
             if ($('#place-summary-container').length > 0) {
                 console.log("Found place-summary-container, making it draggable");
 
-                $('#place-summary-container').draggable({
+                const $summary = $('#place-summary-container');
+                $summary.draggable({
                     handle: '#summary-header',
                     containment: 'window',
                     start: function(event, ui) {
+                        bringToFront($(this));
                         $(this).addClass("dragging");
                         console.log("Started dragging summary");
                     },
@@ -27,6 +37,8 @@ $(document).ready(function() {
                         $(this).removeClass("dragging");
                         console.log("Stopped dragging summary at:", ui.position);
                     }
+                }).on('mousedown', function() {
+                    bringToFront($(this));
                 });
             }
 
@@ -34,10 +46,12 @@ $(document).ready(function() {
             if ($('#place-names-container').length > 0) {
                 console.log("Found place-names-container, making it draggable");
 
-                $('#place-names-container').draggable({
+                const $places = $('#place-names-container');
+                $places.draggable({
                     handle: '#place-names-header',
                     containment: 'window',
                     start: function(event, ui) {
+                        bringToFront($(this));
                         $(this).addClass("dragging");
                         console.log("Started dragging places");
                     },
@@ -45,6 +59,8 @@ $(document).ready(function() {
                         $(this).removeClass("dragging");
                         console.log("Stopped dragging places at:", ui.position);
                     }
+                }).on('mousedown', function() {
+                    bringToFront($(this));
                 });
             }
 
@@ -52,10 +68,12 @@ $(document).ready(function() {
             if ($('#place-similarity-dialog').length > 0) {
                 console.log("Found place-similarity-dialog, making it draggable");
 
-                $('#place-similarity-dialog').draggable({
+                const $similarity = $('#place-similarity-dialog');
+                $similarity.draggable({
                     handle: '#similarity-header',
                     containment: 'window',
                     start: function(event, ui) {
+                        bringToFront($(this));
                         $(this).addClass("dragging");
                         console.log("Started dragging similarity dialog");
                     },
@@ -63,6 +81,8 @@ $(document).ready(function() {
                         $(this).removeClass("dragging");
                         console.log("Stopped dragging similarity dialog at:", ui.position);
                     }
+                }).on('mousedown', function() {
+                    bringToFront($(this));
                 });
             }
 
@@ -70,10 +90,12 @@ $(document).ready(function() {
             if ($('#corpus-controls-container').length > 0) {
                 console.log("Found corpus-controls-container, making it draggable");
 
-                $('#corpus-controls-container').draggable({
+                const $corpusControls = $('#corpus-controls-container');
+                $corpusControls.draggable({
                     handle: '#corpus-header',
                     containment: 'window',
                     start: function(event, ui) {
+                        bringToFront($(this));
                         $(this).addClass("dragging");
                         console.log("Started dragging corpus controls");
                     },
@@ -81,6 +103,8 @@ $(document).ready(function() {
                         $(this).removeClass("dragging");
                         console.log("Stopped dragging corpus controls at:", ui.position);
                     }
+                }).on('mousedown', function() {
+                    bringToFront($(this));
                 });
             }
 
@@ -88,10 +112,12 @@ $(document).ready(function() {
             if ($('#visualization-controls-container').length > 0) {
                 console.log("Found visualization-controls-container, making it draggable");
 
-                $('#visualization-controls-container').draggable({
+                const $visualization = $('#visualization-controls-container');
+                $visualization.draggable({
                     handle: '#visualization-header',
                     containment: 'window',
                     start: function(event, ui) {
+                        bringToFront($(this));
                         $(this).addClass("dragging");
                         console.log("Started dragging visualization controls");
                     },
@@ -99,16 +125,20 @@ $(document).ready(function() {
                         $(this).removeClass("dragging");
                         console.log("Stopped dragging visualization controls at:", ui.position);
                     }
+                }).on('mousedown', function() {
+                    bringToFront($(this));
                 });
             }
 
             // Initialize corpus-builder-card if it exists
             if ($('#corpus-builder-card').length > 0) {
                 console.log("Found corpus-builder-card, making it draggable");
-                $('#corpus-builder-card').draggable({
+                const $builder = $('#corpus-builder-card');
+                $builder.draggable({
                     handle: '#corpus-builder-header',
                     containment: 'window',
                     start: function(event, ui) {
+                        bringToFront($(this));
                         $(this).addClass("dragging");
                         console.log("Started dragging corpus builder card");
                     },
@@ -116,6 +146,8 @@ $(document).ready(function() {
                         $(this).removeClass("dragging");
                         console.log("Stopped dragging corpus builder card at:", ui.position);
                     }
+                }).on('mousedown', function() {
+                    bringToFront($(this));
                 });
             }
 
