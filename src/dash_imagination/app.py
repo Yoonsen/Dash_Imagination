@@ -16,7 +16,6 @@ import math
 from dash_imagination.components.places.place_similarity import create_place_similarity_controls
 from dash_imagination.components.places.place_similarity_dialog import create_place_similarity_dialog
 from dash_imagination.utils.db import get_db_connection
-from dash_imagination.utils.global_state import get_current_state, update_from_books, clear_state
 import plotly.express as px
 import dhlab as dh
 import re
@@ -119,21 +118,53 @@ default_filters = {
     'year_range': [1814, 1905]
 }
 
-def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
+
+def apply_book_operation(current_books, incoming_books, operation):
+    op = (operation or 'intersection').lower()
+    current = set(current_books or [])
+    incoming = set(incoming_books or [])
+
+    if not current:
+        if op == 'difference':
+            return []
+        return sorted(incoming)
+
+    if op == 'union':
+        result = current | incoming
+    elif op == 'difference':
+        result = current - incoming
+    else:  # intersection
+        result = current & incoming if incoming else set()
+    return sorted(result)
+
+
+def fetch_place_tokens(book_ids):
+    if not book_ids:
+        return []
+    df = get_all_places_for_corpus(book_ids)
+    if df.empty:
+        return []
+    return df['token'].dropna().astype(str).unique().tolist()
+
+def get_places_for_map(filters=None, books=None, return_total=False, selected_tokens=None):
     """Get places data for the map visualization."""
-    if filters is None:
-        filters = {}
-    
-    # Enforce maximum limit on places for performance
+    filters = filters or {}
+    books = list(books or [])
+    tokens = [str(t) for t in (selected_tokens or [])]
+
     MAX_PLACES = 2000  # Hard limit for map performance
-    
+
+    if not books and not tokens:
+        empty = pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+        return (empty, 0) if return_total else empty
+
     conn = get_db_connection()
     try:
-        # Get current state
-        books, places = get_current_state()
-        
-        if selected_tokens:
-            # If we have selected tokens, use them directly but include corpus stats
+        if tokens:
+            if not books:
+                empty = pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+                return (empty, 0) if return_total else empty
+
             query = """
             WITH selected_places AS (
                 SELECT 
@@ -160,20 +191,14 @@ def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
             WHERE b.dhlabid IN ({})
             GROUP BY sp.token, sp.name, sp.latitude, sp.longitude
             """
-            # Format the query with both selected tokens and books
             query = query.format(
-                ','.join(['?'] * len(selected_tokens)),
+                ','.join(['?'] * len(tokens)),
                 ','.join(['?'] * len(books))
             )
-            places_df = pd.read_sql_query(query, conn, params=tuple(selected_tokens + books))
+            params = tuple(tokens + books)
+            places_df = pd.read_sql_query(query, conn, params=params)
         else:
-            # Use books for corpus-based place generation
             query = """
-            WITH filtered_books AS (
-                SELECT DISTINCT b.dhlabid
-                FROM books b
-                WHERE b.dhlabid IN ({})
-            )
             SELECT 
                 b.token,
                 p.modern as name,
@@ -183,43 +208,38 @@ def get_places_for_map(filters=None, return_total=False, selected_tokens=None):
                 COUNT(DISTINCT b.dhlabid) as book_count
             FROM books b
             JOIN places p ON b.token = p.token
-            JOIN filtered_books fb ON b.dhlabid = fb.dhlabid
-            WHERE p.latitude IS NOT NULL 
+            WHERE b.dhlabid IN ({})
+            AND p.latitude IS NOT NULL 
             AND p.longitude IS NOT NULL
             AND p.latitude != '0'
             AND p.longitude != '0'
             GROUP BY b.token, p.modern, p.latitude, p.longitude
             ORDER BY frequency DESC
             """
-            
-            # Use books as source of truth
             if not books:
-                return pd.DataFrame(), 0
-                
-            # Format the query with the books
+                empty = pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+                return (empty, 0) if return_total else empty
             query = query.format(','.join(['?'] * len(books)))
             places_df = pd.read_sql_query(query, conn, params=tuple(books))
-        
-        # Convert latitude and longitude to numeric
+
         places_df['latitude'] = pd.to_numeric(places_df['latitude'], errors='coerce')
         places_df['longitude'] = pd.to_numeric(places_df['longitude'], errors='coerce')
-        
-        # Always apply a limit to protect performance
-        # Use the smaller of user-specified max_places or MAX_PLACES
+
         user_max = filters.get('max_places', 0)
-        effective_max = min(user_max if user_max > 0 else MAX_PLACES, MAX_PLACES)
+        effective_max = min(user_max if user_max and user_max > 0 else MAX_PLACES, MAX_PLACES)
         places_df = places_df.head(effective_max)
-        
+
+        if return_total:
+            total = len(places_df)
+            return places_df, total
         return places_df
     finally:
         conn.close()
 
-def get_place_details(token, page=1, per_page=20):
+def get_place_details(token, books, page=1, per_page=20):
     """Get details about a place from the database."""
     conn = get_db_connection()
     try:
-        # Get current state
-        books, _ = get_current_state()
         if not books:
            return pd.DataFrame(), 0
 
@@ -938,51 +958,47 @@ app.index_string = '''
 @app.callback(
     [Output('popup-upload-status', 'children'),
      Output('upload-state', 'data'),
-     Output('current-filters', 'data', allow_duplicate=True)],
+     Output('current-filters', 'data', allow_duplicate=True),
+     Output('current-dhlabids-store', 'data', allow_duplicate=True)],
     [Input('popup-upload-corpus', 'contents')],
     [State('popup-upload-corpus', 'filename'),
      State('current-filters', 'data'),
-     State('corpus-operation', 'data')],
+     State('corpus-operation', 'data'),
+     State('current-dhlabids-store', 'data')],
     prevent_initial_call=True
 )
-def update_state_and_filters(contents, filename, current_filters, operation):
+def update_state_and_filters(contents, filename, current_filters, operation, current_books):
     import pandas as pd
     import io
     import base64
-    from dash_imagination.utils.global_state import update_from_books
+    current_books = current_books or []
     if not contents:
-        return html.Div('', style={'display': 'none'}), {}, current_filters
+        return html.Div('', style={'display': 'none'}), {}, current_filters, dash.no_update
     content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
     try:
         df = pd.read_excel(io.BytesIO(decoded))
         if 'dhlabid' not in df.columns:
-            return html.Div('Error: File must contain a dhlabid column', style={'color': 'red'}), {}, current_filters
+            return html.Div('Error: File must contain a dhlabid column', style={'color': 'red'}), {}, current_filters, dash.no_update
         new_books = [int(x) for x in df['dhlabid'].dropna().tolist()]
         if not new_books:
-            return html.Div('No valid dhlabids found in file.', style={'color': 'red'}), {}, current_filters
-        # Query DB for valid places for these books
-        conn = get_db_connection()
-        try:
-            query = f"""
-            SELECT DISTINCT token
-            FROM books
-            WHERE dhlabid IN ({','.join(['?'] * len(new_books))})
-            """
-            places_df = pd.read_sql_query(query, conn, params=tuple(new_books))
-            new_places = places_df['token'].tolist()
-        finally:
-            conn.close()
-        # Update global state using the same logic as the builder
-        books, places = update_from_books(new_books, new_places, operation=operation or "intersection")
+            return html.Div('No valid dhlabids found in file.', style={'color': 'red'}), {}, current_filters, dash.no_update
+
+        updated_books = apply_book_operation(current_books, new_books, operation)
+        place_tokens = fetch_place_tokens(updated_books)
         # Update filters to reflect new corpus source
         new_filters = current_filters.copy() if current_filters else default_filters.copy()
         new_filters['corpus_source'] = filename
         new_filters['last_operation'] = operation or "intersection"
-        new_filters['selected_tokens'] = places
-        return html.Div('', style={'display': 'none'}), {'uploaded': True, 'filename': filename}, new_filters
+        new_filters['selected_tokens'] = place_tokens
+        return (
+            html.Div('', style={'display': 'none'}),
+            {'uploaded': True, 'filename': filename},
+            new_filters,
+            updated_books
+        )
     except Exception as e:
-        return html.Div(f'Error processing file: {str(e)}', style={'color': 'red'}), {}, current_filters
+        return html.Div(f'Error processing file: {str(e)}', style={'color': 'red'}), {}, current_filters, dash.no_update
 
 
 @app.callback(
@@ -1272,20 +1288,20 @@ app.clientside_callback(
 
 @app.callback(
     [Output('filtered-data', 'data', allow_duplicate=True),
-     Output('current-dhlabids-store', 'data'),
+     Output('current-dhlabids-store', 'data', allow_duplicate=True),
      Output('current-filters', 'data')],
     [Input('current-filters', 'data'),
      Input('upload-state', 'data'),
      Input('reset-corpus-confirm-modal', 'n_clicks')],
-    [State('popup-upload-corpus', 'filename')],
+    [State('popup-upload-corpus', 'filename'),
+     State('current-dhlabids-store', 'data')],
     prevent_initial_call=True
 )
-def update_filtered_data(filters, upload_state, reset_confirm_clicks, filename):
+def update_filtered_data(filters, upload_state, reset_confirm_clicks, filename, current_books):
     ctx = callback_context
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
+    current_books = current_books or []
     if triggered_id == 'reset-corpus-confirm-modal' and reset_confirm_clicks:
-        from dash_imagination.utils.global_state import clear_state
-        clear_state()
         return pd.DataFrame().to_json(date_format='iso', orient='split'), [], {}
     if triggered_id == 'upload-state' and upload_state:
         try:
@@ -1298,12 +1314,8 @@ def update_filtered_data(filters, upload_state, reset_confirm_clicks, filename):
     if not filters:
         return pd.DataFrame().to_json(date_format='iso', orient='split'), [], {}
     try:
-        # Get current state
-        books, places = get_current_state()
-        if not books and not places:
-            return pd.DataFrame().to_json(date_format='iso', orient='split'), [], {}
-        # Get places for the map
-        places_result = get_places_for_map(filters, selected_tokens=places)
+        selected_tokens = filters.get('selected_tokens') if filters else None
+        places_result = get_places_for_map(filters, books=current_books, selected_tokens=selected_tokens)
         if isinstance(places_result, tuple):
             places_df = places_result[0]
         else:
@@ -1312,7 +1324,7 @@ def update_filtered_data(filters, upload_state, reset_confirm_clicks, filename):
         print(f"DEBUG: places_df shape: {places_df.shape}")
         print(f"DEBUG: places_df head: {places_df.head()}")
         json_output = places_df.to_json(date_format='iso', orient='split')
-        return json_output, books, filters
+        return json_output, dash.no_update, filters
     except Exception as e:
         print(f"Error in update_filtered_data: {e}")
         return dash.no_update, dash.no_update, dash.no_update
@@ -1392,7 +1404,9 @@ def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius
             lon=[9.0],
             mode='markers',
             marker=dict(size=1, color='rgba(0,0,0,0)'),
-            showlegend=False
+            hoverinfo='skip',
+            showlegend=False,
+            visible=(view_type == 'points')
         ))
         
         if filtered_data_json is None:
@@ -1921,10 +1935,12 @@ def handle_place_click(n_clicks, ids, lats, lons, hovers):
      Output('place-summary', 'children')],
     [Input('main-map', 'clickData'),
      Input('selected-place', 'data')],
-    [State('place-summary-container', 'style')],
+    [State('place-summary-container', 'style'),
+     State('current-dhlabids-store', 'data')],
     prevent_initial_call=True
 )
-def update_place_summary(click_data, selected_place, current_style):
+def update_place_summary(click_data, selected_place, current_style, current_books):
+    current_books = current_books or []
     ctx = callback_context
     triggered = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
     # If triggered by map click
@@ -1954,7 +1970,7 @@ def update_place_summary(click_data, selected_place, current_style):
                     except Exception:
                         pass
             # Get book details for the place
-            books_df, total_books = get_place_details(token)
+            books_df, total_books = get_place_details(token, current_books)
             if not books_df.empty:
                 if 'total_mentions' in books_df.columns:
                     frequency = int(books_df.iloc[0]['total_mentions'])
@@ -2002,7 +2018,7 @@ def update_place_summary(click_data, selected_place, current_style):
             # Use selected_place (token) to fetch and display the place info
             token = selected_place
             # Get book details for the place
-            books_df, total_books = get_place_details(token)
+            books_df, total_books = get_place_details(token, current_books)
             # Fallbacks for summary info
             modern_part = ""
             frequency = 0
@@ -2101,14 +2117,15 @@ app.clientside_callback(
 @app.callback(
     Output('corpus-stats', 'children'),
     [Input('current-filters', 'data')],
+    [State('current-dhlabids-store', 'data')],
     prevent_initial_call=True
 )
-def update_corpus_stats(filters):
+def update_corpus_stats(filters, current_books):
     if not filters:
         return "No filters available"
     
-    # Get current state
-    books, places = get_current_state()
+    books = current_books or []
+    places = filters.get('selected_tokens', []) if filters else []
     if not books:
         return "No corpus loaded"
     
@@ -2544,14 +2561,9 @@ def load_filtered_data(filters, books):
         return pd.DataFrame().to_json(date_format='iso', orient='split')
     
     try:
-        # Get current state
-        books, places = get_current_state()
-        
-        if not books and not places:
-            return pd.DataFrame().to_json(date_format='iso', orient='split')
-        
         # Get places for the map
-        places_result = get_places_for_map(filters, selected_tokens=places)
+        places = filters.get('selected_tokens') if filters else None
+        places_result = get_places_for_map(filters, books=books, selected_tokens=places)
         if isinstance(places_result, tuple):
             places_df = places_result[0]
         else:
@@ -2681,20 +2693,20 @@ def handle_global_search(search_term, current_figure):
 @app.callback(
     Output('similar-places-list', 'children'),
     [Input('similar-place-search', 'value')],
+    [State('current-dhlabids-store', 'data')],
     prevent_initial_call=True
 )
-def update_similar_places(search_term):
+def update_similar_places(search_term, current_books):
     if not search_term or len(search_term) < 2:
         return html.Div("Enter at least 2 characters to search", style={'color': '#666'})
     
+    books = current_books or []
+    if not books:
+        return html.Div("No corpus loaded", style={'color': '#666'})
+
     try:
         conn = get_db_connection()
         try:
-            # Get current state
-            books, _ = get_current_state()
-            if not books:
-                return html.Div("No corpus loaded", style={'color': '#666'})
-            
             # Search in both historical and modern names
             query = """
             SELECT 
@@ -2811,10 +2823,13 @@ def test_info_btn_callback(n_clicks):
         Output('corpus-browse-table', 'children'),
     ],
     [Input('filtered-data', 'data'), Input('corpus-table-filter', 'data')],
+    [State('current-dhlabids-store', 'data'),
+     State('current-filters', 'data')],
     prevent_initial_call=True
 )
-def update_corpus_info_and_table(_, filter_data):
-    books, _ = get_current_state()
+def update_corpus_info_and_table(_, filter_data, current_books, current_filters):
+    books = current_books or []
+    selected_tokens = (current_filters or {}).get('selected_tokens', [])
     if not books:
         return "0", "0", "0", "", html.Div("No books in corpus.", style={'color': '#666'})
     import pandas as pd

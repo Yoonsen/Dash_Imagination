@@ -43,6 +43,14 @@ This logbook tracks the development progress, decisions, and challenges of the I
 
 ## Development Log
 
+### November 13, 2025
+**Progress**:
+- Replaced the remaining reference to the global `CorpusState` with session-local data from `current-dhlabids-store`, preventing corpus changes from bleeding across users on Cloud Run.
+- Verified the Dash app runs via `pdm run env PYTHONPATH=src python src/dash_imagination/app.py`, ensuring Plotly 6 trace classes (`go.Scattermap`, `go.Densitymap`) are available in local debugging sessions.
+
+**Notes**:
+- Follow-up: monitor other callbacks for accidental imports of `dash_imagination.utils.global_state`; none remain after updating `app.py`.
+
 ### November 12, 2025
 **Progress**:
 - Restored local environment alignment by running the Dash app through the PDM-managed virtualenv (`pdm run env PYTHONPATH=src python -m dash_imagination.app`) so Plotly 6 is available and `go.Scattermap` renders correctly.

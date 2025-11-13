@@ -2,9 +2,47 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State, callback, dash, ctx, no_update
 import pandas as pd
 from ...utils.corpus_build import corpus_builder, get_corpus_stats, count_words
-from ...utils.global_state import update_from_books
+from ...utils.db import get_db_connection
 import dhlab as dh
 from dash import dcc
+
+
+def apply_book_operation(current_books, incoming_books, operation):
+    op = (operation or 'intersection').lower()
+    current = set(current_books or [])
+    incoming = set(incoming_books or [])
+
+    if not current:
+        if op == 'difference':
+            return []
+        return sorted(incoming)
+
+    if op == 'union':
+        result = current | incoming
+    elif op == 'difference':
+        result = current - incoming
+    else:  # intersection
+        result = current & incoming if incoming else set()
+    return sorted(result)
+
+
+def fetch_place_tokens(book_ids):
+    if not book_ids:
+        return []
+    query = """
+        SELECT DISTINCT b.token
+        FROM books b
+        WHERE b.dhlabid IN ({})
+    """
+    conn = get_db_connection()
+    try:
+        formatted = ','.join(['?'] * len(book_ids))
+        df = pd.read_sql_query(query.format(formatted), conn, params=tuple(book_ids))
+    finally:
+        conn.close()
+    if df.empty:
+        return []
+    return df['token'].dropna().astype(str).tolist()
 
 def create_corpus_builder_card(categories_list=None, authors_list=None, default_filters=None):
     """Creates a Bootstrap card component for corpus building."""
@@ -243,14 +281,16 @@ def toggle_card_visibility(n1, n2, builder_style, controls_style):
 # New simplified callback: only updates filters/global state for metadata tab
 @callback(
     [Output("current-filters", "data", allow_duplicate=True),
-     Output("build-corpus-status", "children")],
+     Output("build-corpus-status", "children"),
+     Output("current-dhlabids-store", "data", allow_duplicate=True)],
     [Input("build-corpus-btn", "n_clicks")],
     [State("corpus-category-dropdown", "value"),
      State("corpus-author-dropdown", "value"),
      State("corpus-year-range", "value"),
      State("corpus-max-places-slider", "value"),
      State("current-filters", "data"),
-     State("corpus-operation", "data")],
+     State("corpus-operation", "data"),
+     State("current-dhlabids-store", "data")],
     prevent_initial_call=True
 )
 def build_corpus_and_show_stats(
@@ -261,10 +301,11 @@ def build_corpus_and_show_stats(
     max_places,
     current_filters,
     operation,
+    current_books
 ):
     import time
     if not n_clicks:
-        return dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update
     if current_filters is None:
         current_filters = {}
     # Show spinner/message while building
@@ -284,12 +325,13 @@ def build_corpus_and_show_stats(
         year_range=tuple(year_range) if year_range else None,
         author=author
     )
-    places_df = corpus_builder.get_places(max_places=max_places)
-    place_tokens = places_df['place_token'].tolist() if 'place_token' in places_df.columns else []
-    update_from_books(dhlabids, place_tokens, operation=op)
+    current_books = current_books or []
+    updated_books = apply_book_operation(current_books, dhlabids, operation=op)
+    place_tokens = fetch_place_tokens(updated_books)
     # Optionally, show a success message
     status_done = html.Span("Books added!", style={"color": "#059669", "fontWeight": "500"})
-    return new_filters, status_done
+    new_filters['selected_tokens'] = place_tokens
+    return new_filters, status_done, updated_books
 
 @callback(
     [Output("corpus-category-dropdown", "value"),
@@ -328,20 +370,22 @@ def reset_corpus_filters(n_clicks_timestamp, n_clicks, color, title):
 # New simplified callback: only updates filters/global state
 @callback(
     [Output("current-filters", "data", allow_duplicate=True),
-     Output("build-content-corpus-status", "children")],
+     Output("build-content-corpus-status", "children"),
+     Output("current-dhlabids-store", "data", allow_duplicate=True)],
     [Input("build-content-corpus-btn", "n_clicks")],
     [State("content-wordforms-input", "value"),
      State("content-min-count-input", "value"),
      State("current-filters", "data"),
-     State("corpus-operation", "data")],
+     State("corpus-operation", "data"),
+     State("current-dhlabids-store", "data")],
     prevent_initial_call=True
 )
-def build_content_corpus_and_show_stats(n_clicks, wordforms, min_count, current_filters, operation):
+def build_content_corpus_and_show_stats(n_clicks, wordforms, min_count, current_filters, operation, current_books):
     if not n_clicks:
-        return dash.no_update, dash.no_update
-    from ...utils.global_state import get_current_state
+        return dash.no_update, dash.no_update, dash.no_update
     from ...utils.corpus_build import corpus_builder
-    dhlabids, _ = get_current_state()
+    current_books = current_books or []
+    dhlabids = current_books.copy()
     # If corpus is empty, use all dhlabids from the database
     if not dhlabids:
         dhlabids = corpus_builder.get_corpus()
@@ -367,10 +411,9 @@ def build_content_corpus_and_show_stats(n_clicks, wordforms, min_count, current_
         return dash.no_update, dash.no_update
     if not selected_dhlabids:
         return dash.no_update, dash.no_update
-    places_df = corpus_builder.get_places(max_places=500)
-    place_tokens = places_df['place_token'].tolist() if 'place_token' in places_df.columns else []
     op = (operation or "intersection").lower()
-    update_from_books(selected_dhlabids, place_tokens, operation=op)
+    updated_books = apply_book_operation(current_books, selected_dhlabids, operation=op)
+    place_tokens = fetch_place_tokens(updated_books)
     new_filters = current_filters.copy() if current_filters else {}
     new_filters['content_words'] = words
     new_filters['content_min_count'] = min_count
@@ -378,4 +421,5 @@ def build_content_corpus_and_show_stats(n_clicks, wordforms, min_count, current_
     new_filters['last_operation'] = op
     # Optionally, show a success message
     status_done = html.Span("Books added!", style={"color": "#059669", "fontWeight": "500"})
-    return new_filters, status_done 
+    new_filters['selected_tokens'] = place_tokens
+    return new_filters, status_done, updated_books
