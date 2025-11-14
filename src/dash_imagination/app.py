@@ -1203,18 +1203,26 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
 
     if not matching_places:
         top = coll_df.sort_values(by='count', ascending=False).head(20)
-        return html.Div([
+        no_match_table = dash_table.DataTable(
+            columns=[{'name': 'Word', 'id': 'word'}, {'name': 'Count', 'id': 'count'}],
+            data=top[['word', 'count']].to_dict('records'),
+            style_table={'overflowX': 'auto', 'overflowY': 'auto', 'height': '100%', 'maxHeight': '100%', 'minHeight': 0},
+            style_cell={'padding': '4px'},
+            page_action='none',
+            fixed_rows={'headers': True},
+            sort_action='native',
+            css=[
+                {'selector': '.dash-table-container', 'rule': 'flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;'},
+                {'selector': '.dash-spreadsheet-container', 'rule': 'flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;'},
+                {'selector': '.dash-spreadsheet-inner', 'rule': 'flex: 1 1 auto; min-height: 0; height: 100%;'},
+                {'selector': '.dash-spreadsheet-inner table', 'rule': 'height: 100%;'}
+            ]
+        )
+        content = html.Div([
             html.Div("No place matches found. Showing top collocations instead:", style={'color': '#475569', 'fontSize': '0.8rem', 'marginBottom': '0.5rem'}),
-            dash_table.DataTable(
-                columns=[{'name': 'Word', 'id': 'word'}, {'name': 'Count', 'id': 'count'}],
-                data=top[['word', 'count']].to_dict('records'),
-                style_table={'overflowX': 'auto', 'fontSize': '0.75rem'},
-                style_cell={'padding': '4px'},
-                page_action='none',
-                fixed_rows={'headers': True},
-                sort_action='native'
-            )
-        ]), []
+            html.Div(no_match_table, style={'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'auto'})
+        ], style={'display': 'flex', 'flexDirection': 'column', 'flex': '1 1 auto', 'minHeight': 0})
+        return content, []
 
     match_df_raw = pd.DataFrame(matching_places)
 
@@ -1243,7 +1251,7 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
             {'name': 'Token', 'id': 'Token'}
         ],
         data=match_df.to_dict('records'),
-        style_table={'overflowX': 'auto', 'fontSize': '0.75rem'},
+        style_table={'overflowX': 'auto', 'overflowY': 'auto', 'height': '100%', 'maxHeight': '100%', 'minHeight': 0},
         style_cell={
             'padding': '4px',
             'whiteSpace': 'pre-line',
@@ -1257,10 +1265,20 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
         ],
         page_action='none',
         fixed_rows={'headers': True},
-        sort_action='native'
+        sort_action='native',
+        css=[
+            {'selector': '.dash-table-container', 'rule': 'flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;'},
+            {'selector': '.dash-spreadsheet-container', 'rule': 'flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;'},
+            {'selector': '.dash-spreadsheet-inner', 'rule': 'flex: 1 1 auto; min-height: 0; height: 100%;'},
+            {'selector': '.dash-spreadsheet-inner table', 'rule': 'height: 100%;'}
+        ]
     )
+    table_container = html.Div(table, style={'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'auto'})
+    content = html.Div([
+        table_container
+    ], style={'display': 'flex', 'flexDirection': 'column', 'flex': '1 1 auto', 'minHeight': 0})
     tokens = match_df['Token'].dropna().astype(str).unique().tolist()
-    return table, tokens
+    return content, tokens
 
 @app.callback(
     Output('collocation-highlight', 'data'),
