@@ -3095,9 +3095,6 @@ def update_filtered_data_auto_resample(all_places_json, filters, resample_clicks
     sampled_df = sample_places(all_places_df, n=n)
     return sampled_df.to_json(date_format='iso', orient='split')
 
-# Run Server
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8065, dev_tools_hot_reload=False)
 
 def truncate_text(value: str, length: int = 40) -> tuple[str, str]:
     if not value:
@@ -3119,4 +3116,12 @@ def build_html_table(rows, columns, *, table_class="table table-sm table-striped
         className=table_class,
         style={'margin': 0, 'tableLayout': 'fixed', 'width': '100%'}
     )
-    return html.Div(table, className="table-flex-container", style=container_style or {'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'auto'})
+    wrapper_style = {'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'auto'}
+    if container_style:
+        wrapper_style.update(container_style)
+    return html.Div(table, className="table-flex-container", style=wrapper_style)
+
+
+# Run Server
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=8065, dev_tools_hot_reload=False)
