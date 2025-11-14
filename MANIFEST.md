@@ -20,22 +20,34 @@ The app is a Google Maps-inspired interface with floating, interactive elements 
   - Places table (90,000 entries)
   - Books-Places relationship table
 
+### Conceptual Model
+- Treat the dataset as a document-term matrix (DTM) where **books are columns** and **places are rows**.
+- The primary flow is *books → places*: users assemble a corpus of books, and every downstream view derives from the set of places tied to that corpus.
+- Corpus membership is session-scoped and stored in `current-dhlabids-store` (a per-session `dcc.Store`) so each browser session works with its own book selection.
+- Places have multiple “projections”:
+  1. Places tied to the current corpus (baseline view).
+  2. Places surfaced via collocation queries (places near selected keywords).
+  3. Places prepared for visualization (frequency-weighted, sampled, or highlighted subsets).
+- Dialog logic needs to respect these projections so that place lists, highlights, and map overlays stay synchronized without leaking state across users.
+
 ### Core Functionality
 1. Corpus Building and Visualization
-   - Users can build corpus using book metadata
+   - Users can build corpus using metadata filters (author, title, year, category) and optional content queries (wordforms, min counts).
+   - Corpus operations support add/union, intersect, and subtract so uploaded corpora or builder results can be combined freely.
    - Places from selected corpus are plotted on map
    - External corpus can be loaded into the app
+   - Corpus data lives in `dcc.Store`, ensuring session isolation and predictable Undo/Redo behavior.
 
 2. Interactive Features
    - Click on place to see related books
    - Click on book to access National Library online
-   - View all places within selected corpus
-   - Place highlighting functionality (to be implemented)
+   - View all places within selected corpus, sampled subsets, or collocation results
+   - Highlight workflow lets collocation hits light up relevant places on the map (current implementation triggers highlight overlay; future revisions will unify this with the place dialog presets).
 
 3. Advanced Analysis (Future)
    - Concordance functionality for place-disease relationships
    - Corpus building based on specific themes (e.g., diseases like cholera, typhus)
-   - Collocation and vicinity searches
+   - Collocation and vicinity searches (current collocation pipeline already identifies places near keywords; future work consolidates its UI with the main places dialog presets)
 
 ### System Integration
 The app connects three main components:
@@ -84,6 +96,19 @@ All components are connected through consistent identifiers (URNs) that work acr
 - [ ] Ensure popups work correctly on all devices
 - [ ] Align top layer elements properly on mobile
 - [ ] Test and fix any mobile-specific issues
+
+## Planned Global Search Surface
+- Reserve the global search field (future top-bar component) for **single-entity lookups** spanning three object types: places, people, and books.
+- Search behaves like a Google Maps omnibox: always global, returning discrete hits rather than corpus-sized lists.
+- Example flows:
+  - Typing a place returns matching place entities plus the books where that place is mentioned; selecting it zooms the map and highlights the relevant corpus slice.
+  - Typing an author (e.g., “Amalie Skram”) returns her books, optional NB.no imagery from the relevant era, and an affordance to drop selected books into the active corpus.
+  - Typing a book title returns its metadata, associated places, and previews of illustrations pulled from the Qdrant-based similarity index.
+- Image traversal: leverage the existing Qdrant collection of illustrations/photos so users can start from a single image (e.g., an encyclopedia plate) and discover visually similar images across other books, optionally adding those source books into the corpus as they go.
+- Staging strategy:
+  1. Implement minimum viable global search returning entity cards with “Add to corpus” / “Show on map” actions.
+  2. Enrich responses with NB.no imagery and timeline context.
+  3. Integrate the image-similarity workflow so book discovery can start from visuals, not just text metadata.
 
 ## Future Considerations
 - Performance optimization for mobile devices

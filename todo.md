@@ -8,4 +8,5 @@
 - [ ] Document dialog rebuild plan with fixed-size presets (no live resize) and assign each dialog to the right preset.
 - [ ] Implement shared dialog shell (header/body/footer) applying those presets, with scrollable table/content regions.
 - [ ] Update dialog tables to rely on CSS overflow within fixed heights instead of ResizeObserver logic to avoid call-stack loops.
+- [ ] Add “Download places CSV” action inside the Places dialog (include historical name, modern name, frequency, latitude, longitude so results can be used in external GIS tools).
 
