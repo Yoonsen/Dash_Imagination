@@ -26,6 +26,7 @@ from typing import Tuple
 is_production = os.getenv('ENVIRONMENT', 'development') == 'production'
 is_chromebook = os.getenv('ENVIRONMENT', 'development') == 'chromebook'
 app_name = os.getenv('APP_NAME', 'imagination-map')  # Default to 'imagination_map' if not set
+assets_version = os.getenv('ASSETS_VERSION', 'v20251115')
 
 if is_production:
     db_path = "/app/src/dash_imagination/data/imagination.db"
@@ -54,6 +55,7 @@ if is_production:
             dbc.themes.BOOTSTRAP,
             "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
         ],
+        assets_version=assets_version,
         suppress_callback_exceptions=True
     )
 else:
@@ -63,6 +65,7 @@ else:
             dbc.themes.BOOTSTRAP,
             "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
         ],
+        assets_version=assets_version,
         suppress_callback_exceptions=True
     )
 
