@@ -145,8 +145,8 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                 filter_bar,
                 html.Div(id='corpus-browse-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto', 'fontSize': '0.8rem'}),
                 dcc.Store(id='corpus-table-filter', data={'column': None, 'value': None, 'direction': None})
-            ], style={'height': '100%', 'display': 'flex', 'flexDirection': 'column'})
-        ], style={'flex': '1 1 auto', 'overflowY': 'auto', 'display': 'flex', 'flexDirection': 'column'}),
+            ], style={'flex': '1 1 auto', 'minHeight': 0, 'display': 'flex', 'flexDirection': 'column'})
+        ], style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto', 'display': 'flex', 'flexDirection': 'column'}),
         # Hidden resample-container div to suppress callback errors
         html.Div(id='resample-container', style={'display': 'none'})
     ], id='corpus-controls-container', className="position-absolute m-3 d-flex flex-column", style={

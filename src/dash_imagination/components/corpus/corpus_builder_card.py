@@ -66,147 +66,163 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                 ),
             ], className="d-flex justify-content-between align-items-center", id="corpus-builder-header", style={"cursor": "grab", "userSelect": "none"})
         ], className="bg-success-subtle text-dark"),
-        dbc.CardBody([
-            dbc.Tabs([
-                dbc.Tab([
-                    # Metadata Tab Content
-                    html.Div([
-                        html.Label("Year Range", className="form-label"),
-                        dcc.RangeSlider(
-                            id='corpus-year-range',
-                            min=1814,
-                            max=1905,
-                            step=1,
-                            value=[1814, 1905],
-                            marks={i: str(i) for i in range(1814, 1906, 10)},
-                            className="mb-3"
-                        )
-                    ], className="mb-4"),
-                    html.Div([
-                        html.Label("Select Categories", className="form-label"),
-                        dcc.Dropdown(
-                            id='corpus-category-dropdown',
-                            options=[{'label': cat, 'value': cat} for cat in categories_list],
-                            value=default_filters.get('categories', []),
-                            multi=True,
-                            placeholder="Select categories..."
-                        )
-                    ], className="mb-4"),
-                    html.Div([
-                        html.Label("Select Authors", className="form-label"),
-                        dcc.Dropdown(
-                            id='corpus-author-dropdown',
-                            options=[{'label': author, 'value': author} for author in authors_list],
-                            value=default_filters.get('authors', []),
-                            multi=True,
-                            placeholder="Select authors..."
-                        )
-                    ], className="mb-4"),
-                    html.Div([
-                        html.Label("Combine with existing corpus", className="form-label mb-1"),
-                        dbc.ButtonGroup([
-                            dbc.Button("+", id='corpus-op-union-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Add to current corpus"),
-                            dbc.Button("&", id='corpus-op-intersection-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Keep only overlap"),
-                            dbc.Button("-", id='corpus-op-diff-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Remove from current corpus"),
-                        ], size="sm")
-                    ], className="mb-4"),
-                    html.Div([
-                        dcc.Loading(
-                            id="build-corpus-loading",
-                            type="default",
-                            children=[
-                                html.Button([
-                                    html.I(className="fas fa-plus me-2"),
-                                    "Add Books"
-                                ], id='build-corpus-btn', className="btn btn-primary w-100"),
-                                html.Div(id="build-corpus-status", className="mt-2")
-                            ]
-                        )
-                    ], className="mb-4"),
-                ], label="Metadata", tab_id="metadata"),
-                dbc.Tab([
-                    html.Div([
-                        html.Label("Wordforms (comma-separated)", className="form-label"),
-                        dcc.Input(
-                            id='content-wordforms-input',
-                            type='text',
-                            placeholder='e.g. krig, krigen',
-                            className="form-control mb-3"
+        dbc.CardBody(
+            html.Div(
+                dbc.Tabs(
+                    [
+                        dbc.Tab(
+                            html.Div([
+                                html.Div([
+                                    html.Label("Year Range", className="form-label"),
+                                    dcc.RangeSlider(
+                                        id='corpus-year-range',
+                                        min=1814,
+                                        max=1905,
+                                        step=1,
+                                        value=[1814, 1905],
+                                        marks={i: str(i) for i in range(1814, 1906, 10)},
+                                        className="mb-3"
+                                    )
+                                ], className="mb-4"),
+                                html.Div([
+                                    html.Label("Select Categories", className="form-label"),
+                                    dcc.Dropdown(
+                                        id='corpus-category-dropdown',
+                                        options=[{'label': cat, 'value': cat} for cat in categories_list],
+                                        value=default_filters.get('categories', []),
+                                        multi=True,
+                                        placeholder="Select categories..."
+                                    )
+                                ], className="mb-4"),
+                                html.Div([
+                                    html.Label("Select Authors", className="form-label"),
+                                    dcc.Dropdown(
+                                        id='corpus-author-dropdown',
+                                        options=[{'label': author, 'value': author} for author in authors_list],
+                                        value=default_filters.get('authors', []),
+                                        multi=True,
+                                        placeholder="Select authors..."
+                                    )
+                                ], className="mb-4"),
+                                html.Div([
+                                    html.Label("Combine with existing corpus", className="form-label mb-1"),
+                                    dbc.ButtonGroup([
+                                        dbc.Button("+", id='corpus-op-union-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Add to current corpus"),
+                                        dbc.Button("&", id='corpus-op-intersection-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Keep only overlap"),
+                                        dbc.Button("-", id='corpus-op-diff-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Remove from current corpus"),
+                                    ], size="sm")
+                                ], className="mb-4"),
+                                html.Div([
+                                    dcc.Loading(
+                                        id="build-corpus-loading",
+                                        type="default",
+                                        children=[
+                                            html.Button([
+                                                html.I(className="fas fa-plus me-2"),
+                                                "Add Books"
+                                            ], id='build-corpus-btn', className="btn btn-primary w-100"),
+                                            html.Div(id="build-corpus-status", className="mt-2")
+                                        ]
+                                    )
+                                ], className="mb-4")
+                            ], style={'display': 'flex', 'flexDirection': 'column', 'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
+                            label="Metadata",
+                            tab_id="metadata"
                         ),
-                        html.Label("Minimum occurrences (n)", className="form-label"),
-                        dcc.Input(
-                            id='content-min-count-input',
-                            type='number',
-                            min=1,
-                            value=1,
-                            className="form-control mb-3"
-                        ),
-                        dcc.Loading(
-                            id="build-content-corpus-loading",
-                            type="default",
-                            children=[
-                                html.Button([
-                                    html.I(className="fas fa-plus me-2"),
-                                    "Add Books"
-                                ], id='build-content-corpus-btn', className="btn btn-primary w-100 mb-4"),
-                                html.Div(id="build-content-corpus-status", className="mt-2")
-                            ]
-                        )
-                    ])
-                ], label="Content", tab_id="content"),
-                dbc.Tab([
-                    html.Div([
-                        html.Label("Keywords (comma-separated)", className="form-label"),
-                        dbc.Input(
-                            id='collocation-words-input',
-                            type='text',
-                            placeholder='e.g. krig, krigen',
-                            size='sm',
-                            className="mb-3"
-                        ),
-                        dbc.Row([
-                            dbc.Col([
-                                dbc.Label("Words before", className="form-label"),
-                                dbc.Input(
-                                    id='collocation-before-input',
+                        dbc.Tab(
+                            html.Div([
+                                html.Label("Wordforms (comma-separated)", className="form-label"),
+                                dcc.Input(
+                                    id='content-wordforms-input',
+                                    type='text',
+                                    placeholder='e.g. krig, krigen',
+                                    className="form-control mb-3"
+                                ),
+                                html.Label("Minimum occurrences (n)", className="form-label"),
+                                dcc.Input(
+                                    id='content-min-count-input',
                                     type='number',
                                     min=1,
-                                    max=200,
-                                    step=1,
-                                    value=50,
-                                    size='sm'
+                                    value=1,
+                                    className="form-control mb-3"
+                                ),
+                                dcc.Loading(
+                                    id="build-content-corpus-loading",
+                                    type="default",
+                                    children=[
+                                        html.Button([
+                                            html.I(className="fas fa-plus me-2"),
+                                            "Add Books"
+                                        ], id='build-content-corpus-btn', className="btn btn-primary w-100 mb-4"),
+                                        html.Div(id="build-content-corpus-status", className="mt-2")
+                                    ]
                                 )
-                            ], width=6),
-                            dbc.Col([
-                                dbc.Label("Words after", className="form-label"),
+                            ], style={'display': 'flex', 'flexDirection': 'column', 'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
+                            label="Content",
+                            tab_id="content"
+                        ),
+                        dbc.Tab(
+                            html.Div([
+                                html.Label("Keywords (comma-separated)", className="form-label"),
                                 dbc.Input(
-                                    id='collocation-after-input',
-                                    type='number',
-                                    min=1,
-                                    max=200,
-                                    step=1,
-                                    value=50,
-                                    size='sm'
-                                )
-                            ], width=6),
-                        ], className="g-2 mb-3"),
-                        dbc.Button(
-                            "Find collocations",
-                            id='run-collocations',
-                            color='secondary',
-                            size='sm',
-                            className="w-100 mb-3"
+                                    id='collocation-words-input',
+                                    type='text',
+                                    placeholder='e.g. krig, krigen',
+                                    size='sm',
+                                    className="mb-3"
+                                ),
+                                dbc.Row([
+                                    dbc.Col([
+                                        dbc.Label("Words before", className="form-label"),
+                                        dbc.Input(
+                                            id='collocation-before-input',
+                                            type='number',
+                                            min=1,
+                                            max=200,
+                                            step=1,
+                                            value=50,
+                                            size='sm'
+                                        )
+                                    ], width=6),
+                                    dbc.Col([
+                                        dbc.Label("Words after", className="form-label"),
+                                        dbc.Input(
+                                            id='collocation-after-input',
+                                            type='number',
+                                            min=1,
+                                            max=200,
+                                            step=1,
+                                            value=50,
+                                            size='sm'
+                                        )
+                                    ], width=6),
+                                ], className="g-2 mb-3"),
+                                dbc.Button(
+                                    "Find collocations",
+                                    id='run-collocations',
+                                    color='secondary',
+                                    size='sm',
+                                    className="w-100 mb-3"
+                                ),
+                                dcc.Loading(
+                                    html.Div(id='collocation-results', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
+                                    type='default'
+                                ),
+                                dbc.Button("Highlight places", id='apply-collocation-highlight', color='danger', size='sm', className="w-100 mb-2"),
+                                dbc.Button("Clear highlight", id='clear-collocation-highlight', color='secondary', outline=True, size='sm', className="w-100 mb-3")
+                            ], style={'display': 'flex', 'flexDirection': 'column', 'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'hidden'}),
+                            label="Collocations",
+                            tab_id="collocations"
                         ),
-                        dcc.Loading(
-                            html.Div(id='collocation-results', style={'maxHeight': '200px', 'overflowY': 'auto'}),
-                            type='default'
-                        ),
-                        dbc.Button("Highlight places", id='apply-collocation-highlight', color='danger', size='sm', className="w-100 mb-2"),
-                        dbc.Button("Clear highlight", id='clear-collocation-highlight', color='secondary', outline=True, size='sm', className="w-100 mb-3")
-                    ])
-                ], label="Collocations", tab_id="collocations"),
-            ], id="corpus-builder-tabs", active_tab="metadata"),
-        ], style={'overflowY': 'auto', 'flex': '1 1 auto'}),
+                    ],
+                    id="corpus-builder-tabs",
+                    active_tab="metadata",
+                    style={'flex': '1 1 auto', 'minHeight': 0}
+                ),
+                style={'flex': '1 1 auto', 'minHeight': 0, 'display': 'flex', 'flexDirection': 'column'}
+            ),
+            style={'flex': '1 1 auto', 'minHeight': 0, 'display': 'flex', 'flexDirection': 'column'}
+        ),
     ], id="corpus-builder-card", className="shadow position-absolute m-3 d-flex flex-column", style={
         "width": "350px",
         "minWidth": "340px",
@@ -255,7 +271,7 @@ def toggle_card_visibility(n1, n2, builder_style, controls_style):
         builder_style["left"] = "100px"
         # Remove transform if present
         builder_style.pop("transform", None)
-        controls_style["display"] = "block"
+        controls_style["display"] = "flex"
         return builder_style, controls_style
     elif button_id == "close-corpus-builder":
         # Hide builder card but keep controls visible

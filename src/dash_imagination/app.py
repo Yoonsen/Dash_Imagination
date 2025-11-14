@@ -611,8 +611,17 @@ app.layout = html.Div([
             ], className="d-flex justify-content-between align-items-center")
         ], className="bg-danger-subtle text-dark", id='summary-header'),
         dbc.CardBody([
-            html.Div(id='place-summary')
-        ], style={'overflowY': 'auto', 'flex': '1 1 auto'})
+            html.Div(id='place-summary', style={
+                'flex': '1 1 auto',
+                'minHeight': 0,
+                'overflowY': 'auto'
+            })
+        ], style={
+            'flex': '1 1 auto',
+            'minHeight': 0,
+            'display': 'flex',
+            'flexDirection': 'column'
+        })
     ], id='place-summary-container', className="position-absolute d-flex flex-column", style={
         'width': '350px',
         'minWidth': '300px',
@@ -670,9 +679,23 @@ app.layout = html.Div([
                 html.H5("Results", className="mb-3"),
                 html.Div(id='place-names-list', children=[
                     html.P("Type in the search box to find places", className="text-muted")
-                ])
-            ])
-        ], style={'overflowY': 'auto', 'flex': '1 1 auto'})
+                ], style={
+                    'flex': '1 1 auto',
+                    'minHeight': 0,
+                    'overflowY': 'auto'
+                })
+            ], style={
+                'flex': '1 1 auto',
+                'minHeight': 0,
+                'display': 'flex',
+                'flexDirection': 'column'
+            })
+        ], style={
+            'flex': '1 1 auto',
+            'minHeight': 0,
+            'display': 'flex',
+            'flexDirection': 'column'
+        })
     ], id='place-names-container', className="position-absolute d-flex flex-column", style={
         'width': '350px',
         'minWidth': '320px',
