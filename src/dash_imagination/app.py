@@ -55,7 +55,6 @@ if is_production:
             dbc.themes.BOOTSTRAP,
             "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
         ],
-        assets_version=assets_version,
         suppress_callback_exceptions=True
     )
 else:
@@ -65,9 +64,10 @@ else:
             dbc.themes.BOOTSTRAP,
             "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
         ],
-        assets_version=assets_version,
         suppress_callback_exceptions=True
     )
+
+app._assets_version = assets_version
 
 server = app.server
 
@@ -755,76 +755,72 @@ app.index_string = '''
                 opacity: 0.7;
             }
             /* Resize handle styles */
-            .resize-handle {
+            .ui-resizable-handle {
                 position: absolute;
-                background: #94a3b8;
+                background: rgba(148, 163, 184, 0.45);
                 border-radius: 2px;
                 opacity: 0;
                 transition: opacity 0.2s;
-                z-index: 1000;
+                z-index: 1200;
             }
-            .resize-handle:hover {
+            .ui-resizable-handle:hover,
+            .ui-resizable-handle:active {
                 opacity: 1;
             }
-            .resize-handle.e {
-                width: 8px;
-                height: 100%;
-                right: -4px;
-                top: 0;
-                cursor: e-resize;
-            }
-            .resize-handle.s {
-                width: 100%;
-                height: 8px;
-                bottom: -4px;
+            .ui-resizable-n,
+            .ui-resizable-s {
                 left: 0;
-                cursor: s-resize;
+                right: 0;
+                height: 6px;
+                cursor: ns-resize;
             }
-            .resize-handle.se {
+            .ui-resizable-n {
+                top: -3px;
+            }
+            .ui-resizable-s {
+                bottom: -3px;
+            }
+            .ui-resizable-e,
+            .ui-resizable-w {
+                top: 0;
+                bottom: 0;
+                width: 6px;
+                cursor: ew-resize;
+            }
+            .ui-resizable-e {
+                right: -3px;
+            }
+            .ui-resizable-w {
+                left: -3px;
+            }
+            .ui-resizable-se,
+            .ui-resizable-ne,
+            .ui-resizable-sw,
+            .ui-resizable-nw {
                 width: 12px;
                 height: 12px;
+                border-radius: 50%;
+                cursor: pointer;
+            }
+            .ui-resizable-se {
                 right: -6px;
                 bottom: -6px;
                 cursor: se-resize;
-                border-radius: 50%;
             }
-            .resize-handle.w {
-                width: 8px;
-                height: 100%;
-                left: -4px;
-                top: 0;
-                cursor: w-resize;
-            }
-            .resize-handle.n {
-                width: 100%;
-                height: 8px;
-                top: -4px;
-                left: 0;
-                cursor: n-resize;
-            }
-            .resize-handle.sw {
-                width: 12px;
-                height: 12px;
-                left: -6px;
-                bottom: -6px;
-                cursor: sw-resize;
-                border-radius: 50%;
-            }
-            .resize-handle.ne {
-                width: 12px;
-                height: 12px;
+            .ui-resizable-ne {
                 right: -6px;
                 top: -6px;
                 cursor: ne-resize;
-                border-radius: 50%;
             }
-            .resize-handle.nw {
-                width: 12px;
-                height: 12px;
+            .ui-resizable-sw {
+                left: -6px;
+                bottom: -6px;
+                cursor: sw-resize;
+            }
+            .ui-resizable-nw {
                 left: -6px;
                 top: -6px;
                 cursor: nw-resize;
-                border-radius: 50%;
             }
         </style>
     </head>

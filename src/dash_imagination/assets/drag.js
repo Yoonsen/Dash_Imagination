@@ -54,6 +54,35 @@ $(document).ready(function() {
         $element.data('visibilityObserver', observer);
     }
 
+    function makeResizable($element, extraOptions) {
+        if (!$element || $element.length === 0) {
+            return;
+        }
+        if ($element.hasClass('ui-resizable')) {
+            return;
+        }
+        if (typeof $.ui === 'undefined' || !$.ui.resizable) {
+            console.warn("jQuery UI resizable is not available for", $element.attr('id'));
+            return;
+        }
+
+        const defaults = {
+            handles: 'n,e,s,w,ne,se,nw,sw',
+            minWidth: 260,
+            minHeight: 220,
+            start: function () {
+                const $this = $(this);
+                bringToFront($this);
+                $this.addClass('resizing');
+            },
+            stop: function () {
+                $(this).removeClass('resizing');
+            }
+        };
+
+        $element.resizable($.extend({}, defaults, extraOptions || {}));
+    }
+
     // Function to initialize draggable behavior
     function initializeDraggable() {
         console.log("Initializing draggable elements");
@@ -85,6 +114,7 @@ $(document).ready(function() {
                 }).on('mousedown', function() {
                     bringToFront($(this));
                 });
+                makeResizable($summary, { minWidth: 320, minHeight: 260 });
                 monitorVisibilityElement($summary);
             }
 
@@ -108,6 +138,7 @@ $(document).ready(function() {
                 }).on('mousedown', function() {
                     bringToFront($(this));
                 });
+                makeResizable($places, { minWidth: 320, minHeight: 280 });
                 monitorVisibilityElement($places);
             }
 
@@ -131,6 +162,7 @@ $(document).ready(function() {
                 }).on('mousedown', function() {
                     bringToFront($(this));
                 });
+                makeResizable($similarity, { minWidth: 360, minHeight: 320 });
                 monitorVisibilityElement($similarity);
             }
 
@@ -154,6 +186,7 @@ $(document).ready(function() {
                 }).on('mousedown', function() {
                     bringToFront($(this));
                 });
+                makeResizable($corpusControls, { minWidth: 360, minHeight: 320 });
                 monitorVisibilityElement($corpusControls);
             }
 
@@ -177,6 +210,7 @@ $(document).ready(function() {
                 }).on('mousedown', function() {
                     bringToFront($(this));
                 });
+                makeResizable($visualization, { minWidth: 360, minHeight: 320 });
                 monitorVisibilityElement($visualization);
             }
 
@@ -199,6 +233,7 @@ $(document).ready(function() {
                 }).on('mousedown', function() {
                     bringToFront($(this));
                 });
+                makeResizable($builder, { minWidth: 380, minHeight: 360 });
                 monitorVisibilityElement($builder);
             }
 
