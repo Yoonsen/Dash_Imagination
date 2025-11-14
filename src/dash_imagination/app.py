@@ -612,15 +612,18 @@ app.layout = html.Div([
         ], className="bg-danger-subtle text-dark", id='summary-header'),
         dbc.CardBody([
             html.Div(id='place-summary')
-        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
-    ], id='place-summary-container', className="position-absolute", style={
+        ], style={'overflowY': 'auto', 'flex': '1 1 auto'})
+    ], id='place-summary-container', className="position-absolute d-flex flex-column", style={
         'width': '350px',
-        'height': '500px',
+        'minWidth': '300px',
+        'minHeight': '320px',
         'zIndex': 800,
         'display': 'none',
         'top': '100px',  # Position below the top button container
         'left': '20px',  # Align with other containers
-        'cursor': 'grab'  # Change cursor to grab
+        'cursor': 'grab',
+        'display': 'flex',
+        'flexDirection': 'column'
     }),
 
     # Place Names Container
@@ -669,15 +672,18 @@ app.layout = html.Div([
                     html.P("Type in the search box to find places", className="text-muted")
                 ])
             ])
-        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
-    ], id='place-names-container', className="position-absolute", style={
+        ], style={'overflowY': 'auto', 'flex': '1 1 auto'})
+    ], id='place-names-container', className="position-absolute d-flex flex-column", style={
         'width': '350px',
-        'height': '500px',
+        'minWidth': '320px',
+        'minHeight': '360px',
         'zIndex': 800,
         'display': 'none',
         'top': '60px',
         'right': '10px',  # Initial right position
-        'cursor': 'grab'  # Change cursor to grab
+        'cursor': 'grab',
+        'display': 'flex',
+        'flexDirection': 'column'
     }),
 
     # Add place similarity dialog
@@ -1275,7 +1281,7 @@ def toggle_place_names_container(n_clicks, current_style):
         raise PreventUpdate
     
     new_style = dict(current_style)
-    new_style['display'] = 'block' if current_style.get('display') == 'none' else 'none'
+    new_style['display'] = 'flex' if current_style.get('display') == 'none' else 'none'
     return new_style
 
 # Close button callback
@@ -2042,7 +2048,7 @@ def update_place_summary(click_data, selected_place, current_style, current_book
                 ])
             ])
             new_style = dict(current_style)
-            new_style['display'] = 'block'
+            new_style['display'] = 'flex'
             return new_style, summary
         except Exception as e:
             print(f"Error updating place summary (map): {e}")
@@ -2099,7 +2105,7 @@ def update_place_summary(click_data, selected_place, current_style, current_book
                 ])
             ])
             new_style = dict(current_style)
-            new_style['display'] = 'block'
+            new_style['display'] = 'flex'
             return new_style, summary
         except Exception as e:
             print(f"Error updating place summary (list): {e}")
@@ -2248,7 +2254,7 @@ def update_corpus_stats(filters, current_books):
 def toggle_corpus_controls(n1, n2, current_style):
     if n1 or n2:
         new_style = dict(current_style)
-        new_style['display'] = 'block' if current_style.get('display') == 'none' else 'none'
+        new_style['display'] = 'flex' if current_style.get('display') == 'none' else 'none'
         return new_style
     return current_style
 
@@ -2263,7 +2269,7 @@ def toggle_corpus_controls(n1, n2, current_style):
 def toggle_visualization_controls(n1, n2, current_style):
     if n1 or n2:
         new_style = dict(current_style)
-        new_style['display'] = 'block' if current_style.get('display') == 'none' else 'none'
+        new_style['display'] = 'flex' if current_style.get('display') == 'none' else 'none'
         return new_style
     return current_style
 
@@ -2444,7 +2450,7 @@ def update_loading_state(build_clicks, map_figure, current_style):
     # Show loading when build button is clicked
     if trigger_id == 'build-corpus-btn' and build_clicks:
         new_style = dict(current_style)
-        new_style['display'] = 'block'
+        new_style['display'] = 'flex'
         return new_style
     
     # Hide loading when map is updated

@@ -146,16 +146,19 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                 html.Div(id='corpus-browse-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto', 'fontSize': '0.8rem'}),
                 dcc.Store(id='corpus-table-filter', data={'column': None, 'value': None, 'direction': None})
             ], style={'height': '100%', 'display': 'flex', 'flexDirection': 'column'})
-        ], style={'height': '444px', 'overflowY': 'auto'}),
+        ], style={'flex': '1 1 auto', 'overflowY': 'auto', 'display': 'flex', 'flexDirection': 'column'}),
         # Hidden resample-container div to suppress callback errors
         html.Div(id='resample-container', style={'display': 'none'})
-    ], id='corpus-controls-container', className="position-absolute m-3", style={
+    ], id='corpus-controls-container', className="position-absolute m-3 d-flex flex-column", style={
         'width': '450px',
-        'height': '500px',
+        'minWidth': '360px',
+        'minHeight': '360px',
         'zIndex': 800,
         'display': 'none',
         'top': '60px',
-        'left': '10px'
+        'left': '10px',
+        'display': 'flex',
+        'flexDirection': 'column'
     })
 
 def create_visualization_controls(categories_list=None, titles_list=None, default_filters=None):
@@ -333,15 +336,18 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
             dcc.Download(id="download-map-file"),
             # Status message
             html.Div(id='download-status', className="mt-2")
-        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
-    ], id='visualization-controls-container', className="position-absolute", style={
+        ], style={'overflowY': 'auto', 'flex': '1 1 auto'})
+    ], id='visualization-controls-container', className="position-absolute d-flex flex-column", style={
         'width': '350px',
-        'height': '500px',
+        'minWidth': '320px',
+        'minHeight': '360px',
         'zIndex': 800,
         'display': 'none',
         'top': '100px',
         'left': '20px',
-        'cursor': 'move'
+        'cursor': 'move',
+        'display': 'flex',
+        'flexDirection': 'column'
     }) 
 
 @callback(

@@ -206,10 +206,11 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                     ])
                 ], label="Collocations", tab_id="collocations"),
             ], id="corpus-builder-tabs", active_tab="metadata"),
-        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'}),
-    ], id="corpus-builder-card", className="shadow position-absolute m-3", style={
+        ], style={'overflowY': 'auto', 'flex': '1 1 auto'}),
+    ], id="corpus-builder-card", className="shadow position-absolute m-3 d-flex flex-column", style={
         "width": "350px",
-        "height": "500px",
+        "minWidth": "340px",
+        "minHeight": "360px",
         "zIndex": 800,
         "display": "none",
         "top": "60px",
@@ -247,9 +248,8 @@ def toggle_card_visibility(n1, n2, builder_style, controls_style):
     
     if button_id == "open-corpus-builder":
         # Show builder card and ensure controls stay visible
-        builder_style["display"] = "block"
+        builder_style["display"] = "flex"
         builder_style["width"] = "350px"
-        builder_style["height"] = "500px"
         builder_style["zIndex"] = 800
         builder_style["top"] = "60px"
         builder_style["left"] = "100px"
@@ -335,7 +335,7 @@ def build_corpus_and_show_stats(
 )
 def reset_corpus_filters(n_clicks_timestamp, n_clicks, color, title):
     """Require double-click to confirm reset. On first click, change color/title. On second click within 3s, reset."""
-    ctx = callback_context
+    ctx = dash.callback_context
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
     # Store last click timestamp in a hidden div or use local state
