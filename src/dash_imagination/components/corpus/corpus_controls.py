@@ -20,9 +20,10 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                 html.I(className="fa fa-book me-2"),
                 html.H5("Corpus Controls", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
                 html.Button(
-                    html.I(className="fa fa-times"),
+                    "×",
                     id='close-corpus',
-                    className="btn-close"
+                    className="btn-close dialog-close-btn",
+                    title="Close"
                 )
             ], className="d-flex justify-content-between align-items-center")
         ], className="bg-primary-subtle text-dark", id='corpus-header'),
@@ -173,9 +174,10 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
                 html.I(className="fa fa-chart-bar me-2"),
                 html.H5("Visualization Controls", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
                 html.Button(
-                    html.I(className="fa fa-times"),
+                    "×",
                     id='close-visualization',
-                    className="btn-close"
+                    className="btn-close dialog-close-btn",
+                    title="Close"
                 )
             ], className="d-flex justify-content-between align-items-center")
         ], className="bg-info-subtle text-dark", id='visualization-header'),

@@ -61,8 +61,9 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                 dbc.Button(
                     "×",
                     id="close-corpus-builder",
-                    className="float-end btn-close",
+                    className="float-end btn-close dialog-close-btn",
                     size="sm",
+                    title="Close"
                 ),
             ], className="d-flex justify-content-between align-items-center", id="corpus-builder-header", style={"cursor": "grab", "userSelect": "none"})
         ], className="bg-success-subtle text-dark"),

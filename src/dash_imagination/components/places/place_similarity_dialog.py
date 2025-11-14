@@ -14,9 +14,10 @@ def create_place_similarity_dialog():
                 html.I(className="fa fa-search me-2"),
                 html.H5("Place Similarity", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
                 html.Button(
-                    html.I(className="fa fa-times"),
+                    "×",
                     id='close-similarity',
-                    className="btn-close"
+                    className="btn-close dialog-close-btn",
+                    title="Close"
                 )
             ], className="d-flex justify-content-between align-items-center")
         ], className="bg-info-subtle text-dark", id='similarity-header'),

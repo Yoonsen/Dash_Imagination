@@ -601,9 +601,10 @@ app.layout = html.Div([
                 html.I(className="fa fa-grip-horizontal me-2"),
                 html.H5("Place Details", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
                 html.Button(
-                    html.I(className="fa fa-times"),
+                    "×",
                     id='close-summary',
-                    className="btn-close"
+                    className="btn-close dialog-close-btn",
+                    title="Close"
                 )
             ], className="d-flex justify-content-between align-items-center")
         ], className="bg-danger-subtle text-dark", id='summary-header'),
@@ -627,9 +628,10 @@ app.layout = html.Div([
                 html.I(className="fa fa-map-marker me-2"),
                 html.H5("Place Names", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
                 html.Button(
-                    html.I(className="fa fa-times"),
+                    "×",
                     id='close-place-names',
-                    className="btn-close"
+                    className="btn-close dialog-close-btn",
+                    title="Close"
                 )
             ], className="d-flex justify-content-between align-items-center", id='place-names-header')
         ], className="bg-warning-subtle text-dark"),
