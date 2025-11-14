@@ -17,7 +17,6 @@ import dhlab as dh
 import re
 import json
 from flask import request, send_file
-from dash import dash_table
 from typing import Tuple
 
 #=== initialize
@@ -1203,24 +1202,14 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
 
     if not matching_places:
         top = coll_df.sort_values(by='count', ascending=False).head(20)
-        no_match_table = dash_table.DataTable(
-            columns=[{'name': 'Word', 'id': 'word'}, {'name': 'Count', 'id': 'count'}],
-            data=top[['word', 'count']].to_dict('records'),
-            style_table={'overflowX': 'auto', 'overflowY': 'auto', 'height': '100%', 'maxHeight': '100%', 'minHeight': 0},
-            style_cell={'padding': '4px'},
-            page_action='none',
-            fixed_rows={'headers': True},
-            sort_action='native',
-            css=[
-                {'selector': '.dash-table-container', 'rule': 'flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;'},
-                {'selector': '.dash-spreadsheet-container', 'rule': 'flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;'},
-                {'selector': '.dash-spreadsheet-inner', 'rule': 'flex: 1 1 auto; min-height: 0; height: 100%;'},
-                {'selector': '.dash-spreadsheet-inner table', 'rule': 'height: 100%;'}
-            ]
-        )
+        rows = top[['word', 'count']].to_dict('records')
+        table = build_html_table(rows, [('word', 'Word'), ('count', 'Count')])
         content = html.Div([
-            html.Div("No place matches found. Showing top collocations instead:", style={'color': '#475569', 'fontSize': '0.8rem', 'marginBottom': '0.5rem'}),
-            html.Div(no_match_table, style={'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'auto'})
+            html.Div(
+                "No place matches found. Showing top collocations instead:",
+                style={'color': '#475569', 'fontSize': '0.8rem', 'marginBottom': '0.5rem'}
+            ),
+            table
         ], style={'display': 'flex', 'flexDirection': 'column', 'flex': '1 1 auto', 'minHeight': 0})
         return content, []
 
@@ -1243,39 +1232,13 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
         .sort_values(by='Total count', ascending=False)
         .head(50)
     )
-    table = dash_table.DataTable(
-        columns=[
-            {'name': 'Place', 'id': 'Place'},
-            {'name': 'Tokens', 'id': 'Tokens'},
-            {'name': 'Total count', 'id': 'Total count'},
-            {'name': 'Token', 'id': 'Token'}
-        ],
-        data=match_df.to_dict('records'),
-        style_table={'overflowX': 'auto', 'overflowY': 'auto', 'height': '100%', 'maxHeight': '100%', 'minHeight': 0},
-        style_cell={
-            'padding': '4px',
-            'whiteSpace': 'pre-line',
-            'textAlign': 'left'
-        },
-        style_data_conditional=[
-            {
-                'if': {'column_id': 'Token'},
-                'display': 'none'
-            }
-        ],
-        page_action='none',
-        fixed_rows={'headers': True},
-        sort_action='native',
-        css=[
-            {'selector': '.dash-table-container', 'rule': 'flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;'},
-            {'selector': '.dash-spreadsheet-container', 'rule': 'flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;'},
-            {'selector': '.dash-spreadsheet-inner', 'rule': 'flex: 1 1 auto; min-height: 0; height: 100%;'},
-            {'selector': '.dash-spreadsheet-inner table', 'rule': 'height: 100%;'}
-        ]
+    table_rows = match_df[['Place', 'Tokens', 'Total count']].to_dict('records')
+    table = build_html_table(
+        table_rows,
+        [('Place', 'Place'), ('Tokens', 'Tokens'), ('Total count', 'Total count')]
     )
-    table_container = html.Div(table, style={'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'auto'})
     content = html.Div([
-        table_container
+        table
     ], style={'display': 'flex', 'flexDirection': 'column', 'flex': '1 1 auto', 'minHeight': 0})
     tokens = match_df['Token'].dropna().astype(str).unique().tolist()
     return content, tokens
@@ -2974,70 +2937,37 @@ def update_corpus_info_and_table(_, filter_data, current_books, current_filters)
         if df.empty:
             table_section = html.Div("No books found in corpus.", style={'color': '#666'})
         else:
-            # Wrap DataTable in a div to move horizontal scrollbar to the top
-            table_section = html.Div([
-                dash_table.DataTable(
-                    columns=[
-                        {"name": "Title", "id": "title", "presentation": "markdown"},
-                        {"name": "Author", "id": "author"},
-                        {"name": "≡", "id": "category"},
-                        {"name": "📅\ufe0e", "id": "year"},
-                        {"name": "◆", "id": "placename_count"}
-                    ],
-                    data=[{
-                        **row.to_dict(),
-                        "title": f"[ {(row['title'] or '')[:20] + ('…' if row['title'] and len(row['title']) > 20 else '')} ](https://www.nb.no/items/{row['urn']})",
-                        "author": (row['author'] or '')[:20] + ('…' if row['author'] and len(row['author']) > 20 else ''),
-                        "_title_full": row['title'] or '',
-                        "_author_full": row['author'] or ''
-                    } for _, row in df.iterrows()],
-                    tooltip_data=[
-                        {"title": {"value": row['title'] or '', "type": "markdown"}, "author": {"value": row['author'] or '', "type": "markdown"}} for _, row in df.iterrows()
-                    ],
-                    style_header={
-                        'backgroundColor': '#f8fafc',
-                        'color': '#4B6CB7',
-                        'fontWeight': '500',
-                        'fontSize': '0.85rem',
-                        'borderBottom': '1px solid #e5e7eb',
-                    },
-                    style_table={
-                        "maxHeight": "350px",
-                        "overflowY": "auto",
-                        "overflowX": "hidden",
-                        "minWidth": "100%"
-                    },
-                    style_cell={
-                        "fontSize": "0.75rem",
-                        "padding": "2px 4px",
-                        "whiteSpace": "pre-line",
-                        "overflow": "hidden",
-                        "textOverflow": "ellipsis",
-                        "maxWidth": "90px",
-                        "minWidth": "40px",
-                        "wordBreak": "break-word"
-                    },
-                    style_cell_conditional=[
-                        {"if": {"column_id": "title"}, "maxWidth": "110px", "minWidth": "60px"},
-                        {"if": {"column_id": "author"}, "maxWidth": "80px", "minWidth": "40px"},
-                        {"if": {"column_id": "category"}, "maxWidth": "60px", "minWidth": "40px", "textAlign": "center"},
-                        {"if": {"column_id": "year"}, "maxWidth": "36px", "minWidth": "26px", "textAlign": "center"},
-                        {"if": {"column_id": "placename_count"}, "maxWidth": "36px", "minWidth": "26px", "textAlign": "center"}
-                    ],
-                    style_data_conditional=[
-                        {"if": {"row_index": "odd"}, "backgroundColor": "#f6f6f6"}
-                    ],
-                    markdown_options={"link_target": "_blank"},
-                    page_action="none",
-                    fixed_rows={"headers": True},
-                    sort_action="native",
-                    fill_width=True,
-                    id="corpus-browse-datatable",
-                    tooltip_duration=None
+            table_rows = []
+            for _, row in df.iterrows():
+                title_text, full_title = truncate_text(row['title'] or '', 60)
+                author_text, full_author = truncate_text(row['author'] or '', 40)
+                title_cell = html.A(
+                    title_text or "(Untitled)",
+                    href=f"https://www.nb.no/items/{row['urn']}",
+                    target="_blank",
+                    title=full_title or "NB.no"
                 )
-            ], style={
-                "width": "100%"
-            })
+                author_cell = html.Span(author_text, title=full_author) if full_author else ""
+                table_rows.append({
+                    'title': title_cell,
+                    'author': author_cell,
+                    'category': row['category'] or '',
+                    'year': int(row['year']) if pd.notnull(row['year']) else '',
+                    'placename_count': int(row['placename_count']) if pd.notnull(row['placename_count']) else ''
+                })
+            table_section = build_html_table(
+                table_rows,
+                [
+                    ('title', 'Title'),
+                    ('author', 'Author'),
+                    ('category', '≡'),
+                    ('year', '📅'),
+                    ('placename_count', '◆')
+                ],
+                table_class="table table-sm table-striped table-hover",
+                container_style={'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'auto'}
+            )
+
         return (
             f"{info['book_count']:,}",
             f"{info['author_count']:,}",
@@ -3168,3 +3098,25 @@ def update_filtered_data_auto_resample(all_places_json, filters, resample_clicks
 # Run Server
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8065, dev_tools_hot_reload=False)
+
+def truncate_text(value: str, length: int = 40) -> tuple[str, str]:
+    if not value:
+        return "", ""
+    text = str(value)
+    return (text if len(text) <= length else text[:length] + "…"), text
+
+
+def build_html_table(rows, columns, *, table_class="table table-sm table-striped", container_style=None):
+    header_cells = [html.Th(label, scope="col") for _, label in columns]
+    body_rows = []
+    for row in rows:
+        cells = []
+        for key, _ in columns:
+            cells.append(html.Td(row.get(key, "")))
+        body_rows.append(html.Tr(cells))
+    table = html.Table(
+        [html.Thead(html.Tr(header_cells)), html.Tbody(body_rows)],
+        className=table_class,
+        style={'margin': 0, 'tableLayout': 'fixed', 'width': '100%'}
+    )
+    return html.Div(table, className="table-flex-container", style=container_style or {'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'auto'})

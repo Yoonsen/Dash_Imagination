@@ -26,4 +26,20 @@
 .similarity-score {
     color: #6c757d;
     font-size: 0.875rem;
+}
+
+.table-flex-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+}
+
+.table-flex-container > table {
+    width: 100%;
+    margin: 0;
+}
+
+.table-flex-container tbody tr:hover {
+    background-color: rgba(99, 102, 241, 0.08);
 } 
