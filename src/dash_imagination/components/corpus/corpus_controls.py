@@ -4,6 +4,7 @@ from dash.dependencies import Input, Output, State
 from dash import callback, no_update
 import dash
 from dash import ALL
+from ..common.size_controls import size_control_buttons, CARD_DEFAULT_PRESET, DEFAULT_CARD_SIZES
 
 def create_corpus_controls(categories_list=None, titles_list=None, default_filters=None):
     """Create the corpus controls as a popup dialogue, with modern upload/download and info layout."""
@@ -15,18 +16,23 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
         default_filters = {'categories': [], 'titles': []}
 
     return dbc.Card([
-        dbc.CardHeader([
+        dbc.CardHeader(
             html.Div([
-                html.I(className="fa fa-book me-2"),
-                html.H5("Corpus Controls", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
-                html.Button(
-                    "×",
-                    id='close-corpus',
-                    className="btn-close dialog-close-btn",
-                    title="Close"
-                )
-            ], className="d-flex justify-content-between align-items-center")
-        ], className="bg-primary-subtle text-dark", id='corpus-header'),
+                html.Div([
+                    html.I(className="fa fa-book me-2"),
+                    html.H5("Corpus Controls", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
+                    html.Button(
+                        "×",
+                        id='close-corpus',
+                        className="btn-close dialog-close-btn",
+                        title="Close"
+                    )
+                ], className="d-flex justify-content-between align-items-center flex-grow-1 me-2"),
+                size_control_buttons('corpus-controls')
+            ], className="d-flex justify-content-between align-items-center gap-2"),
+            className="bg-primary-subtle text-dark",
+            id='corpus-header'
+        ),
         dbc.CardBody([
             # Upload/Download/Add Books/Reset row
             html.Div([
@@ -146,13 +152,13 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                 filter_bar,
                 html.Div(id='corpus-browse-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto', 'fontSize': '0.8rem'}),
                 dcc.Store(id='corpus-table-filter', data={'column': None, 'value': None, 'direction': None})
-            ], style={'height': '100%', 'display': 'flex', 'flexDirection': 'column'})
-        ], style={'height': '444px', 'overflowY': 'auto'}),
+            ], style={'flex': '1 1 auto', 'display': 'flex', 'flexDirection': 'column', 'minHeight': 0})
+        ], style={'flex': '1 1 auto', 'minHeight': 0, 'display': 'flex', 'flexDirection': 'column', 'gap': '0.75rem'}),
         # Hidden resample-container div to suppress callback errors
         html.Div(id='resample-container', style={'display': 'none'})
-    ], id='corpus-controls-container', className="position-absolute m-3", style={
-        'width': '450px',
-        'height': '500px',
+    ], id='corpus-controls-container', className="position-absolute m-3 dialog-card d-flex flex-column", style={
+        'width': f"{DEFAULT_CARD_SIZES['corpus-controls']['width']}px",
+        'height': f"{DEFAULT_CARD_SIZES['corpus-controls']['height']}px",
         'zIndex': 800,
         'display': 'none',
         'top': '60px',
@@ -169,18 +175,23 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
         default_filters = {'categories': [], 'titles': []}
 
     return dbc.Card([
-        dbc.CardHeader([
+        dbc.CardHeader(
             html.Div([
-                html.I(className="fa fa-chart-bar me-2"),
-                html.H5("Visualization Controls", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
-                html.Button(
-                    "×",
-                    id='close-visualization',
-                    className="btn-close dialog-close-btn",
-                    title="Close"
-                )
-            ], className="d-flex justify-content-between align-items-center")
-        ], className="bg-info-subtle text-dark", id='visualization-header'),
+                html.Div([
+                    html.I(className="fa fa-chart-bar me-2"),
+                    html.H5("Visualization Controls", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
+                    html.Button(
+                        "×",
+                        id='close-visualization',
+                        className="btn-close dialog-close-btn",
+                        title="Close"
+                    )
+                ], className="d-flex justify-content-between align-items-center flex-grow-1 me-2"),
+                size_control_buttons('visualization-controls')
+            ], className="d-flex justify-content-between align-items-center gap-2"),
+            className="bg-info-subtle text-dark",
+            id='visualization-header'
+        ),
         dbc.CardBody([
             # Tabs for Map and Heatmap views
             dbc.Tabs([
@@ -335,10 +346,10 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
             dcc.Download(id="download-map-file"),
             # Status message
             html.Div(id='download-status', className="mt-2")
-        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
-    ], id='visualization-controls-container', className="position-absolute", style={
-        'width': '350px',
-        'height': '500px',
+        ], style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'})
+    ], id='visualization-controls-container', className="position-absolute dialog-card d-flex flex-column", style={
+        'width': f"{DEFAULT_CARD_SIZES['visualization-controls']['width']}px",
+        'height': f"{DEFAULT_CARD_SIZES['visualization-controls']['height']}px",
         'zIndex': 800,
         'display': 'none',
         'top': '100px',

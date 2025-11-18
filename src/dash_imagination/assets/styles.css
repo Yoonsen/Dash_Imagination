@@ -37,6 +37,36 @@ body, html {
     padding: 15px;
 }
 
+.size-control-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    font-size: 0.75rem;
+    gap: 2px;
+}
+
+.size-control-wrapper .size-btn {
+    padding: 0 6px;
+}
+
+.size-label {
+    font-weight: 600;
+    color: #64748b;
+    font-size: 0.7rem;
+}
+
+.places-tabs {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.places-tab-panel {
+    height: 100%;
+}
+
+
 /* Place detail styling */
 .book-item {
     padding: 8px 0;

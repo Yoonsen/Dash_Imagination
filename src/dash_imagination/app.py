@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output, State, callback, callback_context
+from dash import dcc, html, Input, Output, State, callback, callback_context, ALL
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
@@ -16,6 +16,7 @@ import plotly.express as px
 import dhlab as dh
 import re
 import json
+import copy
 from flask import request, send_file
 from typing import Tuple
 
@@ -74,6 +75,159 @@ from dash_imagination.components.map import create_map_controls
 from dash_imagination.components.corpus import create_corpus_controls, create_visualization_controls, create_corpus_builder_card
 from dash_imagination.components.places.place_similarity import create_place_similarity_controls
 from dash_imagination.components.places.place_similarity_dialog import create_place_similarity_dialog
+from dash_imagination.components.common.size_controls import (
+    SIZE_PRESETS,
+    CARD_DEFAULT_PRESET,
+    DEFAULT_CARD_SIZES,
+    size_control_buttons,
+)
+
+
+def load_places_frame(json_payload):
+    if not json_payload:
+        return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+    return pd.read_json(io.StringIO(json_payload), orient='split')
+
+
+def filter_places_search(df, search_term):
+    if df is None or df.empty:
+        return df
+    if not search_term or len(search_term.strip()) < 3:
+        return df
+    term = search_term.strip().lower()
+    mask = (
+        df['token'].astype(str).str.lower().str.contains(term, na=False) |
+        df['name'].astype(str).str.lower().str.contains(term, na=False)
+    )
+    return df[mask]
+
+
+def render_place_preview(df, selected_place, empty_message="Ingen steder tilgjengelig."):
+    if df is None or df.empty:
+        return html.Div(empty_message, className="text-muted"), html.Div()
+
+    df = df.copy()
+    df['hover_text'] = df.apply(
+        lambda row: f"{row.get('token', '')} ({row.get('name', '')})<br>Modern name: {row.get('name', '')}<br>Mentions: {int(row.get('frequency', 0))}<br>Books: {int(row.get('book_count', 0))}",
+        axis=1
+    )
+
+    summary = html.Div(
+        f"Viser {len(df)} steder.",
+        style={'fontSize': '0.85rem'}
+    )
+
+    rows = [
+        html.Div([
+            html.Div([
+                html.Div(f"{row['token']}", style={'fontWeight': '500', 'fontSize': '0.9rem'}),
+                html.Div(f"{row['name']}", style={'color': '#666', 'fontSize': '0.8rem'})
+            ], style={'flex': '2', 'padding': '8px'}),
+            html.Div(f"{int(row['book_count'])}",
+                     style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}),
+            html.Div(f"{int(row['frequency'])}",
+                     style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'})
+        ], style={
+            'display': 'flex',
+            'borderBottom': '1px solid #eee',
+            'transition': 'background-color 0.2s',
+            'cursor': 'pointer',
+            'backgroundColor': '#ffebee' if selected_place == row['token'] else 'transparent'
+        },
+            className='place-item',
+            id={'type': 'place-item', 'index': row['token']},
+            **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
+        for _, row in df.iterrows()
+    ]
+
+    table = html.Div([
+        html.Div([
+            html.Div("Sted", style={'flex': '2', 'fontWeight': 'bold', 'padding': '8px'}),
+            html.Div("📚", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'}),
+            html.Div("📝", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'})
+        ], style={
+            'display': 'flex',
+            'borderBottom': '2px solid #eee',
+            'marginBottom': '4px',
+            'fontSize': '0.9rem'
+        }),
+        html.Div(rows, style={'maxHeight': '360px', 'overflowY': 'auto'})
+    ], style={'border': '1px solid #eee', 'borderRadius': '4px', 'padding': '4px'})
+
+    return summary, table
+
+
+def truncate_text(value: str, length: int = 40) -> tuple[str, str]:
+    if not value:
+        return "", ""
+    text = str(value)
+    return (text if len(text) <= length else text[:length] + "…"), text
+
+
+def build_html_table(rows, columns, *, table_class="table table-sm table-striped", container_style=None):
+    header_cells = [html.Th(label, scope="col") for _, label in columns]
+    body_rows = []
+    for row in rows:
+        cells = []
+        for key, _ in columns:
+            cells.append(html.Td(row.get(key, "")))
+        body_rows.append(html.Tr(cells))
+    table = html.Table(
+        [html.Thead(html.Tr(header_cells)), html.Tbody(body_rows)],
+        className=table_class,
+        style={'margin': 0, 'tableLayout': 'fixed', 'width': '100%'}
+    )
+    wrapper_style = {'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'auto'}
+    if container_style:
+        wrapper_style.update(container_style)
+    return html.Div(table, className="table-flex-container", style=wrapper_style)
+
+
+
+
+SIZE_LIMITS = {
+    'width': {'min': 280, 'max': 960},
+    'height': {'min': 260, 'max': 900},
+}
+
+
+def _nudge_size(store, card_key, axis, delta):
+    base = copy.deepcopy(DEFAULT_CARD_SIZES)
+    store = copy.deepcopy(store) if store else base
+    dims = store.get(card_key, base[card_key]).copy()
+    limits = SIZE_LIMITS[axis]
+    dims[axis] = max(limits['min'], min(limits['max'], dims[axis] + delta))
+    store[card_key] = dims
+    return store
+
+
+def _apply_size_to_style(store, card_key, current_style):
+    base = DEFAULT_CARD_SIZES
+    dims = (store or base).get(card_key, base[card_key])
+    style = (current_style or {}).copy()
+    style['width'] = f"{dims['width']}px"
+    style['height'] = f"{dims['height']}px"
+    return style
+
+
+def build_places_tab(summary_id, table_id, download_btn_id, download_id, apply_btn_id):
+    return html.Div([
+        html.Div(id=summary_id, className="text-muted", style={'fontSize': '0.85rem', 'flex': '0 0 auto'}),
+        html.Div(id=table_id, style={
+            'flex': '1 1 auto',
+            'minHeight': 0,
+            'overflowY': 'auto',
+            'border': '1px solid #eee',
+            'borderRadius': '6px',
+            'padding': '4px',
+            'backgroundColor': '#fff'
+        }),
+        html.Div([
+            dbc.Button("Last ned CSV", id=download_btn_id, color="secondary", className="w-100 mb-2"),
+            dbc.Button("Vis steder", id=apply_btn_id, color="primary", className="w-100")
+        ], style={'flex': '0 0 auto'}),
+        dcc.Download(id=download_id)
+    ], className="places-tab-panel", style={'display': 'flex', 'flexDirection': 'column', 'height': '100%', 'minHeight': 0, 'gap': '0.5rem'})
 
 # Database Connection & Queries
 def pdquery(conn, query, params=()):
@@ -598,17 +752,22 @@ app.layout = html.Div([
     
     # Place summary container
     dbc.Card([
-        dbc.CardHeader([
+        dbc.CardHeader(
             html.Div([
-                html.I(className="fa fa-grip-horizontal me-2"),
-                html.H5("Place Details", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
-                html.Button(
-                    html.I(className="fa fa-times"),
-                    id='close-summary',
-                    className="btn-close"
-                )
-            ], className="d-flex justify-content-between align-items-center")
-        ], className="bg-danger-subtle text-dark", id='summary-header'),
+                html.Div([
+                    html.I(className="fa fa-grip-horizontal me-2"),
+                    html.H5("Place Details", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
+                    html.Button(
+                        html.I(className="fa fa-times"),
+                        id='close-summary',
+                        className="btn-close"
+                    )
+                ], className="d-flex justify-content-between align-items-center flex-grow-1 me-2"),
+                size_control_buttons('place-summary')
+            ], className="d-flex justify-content-between align-items-center gap-2"),
+            className="bg-danger-subtle text-dark",
+            id='summary-header'
+        ),
         dbc.CardBody([
             html.Div(id='place-summary', style={
                 'flex': '1 1 auto',
@@ -621,8 +780,9 @@ app.layout = html.Div([
             'display': 'flex',
             'flexDirection': 'column'
         })
-    ], id='place-summary-container', className="position-absolute flex-column", style={
-        'width': '350px',
+    ], id='place-summary-container', className="position-absolute dialog-card d-flex flex-column", style={
+        'width': f"{DEFAULT_CARD_SIZES['place-summary']['width']}px",
+        'height': f"{DEFAULT_CARD_SIZES['place-summary']['height']}px",
         'minWidth': '300px',
         'minHeight': '320px',
         'zIndex': 800,
@@ -635,17 +795,21 @@ app.layout = html.Div([
 
     # Place Names Container
     dbc.Card([
-        dbc.CardHeader([
+        dbc.CardHeader(
             html.Div([
-                html.I(className="fa fa-map-marker me-2"),
-                html.H5("Place Names", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
-                html.Button(
-                    html.I(className="fa fa-times"),
-                    id='close-place-names',
-                    className="btn-close"
-                )
-            ], className="d-flex justify-content-between align-items-center", id='place-names-header')
-        ], className="bg-warning-subtle text-dark"),
+                html.Div([
+                    html.I(className="fa fa-map-marker me-2"),
+                    html.H5("Place Names", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
+                    html.Button(
+                        html.I(className="fa fa-times"),
+                        id='close-place-names',
+                        className="btn-close"
+                    )
+                ], className="d-flex justify-content-between align-items-center flex-grow-1 me-2"),
+                size_control_buttons('places')
+            ], className="d-flex justify-content-between align-items-center gap-2", id='place-names-header'),
+            className="bg-warning-subtle text-dark"
+        ),
         dbc.CardBody([
             html.Div([
                 html.Label("Search Places", className="form-label"),
@@ -679,46 +843,47 @@ app.layout = html.Div([
                         switch=True,
                         persistence=True
                     )
-                ], className="mb-2", style={'fontSize': '0.85rem'}),
+                ], className="mb-2", style={'fontSize': '0.85rem', 'flex': '0 0 auto'}),
                 dcc.Tabs(
                     id='places-tabs',
                     value='frequency',
                     children=[
                         dcc.Tab(label="Frekvens", value='frequency', children=[
-                            html.Div(id='places-frequency-summary', className="mb-2 text-muted", style={'fontSize': '0.85rem'}),
-                            html.Div(id='places-frequency-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
-                            html.Div([
-                                dbc.Button("Last ned CSV", id='download-places-frequency-btn', color="secondary", className="w-100 mb-2"),
-                                dbc.Button("Vis steder", id='apply-places-frequency', color="primary", className="w-100")
-                            ], className="mt-3"),
-                            dcc.Download(id='download-places-frequency')
+                            build_places_tab(
+                                'places-frequency-summary',
+                                'places-frequency-table',
+                                'download-places-frequency-btn',
+                                'download-places-frequency',
+                                'apply-places-frequency'
+                            )
                         ]),
                         dcc.Tab(label="Sampling", value='sampling', children=[
-                            html.Div(id='places-sampling-summary', className="mb-2 text-muted", style={'fontSize': '0.85rem'}),
-                            html.Div(id='places-sampling-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
-                            html.Div([
-                                dbc.Button("Last ned CSV", id='download-places-sampling-btn', color="secondary", className="w-100 mb-2"),
-                                dbc.Button("Vis steder", id='apply-places-sampling', color="primary", className="w-100")
-                            ], className="mt-3"),
-                            dcc.Download(id='download-places-sampling')
+                            build_places_tab(
+                                'places-sampling-summary',
+                                'places-sampling-table',
+                                'download-places-sampling-btn',
+                                'download-places-sampling',
+                                'apply-places-sampling'
+                            )
                         ]),
                         dcc.Tab(label="Kollokasjoner", value='collocations', children=[
-                            html.Div(id='places-collocation-summary', className="mb-2 text-muted", style={'fontSize': '0.85rem'}),
-                            html.Div(id='places-collocation-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
-                            html.Div([
-                                dbc.Button("Last ned CSV", id='download-places-collocation-btn', color="secondary", className="w-100 mb-2"),
-                                dbc.Button("Vis steder", id='apply-places-collocations', color="primary", className="w-100")
-                            ], className="mt-3"),
-                            dcc.Download(id='download-places-collocations')
+                            build_places_tab(
+                                'places-collocation-summary',
+                                'places-collocation-table',
+                                'download-places-collocation-btn',
+                                'download-places-collocations',
+                                'apply-places-collocations'
+                            )
                         ])
                     ],
-                    className="flex-grow-1"
+                    className="flex-grow-1 places-tabs"
                 )
             ], id='place-names-list', style={
                 'flex': '1 1 auto',
                 'minHeight': 0,
                 'display': 'flex',
-                'flexDirection': 'column'
+                'flexDirection': 'column',
+                'gap': '0.5rem'
             })
         ], style={
             'flex': '1 1 auto',
@@ -726,8 +891,9 @@ app.layout = html.Div([
             'display': 'flex',
             'flexDirection': 'column'
         })
-    ], id='place-names-container', className="position-absolute flex-column", style={
-        'width': '350px',
+    ], id='place-names-container', className="position-absolute dialog-card d-flex flex-column", style={
+        'width': f"{DEFAULT_CARD_SIZES['places']['width']}px",
+        'height': f"{DEFAULT_CARD_SIZES['places']['height']}px",
         'minWidth': '320px',
         'minHeight': '360px',
         'zIndex': 800,
@@ -761,6 +927,7 @@ app.layout = html.Div([
     dcc.Store(id='places-collocation-data'),
     dcc.Store(id='places-active-mode', data='frequency'),
     dcc.Store(id='heatmap-subset-mode', data='all'),
+    dcc.Store(id='dialog-size-store', data=copy.deepcopy(DEFAULT_CARD_SIZES)),
 
     # Add the new corpus builder card
     create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list, titles_list=titles_list),
@@ -1433,6 +1600,31 @@ def download_collocation_places(n_clicks, colloc_json):
 
 
 @app.callback(
+    Output('dialog-size-store', 'data', allow_duplicate=True),
+    Input({'type': 'size-btn', 'card': ALL, 'axis': ALL, 'delta': ALL}, 'n_clicks'),
+    State('dialog-size-store', 'data'),
+    prevent_initial_call=True
+)
+def handle_size_buttons(n_clicks, store):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+
+    trigger = ctx.triggered[0]
+    if not trigger or not trigger['value']:
+        raise PreventUpdate
+
+    btn_id = trigger['prop_id'].split('.')[0]
+    try:
+        btn = json.loads(btn_id)
+    except json.JSONDecodeError:
+        raise PreventUpdate
+
+    store = _nudge_size(store, btn['card'], btn['axis'], btn['delta'])
+    return store
+
+
+@app.callback(
     Output('current-filters', 'data', allow_duplicate=True),
     Output('heatmap-subset-mode', 'data', allow_duplicate=True),
     Input('apply-places-frequency', 'n_clicks'),
@@ -1480,6 +1672,56 @@ def apply_places_to_map(freq_clicks, sample_clicks, colloc_clicks,
     new_filters['corpus_source'] = 'Places'
     subset_mode = 'subset' if heatmap_subset_value else 'all'
     return new_filters, subset_mode
+
+
+@app.callback(
+    Output('place-summary-container', 'style', allow_duplicate=True),
+    Input('dialog-size-store', 'data'),
+    State('place-summary-container', 'style'),
+    prevent_initial_call=True
+)
+def resize_place_summary(store, current_style):
+    return _apply_size_to_style(store, 'place-summary', current_style)
+
+
+@app.callback(
+    Output('place-names-container', 'style', allow_duplicate=True),
+    Input('dialog-size-store', 'data'),
+    State('place-names-container', 'style'),
+    prevent_initial_call=True
+)
+def resize_places(store, current_style):
+    return _apply_size_to_style(store, 'places', current_style)
+
+
+@app.callback(
+    Output('corpus-controls-container', 'style', allow_duplicate=True),
+    Input('dialog-size-store', 'data'),
+    State('corpus-controls-container', 'style'),
+    prevent_initial_call=True
+)
+def resize_corpus_controls(store, current_style):
+    return _apply_size_to_style(store, 'corpus-controls', current_style)
+
+
+@app.callback(
+    Output('visualization-controls-container', 'style', allow_duplicate=True),
+    Input('dialog-size-store', 'data'),
+    State('visualization-controls-container', 'style'),
+    prevent_initial_call=True
+)
+def resize_visualization_controls(store, current_style):
+    return _apply_size_to_style(store, 'visualization-controls', current_style)
+
+
+@app.callback(
+    Output('corpus-builder-card', 'style', allow_duplicate=True),
+    Input('dialog-size-store', 'data'),
+    State('corpus-builder-card', 'style'),
+    prevent_initial_call=True
+)
+def resize_corpus_builder(store, current_style):
+    return _apply_size_to_style(store, 'corpus-builder', current_style)
 
 # Add this callback to toggle the info modal
 
@@ -3188,107 +3430,6 @@ def update_all_places_store(book_ids, upload_state, reset_n_clicks, current_data
         return pd.DataFrame().to_json(date_format='iso', orient='split')
     df = get_all_places_for_corpus(book_ids)
     return df.to_json(date_format='iso', orient='split')
-
-def truncate_text(value: str, length: int = 40) -> tuple[str, str]:
-    if not value:
-        return "", ""
-    text = str(value)
-    return (text if len(text) <= length else text[:length] + "…"), text
-
-
-def build_html_table(rows, columns, *, table_class="table table-sm table-striped", container_style=None):
-    header_cells = [html.Th(label, scope="col") for _, label in columns]
-    body_rows = []
-    for row in rows:
-        cells = []
-        for key, _ in columns:
-            cells.append(html.Td(row.get(key, "")))
-        body_rows.append(html.Tr(cells))
-    table = html.Table(
-        [html.Thead(html.Tr(header_cells)), html.Tbody(body_rows)],
-        className=table_class,
-        style={'margin': 0, 'tableLayout': 'fixed', 'width': '100%'}
-    )
-    wrapper_style = {'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'auto'}
-    if container_style:
-        wrapper_style.update(container_style)
-    return html.Div(table, className="table-flex-container", style=wrapper_style)
-
-
-def load_places_frame(json_payload):
-    import pandas as pd
-    import io
-    if not json_payload:
-        return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
-    return pd.read_json(io.StringIO(json_payload), orient='split')
-
-
-def filter_places_search(df, search_term):
-    if df is None or df.empty:
-        return df
-    if not search_term or len(search_term.strip()) < 3:
-        return df
-    term = search_term.strip().lower()
-    mask = (
-        df['token'].astype(str).str.lower().str.contains(term, na=False) |
-        df['name'].astype(str).str.lower().str.contains(term, na=False)
-    )
-    return df[mask]
-
-
-def render_place_preview(df, selected_place, empty_message="Ingen steder tilgjengelig."):
-    if df is None or df.empty:
-        return html.Div(empty_message, className="text-muted"), html.Div()
-
-    df = df.copy()
-    df['hover_text'] = df.apply(
-        lambda row: f"{row.get('token', '')} ({row.get('name', '')})<br>Modern name: {row.get('name', '')}<br>Mentions: {int(row.get('frequency', 0))}<br>Books: {int(row.get('book_count', 0))}",
-        axis=1
-    )
-
-    summary = html.Div(
-        f"Viser {len(df)} steder.",
-        style={'fontSize': '0.85rem'}
-    )
-
-    rows = [
-        html.Div([
-            html.Div([
-                html.Div(f"{row['token']}", style={'fontWeight': '500', 'fontSize': '0.9rem'}),
-                html.Div(f"{row['name']}", style={'color': '#666', 'fontSize': '0.8rem'})
-            ], style={'flex': '2', 'padding': '8px'}),
-            html.Div(f"{int(row['book_count'])}",
-                    style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}),
-            html.Div(f"{int(row['frequency'])}",
-                    style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'})
-        ], style={
-            'display': 'flex',
-            'borderBottom': '1px solid #eee',
-            'transition': 'background-color 0.2s',
-            'cursor': 'pointer',
-            'backgroundColor': '#ffebee' if selected_place == row['token'] else 'transparent'
-        },
-        className='place-item',
-        id={'type': 'place-item', 'index': row['token']},
-        **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
-        for _, row in df.iterrows()
-    ]
-
-    table = html.Div([
-        html.Div([
-            html.Div("Sted", style={'flex': '2', 'fontWeight': 'bold', 'padding': '8px'}),
-            html.Div("📚", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'}),
-            html.Div("📝", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'})
-        ], style={
-            'display': 'flex',
-            'borderBottom': '2px solid #eee',
-            'marginBottom': '4px',
-            'fontSize': '0.9rem'
-        }),
-        html.Div(rows, style={'maxHeight': '360px', 'overflowY': 'auto'})
-    ], style={'border': '1px solid #eee', 'borderRadius': '4px', 'padding': '4px'})
-
-    return summary, table
 
 
 # Run Server

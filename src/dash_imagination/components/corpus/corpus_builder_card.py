@@ -5,6 +5,7 @@ from functools import lru_cache
 from ...utils.corpus_build import corpus_builder, get_corpus_stats, count_words
 from ...utils.db import get_db_connection
 import dhlab as dh
+from ..common.size_controls import size_control_buttons, CARD_DEFAULT_PRESET, DEFAULT_CARD_SIZES
 
 DEFAULT_YEAR_RANGE = [1814, 1905]
 
@@ -176,19 +177,23 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
         default_filters = {'categories': [], 'titles': []}
 
     return dbc.Card([
-        dbc.CardHeader([
+        dbc.CardHeader(
             html.Div([
-                html.I(className="fa fa-book me-2"),
-                html.H5("Build Corpus", className="mb-0 d-inline", style={"fontSize": "14px", "fontWeight": 500}),
-                dbc.Button(
-                    "×",
-                    id="close-corpus-builder",
-                    className="float-end btn-close dialog-close-btn",
-                    size="sm",
-                    title="Close"
-                ),
-            ], className="d-flex justify-content-between align-items-center", id="corpus-builder-header", style={"cursor": "grab", "userSelect": "none"})
-        ], className="bg-success-subtle text-dark"),
+                html.Div([
+                    html.I(className="fa fa-book me-2"),
+                    html.H5("Build Corpus", className="mb-0 d-inline", style={"fontSize": "14px", "fontWeight": 500}),
+                    dbc.Button(
+                        "×",
+                        id="close-corpus-builder",
+                        className="float-end btn-close dialog-close-btn",
+                        size="sm",
+                        title="Close"
+                    ),
+                ], className="d-flex justify-content-between align-items-center flex-grow-1 me-2", id="corpus-builder-header", style={"cursor": "grab", "userSelect": "none"}),
+                size_control_buttons('corpus-builder')
+            ], className="d-flex justify-content-between align-items-center gap-2"),
+            className="bg-success-subtle text-dark"
+        ),
         dbc.CardBody([
             dbc.Tabs([
                 dbc.Tab([
@@ -338,11 +343,11 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                         dbc.Button("Clear highlight", id='clear-collocation-highlight', color='secondary', outline=True, size='sm', className="w-100 mb-3")
                     ])
                 ], label="Collocations", tab_id="collocations"),
-            ], id="corpus-builder-tabs", active_tab="metadata"),
-        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'}),
-    ], id="corpus-builder-card", className="shadow position-absolute m-3", style={
-        "width": "350px",
-        "height": "500px",
+            ], id="corpus-builder-tabs", active_tab="metadata", className="flex-grow-1", style={'display': 'flex', 'flexDirection': 'column', 'minHeight': 0})
+        ], style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
+    ], id="corpus-builder-card", className="shadow position-absolute m-3 dialog-card d-flex flex-column", style={
+        "width": f"{DEFAULT_CARD_SIZES['corpus-builder']['width']}px",
+        "height": f"{DEFAULT_CARD_SIZES['corpus-builder']['height']}px",
         "zIndex": 800,
         "display": "none",
         "top": "60px",
