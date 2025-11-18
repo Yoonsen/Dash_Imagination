@@ -1318,7 +1318,7 @@ def update_places_datasets(all_places_json, max_places, resample_n, collocation_
 
     df = load_places_frame(all_places_json)
     if df.empty:
-        return empty_json, empty_json, empty_json
+        return empty_json, empty_json, empty_json, active_tab or 'frequency'
 
     freq_df = (
         df.sort_values(by='frequency', ascending=False)
