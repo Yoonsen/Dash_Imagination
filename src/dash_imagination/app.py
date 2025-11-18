@@ -647,7 +647,6 @@ app.layout = html.Div([
             ], className="d-flex justify-content-between align-items-center", id='place-names-header')
         ], className="bg-warning-subtle text-dark"),
         dbc.CardBody([
-            # Search input
             html.Div([
                 html.Label("Search Places", className="form-label"),
                 dcc.Input(
@@ -671,18 +670,42 @@ app.layout = html.Div([
                     "Resample Places"
                 ], id='resample-places', className="btn btn-primary w-100")
             ], className="mb-4"),
-            
-            # Place list
             html.Div([
-                html.H5("Results", className="mb-3"),
-                html.Div(id='place-names-list', children=[
-                    html.P("Type in the search box to find places", className="text-muted")
-                ], style={
-                    'flex': '1 1 auto',
-                    'minHeight': 0,
-                    'overflowY': 'auto'
-                })
-            ], style={
+                dcc.Tabs(
+                    id='places-tabs',
+                    value='frequency',
+                    children=[
+                        dcc.Tab(label="Frekvens", value='frequency', children=[
+                            html.Div(id='places-frequency-summary', className="mb-2 text-muted", style={'fontSize': '0.85rem'}),
+                            html.Div(id='places-frequency-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
+                            html.Div([
+                                dbc.Button("Last ned CSV", id='download-places-frequency-btn', color="secondary", className="w-100 mb-2"),
+                                dbc.Button("Vis steder", id='apply-places-frequency', color="primary", className="w-100")
+                            ], className="mt-3"),
+                            dcc.Download(id='download-places-frequency')
+                        ]),
+                        dcc.Tab(label="Sampling", value='sampling', children=[
+                            html.Div(id='places-sampling-summary', className="mb-2 text-muted", style={'fontSize': '0.85rem'}),
+                            html.Div(id='places-sampling-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
+                            html.Div([
+                                dbc.Button("Last ned CSV", id='download-places-sampling-btn', color="secondary", className="w-100 mb-2"),
+                                dbc.Button("Vis steder", id='apply-places-sampling', color="primary", className="w-100")
+                            ], className="mt-3"),
+                            dcc.Download(id='download-places-sampling')
+                        ]),
+                        dcc.Tab(label="Kollokasjoner", value='collocations', children=[
+                            html.Div(id='places-collocation-summary', className="mb-2 text-muted", style={'fontSize': '0.85rem'}),
+                            html.Div(id='places-collocation-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
+                            html.Div([
+                                dbc.Button("Last ned CSV", id='download-places-collocation-btn', color="secondary", className="w-100 mb-2"),
+                                dbc.Button("Vis steder", id='apply-places-collocations', color="primary", className="w-100")
+                            ], className="mt-3"),
+                            dcc.Download(id='download-places-collocations')
+                        ])
+                    ],
+                    className="flex-grow-1"
+                )
+            ], id='place-names-list', style={
                 'flex': '1 1 auto',
                 'minHeight': 0,
                 'display': 'flex',
@@ -724,6 +747,9 @@ app.layout = html.Div([
     # Add this to the app layout, near the other Store components
     dcc.Store(id='current-dhlabids-store', data=[]),
     dcc.Store(id='corpus-operation', data='intersection'),
+    dcc.Store(id='places-frequency-data'),
+    dcc.Store(id='places-sample-data'),
+    dcc.Store(id='places-collocation-data'),
 
     # Add the new corpus builder card
     create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list, titles_list=titles_list),
@@ -1258,6 +1284,183 @@ def set_collocation_highlight(apply_clicks, clear_clicks, tokens):
     if triggered == 'clear-collocation-highlight':
         return []
     return dash.no_update
+
+
+@app.callback(
+    Output('places-frequency-data', 'data'),
+    Output('places-sample-data', 'data'),
+    Output('places-collocation-data', 'data'),
+    Input('all-places-store', 'data'),
+    Input('corpus-max-places-slider', 'value'),
+    Input('resample-places', 'n_clicks'),
+    Input('collocation-place-tokens', 'data')
+)
+def update_places_datasets(all_places_json, max_places, resample_n, collocation_tokens):
+    import pandas as pd
+    max_places = max_places or 500
+    base_columns = ['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']
+    empty_json = pd.DataFrame(columns=base_columns).to_json(date_format='iso', orient='split')
+    if not all_places_json:
+        return empty_json, empty_json, empty_json
+
+    df = load_places_frame(all_places_json)
+    if df.empty:
+        return empty_json, empty_json, empty_json
+
+    freq_df = (
+        df.sort_values(by='frequency', ascending=False)
+        .head(max_places)
+        .reset_index(drop=True)
+    )
+    sample_df = sample_places(df, n=max_places).reset_index(drop=True)
+
+    tokens = set(collocation_tokens or [])
+    if tokens:
+        colloc_df = (
+            df[df['token'].isin(tokens)]
+            .sort_values(by='frequency', ascending=False)
+            .head(max_places)
+            .reset_index(drop=True)
+        )
+    else:
+        colloc_df = pd.DataFrame(columns=base_columns)
+
+    return (
+        freq_df.to_json(date_format='iso', orient='split'),
+        sample_df.to_json(date_format='iso', orient='split'),
+        colloc_df.to_json(date_format='iso', orient='split')
+    )
+
+
+@app.callback(
+    Output('places-frequency-summary', 'children'),
+    Output('places-frequency-table', 'children'),
+    Input('places-frequency-data', 'data'),
+    Input('place-search', 'value'),
+    State('selected-place', 'data')
+)
+def display_frequency_places(freq_json, search_term, selected_place):
+    df = load_places_frame(freq_json)
+    df = filter_places_search(df, search_term)
+    summary, table = render_place_preview(df, selected_place, empty_message="Ingen steder tilgjengelig ennå.")
+    return summary, table
+
+
+@app.callback(
+    Output('places-sampling-summary', 'children'),
+    Output('places-sampling-table', 'children'),
+    Input('places-sample-data', 'data'),
+    Input('place-search', 'value'),
+    State('selected-place', 'data')
+)
+def display_sampling_places(sample_json, search_term, selected_place):
+    df = load_places_frame(sample_json)
+    df = filter_places_search(df, search_term)
+    summary, table = render_place_preview(df, selected_place, empty_message="Trykk «Resample Places» for å hente en ny liste.")
+    return summary, table
+
+
+@app.callback(
+    Output('places-collocation-summary', 'children'),
+    Output('places-collocation-table', 'children'),
+    Input('places-collocation-data', 'data'),
+    Input('place-search', 'value'),
+    State('selected-place', 'data')
+)
+def display_collocation_places(colloc_json, search_term, selected_place):
+    df = load_places_frame(colloc_json)
+    if df.empty:
+        return (
+            html.Div("Kjør et kollokasjonssøk for å fylle denne fanen.", style={'fontSize': '0.85rem'}),
+            html.Div("Ingen kollokasjoner funnet.", className="text-muted")
+        )
+    df = filter_places_search(df, search_term)
+    summary, table = render_place_preview(df, selected_place, empty_message="Ingen kollokasjonstreff som matcher søket.")
+    return summary, table
+
+
+def _download_places_frame(json_payload, filename_prefix):
+    df = load_places_frame(json_payload)
+    if df.empty:
+        raise PreventUpdate
+    columns = ['token', 'name', 'frequency', 'book_count', 'latitude', 'longitude']
+    safe_df = df.reindex(columns=columns)
+    return dcc.send_data_frame(safe_df.to_csv, f"{filename_prefix}.csv", index=False)
+
+
+@app.callback(
+    Output('download-places-frequency', 'data'),
+    Input('download-places-frequency-btn', 'n_clicks'),
+    State('places-frequency-data', 'data'),
+    prevent_initial_call=True
+)
+def download_frequency_places(n_clicks, freq_json):
+    return _download_places_frame(freq_json, "places_frequency")
+
+
+@app.callback(
+    Output('download-places-sampling', 'data'),
+    Input('download-places-sampling-btn', 'n_clicks'),
+    State('places-sample-data', 'data'),
+    prevent_initial_call=True
+)
+def download_sampling_places(n_clicks, sample_json):
+    return _download_places_frame(sample_json, "places_sampling")
+
+
+@app.callback(
+    Output('download-places-collocations', 'data'),
+    Input('download-places-collocation-btn', 'n_clicks'),
+    State('places-collocation-data', 'data'),
+    prevent_initial_call=True
+)
+def download_collocation_places(n_clicks, colloc_json):
+    return _download_places_frame(colloc_json, "places_collocations")
+
+
+@app.callback(
+    Output('current-filters', 'data', allow_duplicate=True),
+    Input('apply-places-frequency', 'n_clicks'),
+    Input('apply-places-sampling', 'n_clicks'),
+    Input('apply-places-collocations', 'n_clicks'),
+    State('places-frequency-data', 'data'),
+    State('places-sample-data', 'data'),
+    State('places-collocation-data', 'data'),
+    State('place-search', 'value'),
+    State('corpus-max-places-slider', 'value'),
+    State('current-filters', 'data'),
+    prevent_initial_call=True
+)
+def apply_places_to_map(freq_clicks, sample_clicks, colloc_clicks,
+                        freq_json, sample_json, colloc_json,
+                        search_term, max_places, current_filters):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger = ctx.triggered[0]['prop_id'].split('.')[0]
+    if trigger == 'apply-places-frequency':
+        mode = 'frequency'
+        df = load_places_frame(freq_json)
+    elif trigger == 'apply-places-sampling':
+        mode = 'sampling'
+        df = load_places_frame(sample_json)
+    elif trigger == 'apply-places-collocations':
+        mode = 'collocations'
+        df = load_places_frame(colloc_json)
+    else:
+        raise PreventUpdate
+
+    df = filter_places_search(df, search_term)
+    if df.empty:
+        raise PreventUpdate
+
+    tokens = df['token'].dropna().astype(str).tolist()
+    new_filters = (current_filters or {}).copy()
+    new_filters['selected_tokens'] = tokens
+    new_filters['max_places'] = max_places or len(tokens)
+    new_filters['places_source'] = mode
+    new_filters['corpus_source'] = 'Places'
+    return new_filters
 
 # Add this callback to toggle the info modal
 
@@ -1818,112 +2021,6 @@ def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius
         print(f"Error in update_map: {e}")
         return dash.no_update, dash.no_update, dash.no_update
 
-@app.callback(
-    [Output('place-names-list', 'children'),
-     Output('selected-place', 'data')],
-    [Input('filtered-data', 'data'),
-     Input('place-search', 'value')],
-    [State('selected-place', 'data')]
-)
-def update_place_list(filtered_data_json, search_term, selected_place):
-    if filtered_data_json is None:
-        return html.Div("No places available"), None
-    
-    # Load cached data
-    places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split')
-    
-    if places_df.empty:
-        return html.Div("No places available"), None
-    
-    # Sort by frequency
-    places_df = places_df.sort_values(by='frequency', ascending=False)
-    
-    # Apply search filter if provided
-    if search_term and len(search_term) > 2:
-        search_term = search_term.lower()
-        places_df = places_df[
-            places_df['token'].str.lower().str.contains(search_term) | 
-            places_df['name'].str.lower().str.contains(search_term)
-        ]
-    
-    # Create hover text before creating place items
-    print("DEBUG columns:", places_df.columns)
-    places_df['hover_text'] = places_df.apply(
-        lambda row: f"{row.get('token', '')} ({row.get('name', '')})<br>Modern name: {row.get('name', '')}<br>Mentions: {int(row.get('frequency', 0))}<br>Books: {int(row.get('book_count', 0))}",
-        axis=1
-    )
-    
-    # Limit to top 5000 places
-    places_df = places_df.head(5000)
-    
-    def create_place_item(row):
-        is_selected = selected_place == row['token']
-        return html.Div([
-            html.Div([
-                html.Div(f"{row['token']}", style={'fontWeight': 'bold', 'fontSize': '1rem'}),
-                html.Div(f"{row['name']}", style={'color': '#666', 'fontSize': '0.9rem'})
-            ], style={'marginBottom': '4px'}),
-            html.Div([
-                html.Span(f"📚 {int(row['book_count'])} books", style={'marginRight': '12px', 'color': '#666', 'fontSize': '0.85rem'}),
-                html.Span(f"📝 {int(row['frequency'])} mentions", style={'color': '#666', 'fontSize': '0.85rem'})
-            ])
-        ], style={
-            'borderBottom': '1px solid #eee',
-            'padding': '8px 0',
-            'transition': 'background-color 0.2s',
-            'cursor': 'pointer',
-            'backgroundColor': '#ffebee' if is_selected else 'transparent'
-        }, 
-        className='place-item', 
-        id={'type': 'place-item', 'index': row['token']},
-        **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
-    
-    if places_df.empty:
-        return html.Div("No matching places found"), None
-    
-    # Create the list container with improved performance
-    return html.Div([
-        html.Div([
-            html.Div(f"Showing {len(places_df)} places", 
-                     style={'marginBottom': '8px', 'fontSize': '0.9rem', 'color': '#666'}),
-            html.Div([
-                # Table header
-                html.Div([
-                    html.Div("Place", style={'flex': '2', 'fontWeight': 'bold', 'padding': '8px'}),
-                    html.Div("📚", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'}),
-                    html.Div("📝", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'})
-                ], style={
-                    'display': 'flex',
-                    'borderBottom': '2px solid #eee',
-                    'marginBottom': '4px',
-                    'fontSize': '0.9rem'
-                }),
-                # Table rows
-                html.Div([
-                    html.Div([
-                        html.Div([
-                            html.Div(f"{row['token']}", style={'fontWeight': '500', 'fontSize': '0.9rem'}),
-                            html.Div(f"{row['name']}", style={'color': '#666', 'fontSize': '0.8rem'})
-                        ], style={'flex': '2', 'padding': '8px'}),
-                        html.Div(f"{int(row['book_count'])}", 
-                                style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}),
-                        html.Div(f"{int(row['frequency'])}", 
-                                style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'})
-                    ], style={
-                        'display': 'flex',
-                        'borderBottom': '1px solid #eee',
-                        'transition': 'background-color 0.2s',
-                        'cursor': 'pointer',
-                        'backgroundColor': '#ffebee' if selected_place == row['token'] else 'transparent'
-                    }, 
-                    className='place-item', 
-                    id={'type': 'place-item', 'index': row['token']},
-                    **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
-                    for _, row in places_df.iterrows()
-                ], style={'maxHeight': '400px', 'overflowY': 'auto'})
-            ], style={'border': '1px solid #eee', 'borderRadius': '4px'})
-        ], style={'padding': '12px'})
-    ], style={'backgroundColor': 'white', 'borderRadius': '8px', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'}), selected_place
 
 # Add callback for place item clicks
 @app.callback(
@@ -3073,27 +3170,6 @@ def update_all_places_store(book_ids, upload_state, reset_n_clicks, current_data
     df = get_all_places_for_corpus(book_ids)
     return df.to_json(date_format='iso', orient='split')
 
-@app.callback(
-    Output('filtered-data', 'data', allow_duplicate=True),
-    [Input('all-places-store', 'data'),
-     Input('current-filters', 'data'),
-     Input('resample-places', 'n_clicks')],
-    [State('filtered-data', 'data')],
-    prevent_initial_call=True
-)
-def update_filtered_data_auto_resample(all_places_json, filters, resample_clicks, prev_filtered_data):
-    import pandas as pd
-    import io
-    ctx = dash.callback_context
-    if not all_places_json:
-        return pd.DataFrame().to_json(date_format='iso', orient='split')
-    all_places_df = pd.read_json(io.StringIO(all_places_json), orient='split')
-    n = filters.get('max_places', 2000) if filters else 2000
-    # Always resample on any change
-    sampled_df = sample_places(all_places_df, n=n)
-    return sampled_df.to_json(date_format='iso', orient='split')
-
-
 def truncate_text(value: str, length: int = 40) -> tuple[str, str]:
     if not value:
         return "", ""
@@ -3118,6 +3194,82 @@ def build_html_table(rows, columns, *, table_class="table table-sm table-striped
     if container_style:
         wrapper_style.update(container_style)
     return html.Div(table, className="table-flex-container", style=wrapper_style)
+
+
+def load_places_frame(json_payload):
+    import pandas as pd
+    import io
+    if not json_payload:
+        return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+    return pd.read_json(io.StringIO(json_payload), orient='split')
+
+
+def filter_places_search(df, search_term):
+    if df is None or df.empty:
+        return df
+    if not search_term or len(search_term.strip()) < 3:
+        return df
+    term = search_term.strip().lower()
+    mask = (
+        df['token'].astype(str).str.lower().str.contains(term, na=False) |
+        df['name'].astype(str).str.lower().str.contains(term, na=False)
+    )
+    return df[mask]
+
+
+def render_place_preview(df, selected_place, empty_message="Ingen steder tilgjengelig."):
+    if df is None or df.empty:
+        return html.Div(empty_message, className="text-muted"), html.Div()
+
+    df = df.copy()
+    df['hover_text'] = df.apply(
+        lambda row: f"{row.get('token', '')} ({row.get('name', '')})<br>Modern name: {row.get('name', '')}<br>Mentions: {int(row.get('frequency', 0))}<br>Books: {int(row.get('book_count', 0))}",
+        axis=1
+    )
+
+    summary = html.Div(
+        f"Viser {len(df)} steder.",
+        style={'fontSize': '0.85rem'}
+    )
+
+    rows = [
+        html.Div([
+            html.Div([
+                html.Div(f"{row['token']}", style={'fontWeight': '500', 'fontSize': '0.9rem'}),
+                html.Div(f"{row['name']}", style={'color': '#666', 'fontSize': '0.8rem'})
+            ], style={'flex': '2', 'padding': '8px'}),
+            html.Div(f"{int(row['book_count'])}",
+                    style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}),
+            html.Div(f"{int(row['frequency'])}",
+                    style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'})
+        ], style={
+            'display': 'flex',
+            'borderBottom': '1px solid #eee',
+            'transition': 'background-color 0.2s',
+            'cursor': 'pointer',
+            'backgroundColor': '#ffebee' if selected_place == row['token'] else 'transparent'
+        },
+        className='place-item',
+        id={'type': 'place-item', 'index': row['token']},
+        **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
+        for _, row in df.iterrows()
+    ]
+
+    table = html.Div([
+        html.Div([
+            html.Div("Sted", style={'flex': '2', 'fontWeight': 'bold', 'padding': '8px'}),
+            html.Div("📚", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'}),
+            html.Div("📝", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'})
+        ], style={
+            'display': 'flex',
+            'borderBottom': '2px solid #eee',
+            'marginBottom': '4px',
+            'fontSize': '0.9rem'
+        }),
+        html.Div(rows, style={'maxHeight': '360px', 'overflowY': 'auto'})
+    ], style={'border': '1px solid #eee', 'borderRadius': '4px', 'padding': '4px'})
+
+    return summary, table
 
 
 # Run Server
