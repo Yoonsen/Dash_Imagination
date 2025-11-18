@@ -1,0 +1,43 @@
+.dialog-close-btn {
+    font-size: 1.15rem;
+    line-height: 1;
+    font-weight: 500;
+    color: #111827;
+    opacity: 0.75;
+}
+
+.dialog-close-btn:hover,
+.dialog-close-btn:focus {
+    opacity: 1;
+    color: #111827;
+}
+
+.place-similarity-controls {
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    margin-bottom: 1rem;
+}
+
+.similar-places-list {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 1rem;
+}
+
+.similar-place-item {
+    padding: 0.5rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.similar-place-item:last-child {
+    border-bottom: none;
+}
+
+.place-name {
+    font-weight: 500;
+}
+
+.similarity-score {
+    color: #6c757d;
+    font-size: 0.875rem;
+} 

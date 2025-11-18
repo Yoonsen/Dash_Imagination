@@ -9,24 +9,38 @@ import os
 import base64
 import io
 from dash.exceptions import PreventUpdate
+from scipy.spatial import ConvexHull
+import math
+from dash_imagination.utils.db import get_db_connection
+import plotly.express as px
+import dhlab as dh
+import re
+import json
+from flask import request, send_file
+from typing import Tuple
 
 #=== initialize
 
 # Determine environment
 is_production = os.getenv('ENVIRONMENT', 'development') == 'production'
+is_chromebook = os.getenv('ENVIRONMENT', 'development') == 'chromebook'
 app_name = os.getenv('APP_NAME', 'imagination-map')  # Default to 'imagination_map' if not set
+assets_version = os.getenv('ASSETS_VERSION', 'v20251115')
 
 if is_production:
-    db_path = "/app/src/dash_imagination/data/imagination.db"  # Reverted to old file name
+    db_path = "/app/src/dash_imagination/data/imagination.db"
+elif is_chromebook:
+    db_path = "/home/yoonsen/Dash_Imagination/src/dash_imagination/data/imagination.db"
 else:
-    # Try the local path first, fall back to container path if that fails
-    local_path = "/mnt/disk1/Github/Dash_Imagination/src/dash_imagination/data/imagination.db"  # Reverted to old file name
-    container_path = "/app/src/dash_imagination/data/imagination.db"  # Reverted to old file name
-    
-    if os.path.exists(local_path):
-        db_path = local_path
-    else:
-        db_path = container_path
+    # Development environment - use the correct path directly
+    db_path = "/mnt/disk1/Github/Dash_Imagination/src/dash_imagination/data/imagination.db"
+    if not os.path.exists(db_path):
+        print(f"Warning: Database not found at {db_path}")
+        # Try alternative path
+        alt_path = "/mnt/disk1/Github/Dash_Imagination/src/data/imagination.db"
+        if os.path.exists(alt_path):
+            print(f"Found database at alternative path: {alt_path}")
+            db_path = alt_path
 
 print(f"Using database at: {db_path}")
 
@@ -39,7 +53,8 @@ if is_production:
         external_stylesheets=[
             dbc.themes.BOOTSTRAP,
             "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
-        ]
+        ],
+        suppress_callback_exceptions=True
     )
 else:
     app = dash.Dash(
@@ -47,23 +62,20 @@ else:
         external_stylesheets=[
             dbc.themes.BOOTSTRAP,
             "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
-        ]
+        ],
+        suppress_callback_exceptions=True
     )
+
+app._assets_version = assets_version
 
 server = app.server
 
-# Database Connection & Queries
-def get_db_connection():
-    print(f"Connecting to database at: {db_path}")
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
-    except Exception as e:
-        print(f"Database connection error: {e}")
-        # You could return a dummy connection or raise the error
-        raise
+from dash_imagination.components.map import create_map_controls
+from dash_imagination.components.corpus import create_corpus_controls, create_visualization_controls, create_corpus_builder_card
+from dash_imagination.components.places.place_similarity import create_place_similarity_controls
+from dash_imagination.components.places.place_similarity_dialog import create_place_similarity_dialog
 
+# Database Connection & Queries
 def pdquery(conn, query, params=()):
     return pd.read_sql_query(query, conn, params=params)
 
@@ -71,8 +83,14 @@ def get_authors():
     conn = get_db_connection()
     df = pdquery(conn, "SELECT DISTINCT author FROM corpus WHERE author IS NOT NULL ORDER BY author")
     conn.close()
-    authors = [str(author) for author in df['author'].tolist() if author is not None]
-    return authors
+    # Split authors on '/', strip whitespace, flatten, deduplicate, and sort
+    authors = set()
+    for author_str in df['author'].dropna():
+        for author in str(author_str).split('/'):
+            author = author.strip()
+            if author:
+                authors.add(author)
+    return sorted(authors)
 
 def get_categories():
     conn = get_db_connection()
@@ -94,116 +112,193 @@ def get_titles():
     conn.close()
     return title_year_list
 
-def get_places_for_map(filters=None, return_total=False):
-    conn = get_db_connection()
-    sample_size = filters.get('sample_size', 50) if filters else 50
-    max_places = filters.get('max_places', 1500) if filters else 1500
-
-    dhlabids=[]
-    if filters and 'uploaded_corpus' in filters and filters['uploaded_corpus']:
-        dhlabids = filters['uploaded_corpus']
-        print(f"Using uploaded corpus with {len(dhlabids)} dhlabids")
-        book_sample_query = f"""
-        SELECT dhlabid
-        FROM (SELECT DISTINCT dhlabid FROM books WHERE dhlabid IN ({','.join(['?'] * len(dhlabids))}))
-        ORDER BY RANDOM()
-        LIMIT ?
-        """
-        sampled_books = pd.read_sql_query(book_sample_query, conn, params=tuple(dhlabids) + (sample_size,))
-    else:
-        print("Falling back to Epikk sample")
-        book_sample_query = """
-        SELECT dhlabid
-        FROM corpus
-        WHERE category = 'Diktning: Epikk'
-        ORDER BY RANDOM()
-        LIMIT ?
-        """
-        sampled_books = pd.read_sql_query(book_sample_query, conn, params=(sample_size,))
-
-    if sampled_books.empty:
-        print("No books sampled")
-        conn.close()
-        return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'global_counts', 'book_count'])
-
-    sampled_dhlabids = sampled_books['dhlabid'].tolist()
-    print(f"Sampled dhlabids: {len(sampled_dhlabids)} - {sampled_dhlabids[:5]}...")
-
-    # Total places query without LIMIT
-    if filters and 'uploaded_corpus' in filters:
-        total_query = """
-        SELECT COUNT(DISTINCT p.token) as total_places
-        FROM places p
-        JOIN books bp ON p.token = bp.token
-        WHERE bp.dhlabid IN ({})
-        """.format(','.join(['?'] * len(dhlabids)))
-        total_places_df = pd.read_sql_query(total_query, conn, params=tuple(dhlabids))
-        total_places = total_places_df['total_places'].iloc[0] if not total_places_df.empty else 0
-    else:
-        total_places = 0  # Default for non-uploaded corpus
-
-    # Limited places query
-    base_query = """
-    SELECT p.token, p.modern as name, p.latitude, p.longitude, SUM(bp.book_count) as frequency,
-           COUNT(DISTINCT bp.dhlabid) as book_count
-    FROM places p
-    JOIN books bp ON p.token = bp.token
-    WHERE bp.dhlabid IN ({})
-    GROUP BY p.token, p.modern, p.latitude, p.longitude
-    ORDER BY frequency DESC
-    LIMIT ?
-    """.format(','.join(['?'] * len(sampled_dhlabids)))
-    df = pd.read_sql_query(base_query, conn, params=tuple(sampled_dhlabids) + (max_places,))
-    print(f"Sampled {len(sampled_dhlabids)} books, got {len(df)} places")
-    conn.close()
-    
-    if return_total:
-        return df, total_places
-    return df
-
-def get_place_details(token, filters=None):
-    conn = get_db_connection()
-    query = """
-    SELECT DISTINCT c.title, c.author, c.year, c.urn, bp.book_count
-    FROM corpus c
-    JOIN books bp ON c.dhlabid = bp.dhlabid
-    WHERE bp.token = ?
-    """
-    params = [token]
-    conditions = []
-    
-    if filters:
-        if 'uploaded_corpus' in filters and filters['uploaded_corpus']:
-            dhlabids = filters['uploaded_corpus']
-            conditions.append(f"c.dhlabid IN ({','.join(['?'] * len(dhlabids))})")
-            params.extend(dhlabids)
-        if 'categories' in filters and filters['categories']:
-            categories = filters['categories']
-            conditions.append(f"c.category IN ({','.join(['?'] * len(categories))})")
-            params.extend(categories)
-        if 'titles' in filters and filters['titles']:
-            titles = [title.split(' (')[0] for title in filters['titles']]
-            conditions.append(f"c.title IN ({','.join(['?'] * len(titles))})")
-            params.extend(titles)
-    
-    if conditions:
-        query += " AND " + " AND ".join(conditions)
-    query += " ORDER BY bp.book_count DESC LIMIT 20"
-    print(query, params)
-    books = pdquery(conn, query, tuple(params))
-    conn.close()
-    return books
-
-
 # Initialize variables before layout
 default_filters = {
-    'year_range': [1850, 1880],
     'categories': [],
-    'authors': [],
     'titles': [],
-    'max_places': 1500,
-    'sample_size': 50
+    'sample_size': 0,
+    'max_places': 500,
+    'year_range': [1814, 1905]
 }
+
+
+def apply_book_operation(current_books, incoming_books, operation):
+    op = (operation or 'intersection').lower()
+    current = set(current_books or [])
+    incoming = set(incoming_books or [])
+
+    if not current:
+        if op == 'difference':
+            return []
+        return sorted(incoming)
+
+    if op == 'union':
+        result = current | incoming
+    elif op == 'difference':
+        result = current - incoming
+    else:  # intersection
+        result = current & incoming if incoming else set()
+    return sorted(result)
+
+
+def fetch_place_tokens(book_ids):
+    if not book_ids:
+        return []
+    df = get_all_places_for_corpus(book_ids)
+    if df.empty:
+        return []
+    return df['token'].dropna().astype(str).unique().tolist()
+
+def get_places_for_map(filters=None, books=None, return_total=False, selected_tokens=None):
+    """Get places data for the map visualization."""
+    filters = filters or {}
+    books = list(books or [])
+    tokens = [str(t) for t in (selected_tokens or [])]
+
+    MAX_PLACES = 2000  # Hard limit for map performance
+
+    if not books and not tokens:
+        empty = pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+        return (empty, 0) if return_total else empty
+
+    conn = get_db_connection()
+    try:
+        if tokens:
+            if not books:
+                empty = pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+                return (empty, 0) if return_total else empty
+
+            query = """
+            WITH selected_places AS (
+                SELECT 
+                    p.token,
+                    p.modern as name,
+                    p.latitude,
+                    p.longitude
+                FROM places p
+                WHERE p.token IN ({})
+                AND p.latitude IS NOT NULL 
+                AND p.longitude IS NOT NULL
+                AND p.latitude != '0'
+                AND p.longitude != '0'
+            )
+            SELECT 
+                sp.token,
+                sp.name,
+                sp.latitude,
+                sp.longitude,
+                SUM(b.book_count) as frequency,
+                COUNT(DISTINCT b.dhlabid) as book_count
+            FROM selected_places sp
+            LEFT JOIN books b ON sp.token = b.token
+            WHERE b.dhlabid IN ({})
+            GROUP BY sp.token, sp.name, sp.latitude, sp.longitude
+            """
+            query = query.format(
+                ','.join(['?'] * len(tokens)),
+                ','.join(['?'] * len(books))
+            )
+            params = tuple(tokens + books)
+            places_df = pd.read_sql_query(query, conn, params=params)
+        else:
+            query = """
+            SELECT 
+                b.token,
+                p.modern as name,
+                p.latitude,
+                p.longitude,
+                SUM(b.book_count) as frequency,
+                COUNT(DISTINCT b.dhlabid) as book_count
+            FROM books b
+            JOIN places p ON b.token = p.token
+            WHERE b.dhlabid IN ({})
+            AND p.latitude IS NOT NULL 
+            AND p.longitude IS NOT NULL
+            AND p.latitude != '0'
+            AND p.longitude != '0'
+            GROUP BY b.token, p.modern, p.latitude, p.longitude
+            ORDER BY frequency DESC
+            """
+            if not books:
+                empty = pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+                return (empty, 0) if return_total else empty
+            query = query.format(','.join(['?'] * len(books)))
+            places_df = pd.read_sql_query(query, conn, params=tuple(books))
+
+        places_df['latitude'] = pd.to_numeric(places_df['latitude'], errors='coerce')
+        places_df['longitude'] = pd.to_numeric(places_df['longitude'], errors='coerce')
+
+        user_max = filters.get('max_places', 0)
+        effective_max = min(user_max if user_max and user_max > 0 else MAX_PLACES, MAX_PLACES)
+        places_df = places_df.head(effective_max)
+
+        if return_total:
+            total = len(places_df)
+            return places_df, total
+        return places_df
+    finally:
+        conn.close()
+
+def get_place_details(token, books, page=1, per_page=20):
+    """Get details about a place from the database."""
+    conn = get_db_connection()
+    try:
+        if not books:
+           return pd.DataFrame(), 0
+
+        
+        # Query to get book details with pagination
+        query = """
+        WITH place_stats AS (
+            SELECT 
+                COUNT(DISTINCT b.dhlabid) as total_books,
+                SUM(b.book_count) as total_mentions
+            FROM books b
+            WHERE b.token = ?
+            AND b.dhlabid IN ({})
+        ),
+        book_mentions AS (
+            SELECT 
+                b.dhlabid,
+                b.book_count as mention_count
+            FROM books b
+            WHERE b.token = ?
+            AND b.dhlabid IN ({})
+        )
+        SELECT 
+            c.title,
+            c.author,
+            c.year,
+            c.dhlabid,
+            c.urn,
+            bm.mention_count,
+            (SELECT total_books FROM place_stats) as total_books,
+            (SELECT total_mentions FROM place_stats) as total_mentions
+        FROM book_mentions bm
+        JOIN corpus c ON bm.dhlabid = c.dhlabid
+        ORDER BY c.year DESC, c.title
+        LIMIT ? OFFSET ?
+        """.format(','.join(['?'] * len(books)), ','.join(['?'] * len(books)))
+        
+        # Get the data
+        params = [token] + books + [token] + books + [per_page, (page - 1) * per_page]
+        df = pd.read_sql_query(query, conn, params=params)
+        
+        # Get total count for pagination
+        count_query = """
+        SELECT COUNT(DISTINCT c.title) as total
+        FROM books b
+        JOIN corpus c ON b.dhlabid = c.dhlabid
+        WHERE b.token = ?
+        AND b.dhlabid IN ({})
+        """.format(','.join(['?'] * len(books)))
+        
+        total = pd.read_sql_query(count_query, conn, params=[token] + books).iloc[0]['total']
+        
+        return df, total
+        
+    finally:
+        conn.close()
 
 # Initialize lists with defaults
 authors_list = ["Ibsen", "Bjørnson", "Collett", "Lie", "Kielland"]
@@ -219,122 +314,230 @@ except Exception as e:
 
 # App Layout
 app.layout = html.Div([
-    # Category Button at Top Right
-    html.Div([
-        dbc.Button(
-            "Select Categories",
-            id='category-toggle-button',
-            color="primary",
-            outline=True,
-            size="sm",
-            style={'margin': '5px'}
-        ),
-        dbc.Modal([
-            dbc.ModalHeader(dbc.ModalTitle("Select Categories")),
-            dbc.ModalBody([
-                dcc.Dropdown(
-                    id='category-dropdown',
-                    options=[{'label': cat, 'value': cat} for cat in categories_list],
-                    value=default_filters['categories'],
-                    multi=True,
-                    placeholder="Select categories..."
-                )
-            ]),
-            dbc.ModalFooter(
-                dbc.Button("Close", id="close-category-modal", className="ml-auto")
-            ),
-        ], id="category-modal", is_open=False),
-    ], style={
-        'position': 'absolute',
-        'top': '20px',
-        'left': '70px',  # Positioned next to sidebar toggle
-        'zIndex': 1001
-    }),
-    html.Div([
-        dbc.Button(
-            [
-                html.I(className="fa fa-list", style={'marginRight': '5px'}),
-                "Places"
-            ],
-            id='place-names-toggle',
-            color="primary",
-            outline=True,
-            size="sm",
-            style={'margin': '5px'}
-        )
-    ], style={
-        'position': 'absolute',
-        'top': '20px',
-        'left': '210px',  # Positioned after the Categories button
-        'zIndex': 1001
-    }),
-    
+    # Main map area (bottom layer)
     html.Div([
         dcc.Graph(
             id='main-map',
             style={'height': '100vh'},
-            config={'displayModeBar': False, 'scrollZoom': True}
+            config={
+                'displayModeBar': False,  # Hide the mode bar
+                'scrollZoom': True,
+                'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+                'displaylogo': False,
+                'showTips': True,
+                'showLink': False,
+                'showEditInChartStudio': False,
+                'showSendToCloud': False,
+                'responsive': True,
+                'editable': False,
+                'edits': {
+                    'shapePosition': False,
+                    'annotationPosition': False
+                }
+            }
         ),
-    ], style={
-        'position': 'absolute',
-        'top': 0,
-        'left': 0,
-        'width': '100%',
-        'height': '100vh'
-    }),
-    
-    html.Div([
-        dbc.RadioItems(
-            id='view-toggle',
-            options=[
-                {'label': 'Map', 'value': 'map'},
-                {'label': 'Heatmap', 'value': 'heatmap'}
-            ],
-            value='map',
-            inline=True,
-            inputClassName='btn-check',
-            labelClassName='btn btn-outline-primary rounded-pill mx-1',
-            labelCheckedClassName='active',
-        ),
-        dcc.Checklist(
-            id='cluster-toggle',
-            options=[{'label': 'Enable Clustering', 'value': 'true'}],
-            value=[],  # Default to off
-            style={'display': 'inline-block', 'marginLeft': '10px'}
-        )
-    ], style={
-        'position': 'absolute',
-        'top': '20px',
-        'right': '40px',
-        'zIndex': 1000
-    }),
-    
-    html.Div([
-        html.Button(
-            html.I(className="fa fa-bars"),
-            id='sidebar-toggle',
-            style={
-                'background': 'white',
-                'border': 'none',
-                'borderRadius': '50%',
-                'width': '40px',
-                'height': '40px',
+        # Loading overlay
+        html.Div([
+            html.Div([
+                html.I(className="fas fa-spinner fa-spin", style={'fontSize': '24px', 'marginRight': '10px'}),
+                html.Span("Preparing places...", style={'fontSize': '16px'})
+            ], style={
+                'backgroundColor': 'rgba(255, 255, 255, 0.9)',
+                'padding': '15px 25px',
+                'borderRadius': '8px',
+                'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
                 'display': 'flex',
                 'alignItems': 'center',
-                'justifyContent': 'center',
-                'boxShadow': '0 2px 4px rgba(0,0,0,0.2)',
-                'cursor': 'pointer'
-            }
-        )
-    ], style={
-        'position': 'absolute',
-        'top': '20px',
-        'left': '20px',
-        'zIndex': 1000
-    }),
+                'justifyContent': 'center'
+            })
+        ], id='loading-overlay', style={
+            'position': 'absolute',
+            'top': '50%',
+            'left': '50%',
+            'transform': 'translate(-50%, -50%)',
+            'zIndex': 1000,
+            'display': 'none'
+        })
+    ], style={'position': 'absolute', 'top': 0, 'left': 0, 'right': 0, 'bottom': 0}),
     
-    # Replace the current ImagiNation text div with this button and modal:
+    # Top bar (top layer with translucent background)
+    html.Div([
+        # Left section with search and corpus controls
+        html.Div([
+            # Search field
+            html.Div([
+                html.Div([
+                    html.I(className="fas fa-search", style={
+                        "color": "#666",
+                        "marginRight": "8px",
+                        "fontSize": "16px"
+                    }),
+                    dcc.Input(
+                        id="global-place-search",
+                        type="text",
+                        placeholder="Search places...",
+                        style={
+                            "width": "100%",
+                            "height": "100%",
+                            "border": "none",
+                            "outline": "none",
+                            "fontSize": "14px",
+                            "color": "#333",
+                            "backgroundColor": "transparent",
+                            "padding": "0"
+                        }
+                    )
+                ], style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "padding": "0 12px",
+                    "height": "36px",
+                    "backgroundColor": "white",
+                    "borderRadius": "8px",
+                    "boxShadow": "0 2px 6px rgba(0,0,0,0.15)",
+                    "transition": "box-shadow 0.3s ease",
+                    "pointerEvents": "auto",
+                    "width": "240px",
+                    "flexShrink": "0"  # Prevent search field from shrinking
+                })
+            ], style={
+                "display": "flex",
+                "alignItems": "center",
+                "flexShrink": "0"  # Prevent container from shrinking
+            }),
 
+            # Buttons container
+            html.Div([
+                # Tools button
+                html.Button(
+                    html.I(className="fas fa-sliders-h"),
+                    id='visualization-button',
+                    style={
+                        'padding': '8px',
+                        'backgroundColor': 'white',
+                        'color': '#475569',
+                        'border': 'none',
+                        'borderRadius': '50%',
+                        'cursor': 'pointer',
+                        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                        'transition': 'all 0.2s',
+                        'width': '36px',
+                        'height': '36px',
+                        'display': 'flex',
+                        'alignItems': 'center',
+                        'justifyContent': 'center',
+                        'fontSize': '14px',
+                        'flexShrink': '0'  # Prevent the button from shrinking
+                    }
+                ),
+
+                # Corpus and Places buttons
+                html.Button("Corpus", id='corpus-button', style={
+                    'padding': '8px 16px',
+                    'backgroundColor': 'white',
+                    'color': '#475569',
+                    'border': 'none',
+                    'borderRadius': '20px',
+                    'cursor': 'pointer',
+                    'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                    'transition': 'all 0.2s',
+                    'fontSize': '14px',
+                    'fontWeight': '500',
+                    'lineHeight': '1.5',
+                    'flexShrink': '0',  # Prevent the button from shrinking
+                    'marginLeft': '8px'  # Add margin between buttons
+                }),
+                html.Button("Places", id='place-names-toggle', style={
+                    'padding': '8px 16px',
+                    'backgroundColor': 'white',
+                    'color': '#475569',
+                    'border': 'none',
+                    'borderRadius': '20px',
+                    'cursor': 'pointer',
+                    'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                    'transition': 'all 0.2s',
+                    'fontSize': '14px',
+                    'fontWeight': '500',
+                    'lineHeight': '1.5',
+                    'flexShrink': '0',  # Prevent the button from shrinking
+                    'marginLeft': '8px'  # Add margin between buttons
+                })
+            ], style={
+                'display': 'flex',
+                'flexDirection': 'row',  # Default to horizontal layout
+                'alignItems': 'center',
+                'flexWrap': 'wrap',  # Allow wrapping only when needed
+                'gap': '8px',  # Add gap between wrapped items
+                'marginLeft': '8px',  # Add margin between search and buttons
+                'flexShrink': '0'  # Prevent container from shrinking
+            })
+        ], style={
+            'display': 'flex',
+            'flexDirection': 'row',  # Change to horizontal layout
+            'alignItems': 'center',
+            'position': 'absolute',
+            'left': '20px',
+            'top': '20px',
+            'zIndex': 1000,
+            'pointerEvents': 'auto',
+            'flexWrap': 'wrap',  # Allow wrapping when needed
+            'gap': '8px',  # Add gap between wrapped items
+            'maxWidth': 'calc(100% - 180px)'  # Reserve space for map view button
+        }),
+
+        # Right section with map view button
+        html.Div([
+            html.Button([
+                html.I(className="fas fa-map-marker-alt", style={'marginRight': '8px'}),
+                "Map View"
+            ], id='map-button', style={
+                'padding': '8px 16px',
+                'backgroundColor': 'white',
+                'color': '#475569',
+                'border': 'none',
+                'borderRadius': '20px',
+                'cursor': 'pointer',
+                'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                'transition': 'all 0.2s',
+                'fontSize': '14px',
+                'fontWeight': '500',
+                'lineHeight': '1.5',
+                'display': 'flex',
+                'alignItems': 'center',
+                'whiteSpace': 'nowrap',  # Prevent text wrapping
+                'flexShrink': '0'  # Prevent button from shrinking
+            })
+        ], style={
+            'position': 'absolute',
+            'right': '20px',
+            'top': '20px',
+            'zIndex': 1000,
+            'pointerEvents': 'auto',
+            'flexShrink': '0'  # Prevent container from shrinking
+        }),
+    ], style={
+        'position': 'fixed',
+        'top': 0,
+        'left': 0,
+        'right': 0,
+        'height': '80px',
+        'backgroundColor': 'rgba(255, 255, 255, 0)',
+        'zIndex': 1000,
+        'pointerEvents': 'none',
+        'padding': '0 20px',  # Add padding for better mobile spacing
+        'display': 'flex',
+        'justifyContent': 'space-between',
+        'alignItems': 'center'
+    }),
+
+    # Rest of the components...
+    html.Div(id='cached-data', style={'display': 'none'}),
+
+    # Map controls in a modal
+    create_corpus_controls(categories_list, titles_list, default_filters),
+    create_visualization_controls(categories_list, titles_list, default_filters),
+
+    # ImagiNation info button and modal
     html.Div([
         html.Button([
             html.H3("ImagiNation", style={
@@ -342,17 +545,11 @@ app.layout = html.Div([
                 'fontWeight': '400',
                 'color': '#333',
                 'fontSize': '20px'
-            }),
-            html.Span("Click for info", style={
-                'fontSize': '11px',
-                'color': '#666',
-                'display': 'block',
-                'marginTop': '2px'
             })
         ], 
         id='info-button',
         style={
-            'background': 'white',
+            'background': 'rgba(255,255,255,0.6)',
             'border': 'none',
             'borderRadius': '4px',
             'boxShadow': '0 2px 4px rgba(0,0,0,0.2)',
@@ -399,294 +596,180 @@ app.layout = html.Div([
         'width': 'auto'
     }),
     
-    html.Div([
-        html.Div([
-            html.H3("Layers & Filters", style={'margin': '0', 'fontWeight': '400'})
-        ], style={'padding': '15px', 'borderBottom': '1px solid #eee', 'marginTop': '50px'}),
-        dbc.Accordion([
-            dbc.AccordionItem([
-                html.Div([
-                    html.Label("Upload Custom Corpus", style={'marginBottom': '8px'}),
-                    dcc.Upload(
-                        id='upload-corpus',
-                        children=html.Div([
-                            html.I(className="fas fa-file-upload", style={'marginRight': '10px'}),
-                            'Drag and Drop or ',
-                            html.A('Select File', style={'color': '#4285F4', 'cursor': 'pointer'})
-                        ]),
-                        style={
-                            'width': '100%',
-                            'height': '60px',
-                            'lineHeight': '60px',
-                            'borderWidth': '1px',
-                            'borderStyle': 'dashed',
-                            'borderRadius': '5px',
-                            'textAlign': 'center',
-                            'margin': '0 0 15px 0',
-                            'background': 'rgba(66, 133, 244, 0.05)'
-                        },
-                        multiple=False
-                    ),
-                    html.Div(id='upload-status', style={'fontSize': '13px', 'marginBottom': '15px'}),
-                    html.Div([
-                        html.Button([
-                            html.I(className="fas fa-trash-alt", style={'marginRight': '5px'}),
-                            "Reset to Default Corpus"
-                        ], 
-                        id='reset-corpus',
-                        style={
-                            'background': 'none',
-                            'border': 'none',
-                            'color': '#555',
-                            'textDecoration': 'underline',
-                            'cursor': 'pointer',
-                            'fontSize': '13px',
-                            'padding': '0',
-                            'display': 'inline-block',
-                            'marginTop': '5px'
-                        })
-                    ], style={'textAlign': 'right'})
-                ])
-            ], title="Upload Corpus", className="sidebar-section"),
-            
-            dbc.AccordionItem([
-               dbc.RadioItems(
-                    id='map-style',
-                    options=[
-                        {'label': 'Street', 'value': 'open-street-map'},
-                        {'label': 'Light', 'value': 'carto-positron'},
-                        {'label': 'Dark', 'value': 'carto-darkmatter'},
-                        {'label': 'Satellite', 'value': 'white-bg'}
-                    ],
-                    value='open-street-map',  # Try changing this to a different default
-                    inline=False,
-                    labelStyle={'display': 'block', 'margin': '8px 0'}
-                ),
-            ], title="Base Map", className="sidebar-section"),
-            
-            dbc.AccordionItem([
-                html.Label("Sample Size"),
-                dcc.Dropdown(
-                    id='sample-size',
-                    options=[{'label': f"{n} Books", 'value': n} for n in [10, 50, 100, 500, 1000, 2000]],
-                    value=default_filters['sample_size'],
-                    className='mb-3'
-                ),
-                html.Label("Marker Size"),
-                dcc.Slider(
-                    id='marker-size-slider',
-                    min=2,
-                    max=6,
-                    value=3,
-                    step=1,
-                    marks={i: str(i) for i in range(2, 7)},
-                    className='mb-4'
-                ),
-                html.Label("Max Places"),
-                dcc.Slider(
-                    id='max-places-slider',
-                    min=50,
-                    max=1500,
-                    value=default_filters['max_places'],
-                    step=50,
-                    marks={i: str(i) for i in [50, 200, 350, 500, 750, 1000, 1300, 1500]},
-                    className='mb-4'
-                ),
-                html.Div([
-                    html.H5("Heatmap Settings", className='mt-3 mb-2'),
-                    html.Label("Intensity"),
-                    dcc.Slider(
-                        id='heatmap-intensity',
-                        min=1,
-                        max=10,
-                        value=3,
-                        marks={i: str(i) for i in range(1, 11, 2)},
-                        className='mb-3'
-                    ),
-                    html.Label("Radius"),
-                    dcc.Slider(
-                        id='heatmap-radius',
-                        min=1,
-                        max=30,
-                        value=5,  # Start with a smaller default
-                        step=1,
-                        marks={i: str(i) for i in [1, 5, 10, 15, 20, 30]},
-                        className='mb-3'
-                    )
-                ], id='heatmap-settings', style={'display': 'none'}),
-            ], title="Display Settings", className="sidebar-section"),
-            
-            dbc.AccordionItem([
-                html.Label("Work"),
-                dcc.Dropdown(
-                    id='title-dropdown',
-                    options=[{'label': title, 'value': title} for title in titles_list],
-                    value=default_filters['titles'],
-                    multi=True,
-                    placeholder="Select works...",
-                    className='mb-3'
-                ),
-            ], title="Works", className="sidebar-section"),
-            # dbc.AccordionItem([
-            #     html.Div([
-            #         html.Div([
-            #             html.Label("Top Places by Frequency"),
-            #             dcc.Dropdown(
-            #                 id='places-limit-dropdown',
-            #                 options=[
-            #                     {'label': 'Top 100', 'value': 100},
-            #                     {'label': 'Top 250', 'value': 250},
-            #                     {'label': 'Top 500', 'value': 500},
-            #                     {'label': 'Top 1000', 'value': 1000}
-            #                 ],
-            #                 value=250,
-            #                 clearable=False,
-            #                 className='mb-2'
-            #             ),
-            #             html.Div([
-            #                 dcc.Input(
-            #                     id='place-search',
-            #                     type='text',
-            #                     placeholder='Search places...',
-            #                     className='form-control mb-2'
-            #                 ),
-            #                 html.Div(id='place-list', style={'maxHeight': '300px', 'overflowY': 'auto'})
-            #             ])
-            #         ])
-            #     ])
-            # ], title="Place Names", className="sidebar-section")
-            
-        ], id="sidebar-accordion", start_collapsed=True),
-        
-        html.Div(id='corpus-stats', style={'padding': '15px', 'borderTop': '1px solid #eee', 'fontSize': '14px'})
-    ], id='sidebar', style={
-        'position': 'absolute',
-        'top': 0,
-        'left': 0,
-        'width': '0',
-        'height': '100vh',
-        'backgroundColor': 'white',
-        'boxShadow': '2px 0 4px rgba(0,0,0,0.2)',
-        'zIndex': 900,
-        'overflowY': 'auto',
-        'overflowX': 'hidden',
-        'transition': 'width 0.3s ease'
-    }),
-    
-    html.Div([
-        html.Div([
+    # Place summary container
+    dbc.Card([
+        dbc.CardHeader([
             html.Div([
-                html.I(className="fa fa-grip-horizontal"),
-                html.H4("Place Details", style={'marginBottom': '0', 'fontWeight': '400', 'flex': '1'}),
+                html.I(className="fa fa-grip-horizontal me-2"),
+                html.H5("Place Details", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
                 html.Button(
                     html.I(className="fa fa-times"),
                     id='close-summary',
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'cursor': 'pointer',
-                        'fontSize': '16px'
-                    }
+                    className="btn-close"
                 )
-            ], style={
-                'display': 'flex',
-                'justifyContent': 'space-between',
-                'alignItems': 'center',
-                'marginBottom': '10px',
-                'cursor': 'move'
-            }, id='summary-header'),
-            html.Div(id='place-summary')
+            ], className="d-flex justify-content-between align-items-center")
+        ], className="bg-danger-subtle text-dark", id='summary-header'),
+        dbc.CardBody([
+            html.Div(id='place-summary', style={
+                'flex': '1 1 auto',
+                'minHeight': 0,
+                'overflowY': 'auto'
+            })
         ], style={
-            'padding': '15px',
-            'backgroundColor': 'white',
-            'borderRadius': '8px',
-            'boxShadow': '0 4px 15px rgba(0,0,0,0.15)',
-            'border': '1px solid rgba(0,0,0,0.05)'
+            'flex': '1 1 auto',
+            'minHeight': 0,
+            'display': 'flex',
+            'flexDirection': 'column'
         })
-    ], id='place-summary-container', style={
-        'position': 'absolute',
-        'bottom': '80px',
-        'left': '20px',
+    ], id='place-summary-container', className="position-absolute flex-column", style={
         'width': '350px',
-        'maxHeight': '500px',
-        'overflowY': 'auto',
+        'minWidth': '300px',
+        'minHeight': '320px',
         'zIndex': 800,
         'display': 'none',
-        'cursor': 'auto'
+        'top': '100px',  # Position below the top button container
+        'left': '20px',  # Align with other containers
+        'cursor': 'grab',
+        'flexDirection': 'column'
     }),
 
-    html.Div([
-        html.Div([
-           # Make sure your places-header has this structure:
-
+    # Place Names Container
+    dbc.Card([
+        dbc.CardHeader([
             html.Div([
-                html.I(className="fa fa-list", style={'marginRight': '8px'}),
-                html.H4("Place Names", style={'marginBottom': '0', 'fontWeight': '400', 'flex': '1'}),
+                html.I(className="fa fa-map-marker me-2"),
+                html.H5("Place Names", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
                 html.Button(
                     html.I(className="fa fa-times"),
-                    id='close-places',
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'cursor': 'pointer',
-                        'fontSize': '16px'
-                    }
+                    id='close-place-names',
+                    className="btn-close"
                 )
-            ], style={
-                'display': 'flex',
-                'justifyContent': 'space-between',
-                'alignItems': 'center',
-                'marginBottom': '10px',
-                'cursor': 'grab'  # Add this explicitly
-            }, id='places-header'),
+            ], className="d-flex justify-content-between align-items-center", id='place-names-header')
+        ], className="bg-warning-subtle text-dark"),
+        dbc.CardBody([
             html.Div([
-                dcc.Dropdown(
-                    id='places-limit-dropdown',
-                    options=[
-                        {'label': 'Top 100', 'value': 100},
-                        {'label': 'Top 250', 'value': 250},
-                        {'label': 'Top 500', 'value': 500},
-                        {'label': 'Top 1000', 'value': 1000}
-                    ],
-                    value=250,
-                    clearable=False,
-                    className='mb-2'
-                ),
+                html.Label("Search Places", className="form-label"),
                 dcc.Input(
                     id='place-search',
                     type='text',
-                    placeholder='Search places...',
-                    className='form-control mb-2'
+                    placeholder='Type to search...',
+                    className="form-control mb-3"
                 ),
-                html.Div(id='place-list', style={'maxHeight': '300px', 'overflowY': 'auto'})
-            ])
+                html.Label("Maximum Places", className="form-label"),
+                dcc.Slider(
+                    id='corpus-max-places-slider',
+                    min=100,
+                    max=2000,
+                    step=100,
+                    value=500,
+                    marks={i: str(i) for i in range(500, 2001, 500)},
+                    className="mb-3"
+                ),
+                html.Button([
+                    html.I(className="fas fa-sync-alt me-2"),
+                    "Resample Places"
+                ], id='resample-places', className="btn btn-primary w-100")
+            ], className="mb-4"),
+            html.Div([
+                html.Div([
+                    dbc.Checklist(
+                        options=[{"label": "Bruk underliste i heatmap", "value": "subset"}],
+                        value=[],
+                        id='heatmap-subset-checkbox',
+                        switch=True,
+                        persistence=True
+                    )
+                ], className="mb-2", style={'fontSize': '0.85rem'}),
+                dcc.Tabs(
+                    id='places-tabs',
+                    value='frequency',
+                    children=[
+                        dcc.Tab(label="Frekvens", value='frequency', children=[
+                            html.Div(id='places-frequency-summary', className="mb-2 text-muted", style={'fontSize': '0.85rem'}),
+                            html.Div(id='places-frequency-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
+                            html.Div([
+                                dbc.Button("Last ned CSV", id='download-places-frequency-btn', color="secondary", className="w-100 mb-2"),
+                                dbc.Button("Vis steder", id='apply-places-frequency', color="primary", className="w-100")
+                            ], className="mt-3"),
+                            dcc.Download(id='download-places-frequency')
+                        ]),
+                        dcc.Tab(label="Sampling", value='sampling', children=[
+                            html.Div(id='places-sampling-summary', className="mb-2 text-muted", style={'fontSize': '0.85rem'}),
+                            html.Div(id='places-sampling-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
+                            html.Div([
+                                dbc.Button("Last ned CSV", id='download-places-sampling-btn', color="secondary", className="w-100 mb-2"),
+                                dbc.Button("Vis steder", id='apply-places-sampling', color="primary", className="w-100")
+                            ], className="mt-3"),
+                            dcc.Download(id='download-places-sampling')
+                        ]),
+                        dcc.Tab(label="Kollokasjoner", value='collocations', children=[
+                            html.Div(id='places-collocation-summary', className="mb-2 text-muted", style={'fontSize': '0.85rem'}),
+                            html.Div(id='places-collocation-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
+                            html.Div([
+                                dbc.Button("Last ned CSV", id='download-places-collocation-btn', color="secondary", className="w-100 mb-2"),
+                                dbc.Button("Vis steder", id='apply-places-collocations', color="primary", className="w-100")
+                            ], className="mt-3"),
+                            dcc.Download(id='download-places-collocations')
+                        ])
+                    ],
+                    className="flex-grow-1"
+                )
+            ], id='place-names-list', style={
+                'flex': '1 1 auto',
+                'minHeight': 0,
+                'display': 'flex',
+                'flexDirection': 'column'
+            })
         ], style={
-            'padding': '15px',
-            'backgroundColor': 'white',
-            'borderRadius': '8px',
-            'boxShadow': '0 4px 15px rgba(0,0,0,0.15)',
-            'border': '1px solid rgba(0,0,0,0.05)'
+            'flex': '1 1 auto',
+            'minHeight': 0,
+            'display': 'flex',
+            'flexDirection': 'column'
         })
-    ], id='place-names-container', style={
-        'position': 'absolute',
-        'top': '80px',
-        'right': '20px',
+    ], id='place-names-container', className="position-absolute flex-column", style={
         'width': '350px',
-        'maxHeight': '500px',
-        'overflowY': 'auto',
+        'minWidth': '320px',
+        'minHeight': '360px',
         'zIndex': 800,
         'display': 'none',
-        'cursor': 'auto'
+        'top': '60px',
+        'right': '10px',  # Initial right position
+        'cursor': 'grab',
+        'flexDirection': 'column'
     }),
 
+    # Add place similarity dialog
+    create_place_similarity_dialog(),
+
+    # Hidden divs and stores
     html.Div(id='reset-status', style={'display': 'none'}),
     dcc.Store(id='filtered-data'),
-    dcc.Store(id='selected-place'),
+    dcc.Store(id='selected-place', data=None),
     dcc.Store(id='map-view-state'),
-    dcc.Store(id='current-filters', data=default_filters),
+    dcc.Store(id='current-filters', data={}),  # Initialize with empty dict
     dcc.Store(id='upload-state', data=None),
-    dcc.Store(id='category-selection', data=default_filters['categories']),
-])
+    dcc.Store(id='category-selection', data=[]),  # Initialize with empty list
+
+    # Change view-type from Div to Store
+    dcc.Store(id='view-type', data='points'),
+
+    # Add this to the app layout, near the other Store components
+    dcc.Store(id='current-dhlabids-store', data=[]),
+    dcc.Store(id='corpus-operation', data='intersection'),
+    dcc.Store(id='places-frequency-data'),
+    dcc.Store(id='places-sample-data'),
+    dcc.Store(id='places-collocation-data'),
+    dcc.Store(id='places-active-mode', data='frequency'),
+    dcc.Store(id='heatmap-subset-mode', data='all'),
+
+    # Add the new corpus builder card
+    create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list, titles_list=titles_list),
+    # Add interval for clearing download status
+    dcc.Interval(id='clear-download-status-interval', interval=6000, n_intervals=0, disabled=True),
+    dcc.Store(id='all-places-store'),  # Store for caching all places for current corpus
+    dcc.Store(id='collocation-place-tokens', data=[]),
+    dcc.Store(id='collocation-highlight', data=[]),
+], id='main-container')
 
 # Add custom CSS
 app.index_string = '''
@@ -711,6 +794,97 @@ app.index_string = '''
             #place-summary-container.dragging {
                 opacity: 0.7;
             }
+            /* Button hover effects */
+            #corpus-button:hover, #place-names-toggle:hover {
+                background-color: #1e293b !important;
+            }
+            #map-button:hover, #heatmap-button:hover {
+                background-color: #1d4ed8 !important;
+            }
+            #visualization-button:hover {
+                background-color: #1e293b !important;
+                transform: scale(1.1);
+            }
+            .place-item:hover {
+                background-color: #f8f9fa;
+            }
+            .place-item:active {
+                background-color: #e9ecef;
+            }
+            #place-names-container {
+                cursor: move;
+            }
+            #place-names-container.dragging {
+                opacity: 0.7;
+            }
+            /* Resize handle styles */
+            .ui-resizable-handle {
+                position: absolute;
+                background: rgba(148, 163, 184, 0.45);
+                border-radius: 2px;
+                opacity: 0;
+                transition: opacity 0.2s;
+                z-index: 1200;
+            }
+            .ui-resizable-handle:hover,
+            .ui-resizable-handle:active {
+                opacity: 1;
+            }
+            .ui-resizable-n,
+            .ui-resizable-s {
+                left: 0;
+                right: 0;
+                height: 6px;
+                cursor: ns-resize;
+            }
+            .ui-resizable-n {
+                top: -3px;
+            }
+            .ui-resizable-s {
+                bottom: -3px;
+            }
+            .ui-resizable-e,
+            .ui-resizable-w {
+                top: 0;
+                bottom: 0;
+                width: 6px;
+                cursor: ew-resize;
+            }
+            .ui-resizable-e {
+                right: -3px;
+            }
+            .ui-resizable-w {
+                left: -3px;
+            }
+            .ui-resizable-se,
+            .ui-resizable-ne,
+            .ui-resizable-sw,
+            .ui-resizable-nw {
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                cursor: pointer;
+            }
+            .ui-resizable-se {
+                right: -6px;
+                bottom: -6px;
+                cursor: se-resize;
+            }
+            .ui-resizable-ne {
+                right: -6px;
+                top: -6px;
+                cursor: ne-resize;
+            }
+            .ui-resizable-sw {
+                left: -6px;
+                bottom: -6px;
+                cursor: sw-resize;
+            }
+            .ui-resizable-nw {
+                left: -6px;
+                top: -6px;
+                cursor: nw-resize;
+            }
         </style>
     </head>
     <body>
@@ -721,96 +895,591 @@ app.index_string = '''
             {%renderer%}
         </footer>
         <script>
-            $("#place-summary-container").draggable({
-                handle: "#drag-handle",
-                containment: "parent",
-                start: function(event, ui) {
-                    $(this).addClass("dragging");
-                },
-                stop: function(event, ui) {
-                    $(this).removeClass("dragging");
-                    var pos = $(this).position();
-                    $("#summary-position").text(JSON.stringify({top: pos.top, left: pos.left}));
+            document.addEventListener('DOMContentLoaded', function() {
+                function initializeDraggable(element) {
+                    let isDragging = false;
+                    let startX, startY;
+                    let initialLeft, initialTop;
+                    let touchIdentifier = null;
+                    
+                    const header = element.querySelector('.card-header');
+                    if (!header) return;
+                    
+                    // Mouse event handlers
+                    header.addEventListener('mousedown', startDrag);
+                    document.addEventListener('mousemove', drag);
+                    document.addEventListener('mouseup', stopDrag);
+                    
+                    // Enhanced touch event handlers
+                    header.addEventListener('touchstart', handleTouchStart, { passive: false });
+                    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+                    document.addEventListener('touchend', handleTouchEnd);
+                    document.addEventListener('touchcancel', handleTouchEnd);
+                    
+                    function startDrag(e) {
+                        e.preventDefault();
+                        isDragging = true;
+                        element.classList.add('dragging');
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        initialLeft = parseInt(window.getComputedStyle(element).left);
+                        initialTop = parseInt(window.getComputedStyle(element).top);
+                    }
+                    
+                    function handleTouchStart(e) {
+                        if (e.touches.length > 1) return; // Ignore multi-touch
+                        e.preventDefault();
+                        const touch = e.touches[0];
+                        touchIdentifier = touch.identifier;
+                        isDragging = true;
+                        element.classList.add('dragging');
+                        startX = touch.clientX;
+                        startY = touch.clientY;
+                        initialLeft = parseInt(window.getComputedStyle(element).left);
+                        initialTop = parseInt(window.getComputedStyle(element).top);
+                    }
+                    
+                    function drag(e) {
+                        if (!isDragging) return;
+                        e.preventDefault();
+                        
+                        const dx = e.clientX - startX;
+                        const dy = e.clientY - startY;
+                        
+                        // Add bounds checking to keep element within viewport
+                        const newLeft = Math.max(0, Math.min(window.innerWidth - element.offsetWidth, initialLeft + dx));
+                        const newTop = Math.max(0, Math.min(window.innerHeight - element.offsetHeight, initialTop + dy));
+                        
+                        element.style.left = `${newLeft}px`;
+                        element.style.top = `${newTop}px`;
+                    }
+                    
+                    function handleTouchMove(e) {
+                        if (!isDragging) return;
+                        e.preventDefault();
+                        
+                        // Find the touch that matches our identifier
+                        const touch = Array.from(e.touches).find(t => t.identifier === touchIdentifier);
+                        if (!touch) return;
+                        
+                        const dx = touch.clientX - startX;
+                        const dy = touch.clientY - startY;
+                        
+                        // Add bounds checking to keep element within viewport
+                        const newLeft = Math.max(0, Math.min(window.innerWidth - element.offsetWidth, initialLeft + dx));
+                        const newTop = Math.max(0, Math.min(window.innerHeight - element.offsetHeight, initialTop + dy));
+                        
+                        element.style.left = `${newLeft}px`;
+                        element.style.top = `${newTop}px`;
+                    }
+                    
+                    function stopDrag() {
+                        if (isDragging) {
+                            isDragging = false;
+                            element.classList.remove('dragging');
+                            touchIdentifier = null;
+                        }
+                    }
+                    
+                    function handleTouchEnd(e) {
+                        e.preventDefault();
+                        stopDrag();
+                    }
                 }
+                
+                // Initialize all cards
+                const cards = [
+                    '#place-names-container',
+                    '#place-summary-container',
+                    '#corpus-controls-container',
+                    '#visualization-controls-container',
+                    '#place-similarity-dialog'
+                ];
+                
+                cards.forEach(selector => {
+                    const element = document.querySelector(selector);
+                    if (element) {
+                        initializeDraggable(element);
+                    }
+                });
+                
+                // Initialize new cards when they become visible
+                const observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                            const element = mutation.target;
+                            if (element.style.display === 'block' && !element.classList.contains('initialized')) {
+                                initializeDraggable(element);
+                                element.classList.add('initialized');
+                            }
+                        }
+                    });
+                });
+                
+                cards.forEach(selector => {
+                    const element = document.querySelector(selector);
+                    if (element) {
+                        observer.observe(element, { attributes: true });
+                    }
+                });
             });
-            var initialPos = $("#summary-position").text() ? JSON.parse($("#summary-position").text()) : {top: 0, left: 0};
-            $("#place-summary-container").css({top: initialPos.top, left: initialPos.left});
         </script>
     </body>
 </html>
 '''
 
-# Callbacks
 @app.callback(
-    [Output('upload-status', 'children'),
+    [Output('popup-upload-status', 'children'),
      Output('upload-state', 'data'),
-     Output('current-filters', 'data')],
-    [Input('upload-corpus', 'contents'),
-     Input('max-places-slider', 'value'),
-     Input('sample-size', 'value'),
-     Input('category-selection', 'data'),
-     Input('title-dropdown', 'value'),
-     Input('reset-corpus', 'n_clicks')],
-    [State('upload-corpus', 'filename'),
-     State('upload-corpus', 'last_modified'),
-     State('current-filters', 'data')]
+     Output('current-filters', 'data', allow_duplicate=True),
+     Output('current-dhlabids-store', 'data', allow_duplicate=True)],
+    [Input('popup-upload-corpus', 'contents')],
+    [State('popup-upload-corpus', 'filename'),
+     State('current-filters', 'data'),
+     State('corpus-operation', 'data'),
+     State('current-dhlabids-store', 'data')],
+    prevent_initial_call=True
 )
-def update_state_and_filters(contents, max_places, sample_size, categories, titles, reset_clicks, filename, date, current_filters):
-    ctx = callback_context
-    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
-    print(f"!!! Combined callback triggered by: {triggered_id} !!!")
-    
-    if not current_filters:
-        current_filters = default_filters.copy()
-    
-    if triggered_id == 'reset-corpus' and reset_clicks:
-        print("Resetting to default corpus...")
-        return html.Div([
-            html.I(className="fas fa-info-circle", style={'color': 'blue', 'marginRight': '8px'}),
-            'Reset to default corpus.'
-        ]), None, default_filters  # Reset to default
-    
-    if triggered_id == 'upload-corpus':
-        print("Processing upload...")
-        if contents is None:
-            return html.Div("Upload a corpus file to begin"), None, current_filters
-        try:
-            content_type, content_string = contents.split(',')
-            decoded = base64.b64decode(content_string)
-            if filename.endswith('.csv'):
-                uploaded_df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
-            elif filename.endswith('.xlsx'):
-                uploaded_df = pd.read_excel(io.BytesIO(decoded))
-            else:
-                return html.Div(['Unsupported file type.'], style={'color': 'red'}), None, current_filters
-            id_column = 'dhlabid' if 'dhlabid' in uploaded_df.columns else 'urn'
-            if id_column == 'urn':
-                conn = get_db_connection()
-                urns = uploaded_df['urn'].tolist()
-                urn_query = f"SELECT dhlabid, urn FROM corpus WHERE urn IN ({','.join(['?'] * len(urns))})"
-                urn_mapping = pd.read_sql_query(urn_query, conn, params=tuple(urns))
-                conn.close()
-                uploaded_df = uploaded_df.merge(urn_mapping, on='urn', how='inner')
-            dhlabids = uploaded_df['dhlabid'].tolist()
-            current_filters['uploaded_corpus'] = dhlabids
-            filtered_corpus_json = uploaded_df.to_json(date_format='iso', orient='split')
-            print(f"Uploaded {len(dhlabids)} dhlabids: {dhlabids[:5]}...")
-            status = html.Div([html.I(className="fas fa-check-circle", style={'color': 'green', 'marginRight': '8px'}),
-                               f'Uploaded {filename} with {len(dhlabids)} books.'])
-            print(f"Returning status: {status}")
-            return status, filtered_corpus_json, current_filters
-        except Exception as e:
-            print(f"Upload error: {e}")
-            return html.Div(['Error processing file.'], style={'color': 'red'}), None, current_filters
-    
-    current_filters.update({
-        'categories': categories or [],
-        'titles': titles or [],
-        'max_places': max_places if max_places else current_filters['max_places'],
-        'sample_size': sample_size if sample_size else current_filters['sample_size']
-    })
-    #print(f"Updated filters from UI: {current_filters}")
-    return dash.no_update, dash.no_update, current_filters
+def update_state_and_filters(contents, filename, current_filters, operation, current_books):
+    import pandas as pd
+    import io
+    import base64
+    current_books = current_books or []
+    if not contents:
+        return html.Div('', style={'display': 'none'}), {}, current_filters, dash.no_update
+    content_type, content_string = contents.split(',')
+    decoded = base64.b64decode(content_string)
+    try:
+        df = pd.read_excel(io.BytesIO(decoded))
+        if 'dhlabid' not in df.columns:
+            return html.Div('Error: File must contain a dhlabid column', style={'color': 'red'}), {}, current_filters, dash.no_update
+        new_books = [int(x) for x in df['dhlabid'].dropna().tolist()]
+        if not new_books:
+            return html.Div('No valid dhlabids found in file.', style={'color': 'red'}), {}, current_filters, dash.no_update
+
+        updated_books = apply_book_operation(current_books, new_books, operation)
+        place_tokens = fetch_place_tokens(updated_books)
+        # Update filters to reflect new corpus source
+        new_filters = current_filters.copy() if current_filters else default_filters.copy()
+        new_filters['corpus_source'] = filename
+        new_filters['last_operation'] = operation or "intersection"
+        new_filters['selected_tokens'] = place_tokens
+        return (
+            html.Div('', style={'display': 'none'}),
+            {'uploaded': True, 'filename': filename},
+            new_filters,
+            updated_books
+        )
+    except Exception as e:
+        return html.Div(f'Error processing file: {str(e)}', style={'color': 'red'}), {}, current_filters, dash.no_update
+
+
+@app.callback(
+    Output('corpus-operation', 'data'),
+    Input('corpus-op-union-controls', 'n_clicks'),
+    Input('corpus-op-intersection-controls', 'n_clicks'),
+    Input('corpus-op-diff-controls', 'n_clicks'),
+    Input('corpus-op-union-builder', 'n_clicks'),
+    Input('corpus-op-intersection-builder', 'n_clicks'),
+    Input('corpus-op-diff-builder', 'n_clicks'),
+    State('corpus-operation', 'data'),
+    prevent_initial_call=True
+)
+def set_corpus_operation(
+    union_controls,
+    intersection_controls,
+    diff_controls,
+    union_builder,
+    intersection_builder,
+    diff_builder,
+    current_operation,
+):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    triggered = ctx.triggered[0]['prop_id'].split('.')[0]
+    mapping = {
+        'corpus-op-union-controls': 'union',
+        'corpus-op-intersection-controls': 'intersection',
+        'corpus-op-diff-controls': 'difference',
+        'corpus-op-union-builder': 'union',
+        'corpus-op-intersection-builder': 'intersection',
+        'corpus-op-diff-builder': 'difference',
+    }
+    return mapping.get(triggered, (current_operation or 'intersection'))
+
+
+def _operation_button_styles(selected: str, target: str) -> Tuple[str, bool]:
+    op = (selected or 'intersection').lower()
+    active = op == target
+    return ('primary' if active else 'secondary', not active)
+
+
+@app.callback(
+    Output('corpus-op-union-controls', 'color'),
+    Output('corpus-op-intersection-controls', 'color'),
+    Output('corpus-op-diff-controls', 'color'),
+    Output('corpus-op-union-controls', 'outline'),
+    Output('corpus-op-intersection-controls', 'outline'),
+    Output('corpus-op-diff-controls', 'outline'),
+    Input('corpus-operation', 'data')
+)
+def style_corpus_operation_controls(operation):
+    c_union, o_union = _operation_button_styles(operation, 'union')
+    c_intersection, o_intersection = _operation_button_styles(operation, 'intersection')
+    c_diff, o_diff = _operation_button_styles(operation, 'difference')
+    return c_union, c_intersection, c_diff, o_union, o_intersection, o_diff
+
+
+@app.callback(
+    Output('corpus-op-union-builder', 'color'),
+    Output('corpus-op-intersection-builder', 'color'),
+    Output('corpus-op-diff-builder', 'color'),
+    Output('corpus-op-union-builder', 'outline'),
+    Output('corpus-op-intersection-builder', 'outline'),
+    Output('corpus-op-diff-builder', 'outline'),
+    Input('corpus-operation', 'data')
+)
+def style_corpus_operation_builder(operation):
+    c_union, o_union = _operation_button_styles(operation, 'union')
+    c_intersection, o_intersection = _operation_button_styles(operation, 'intersection')
+    c_diff, o_diff = _operation_button_styles(operation, 'difference')
+    return c_union, c_intersection, c_diff, o_union, o_intersection, o_diff
+
+
+@app.callback(
+    Output('collocation-results', 'children'),
+    Output('collocation-place-tokens', 'data'),
+    Input('run-collocations', 'n_clicks'),
+    State('collocation-words-input', 'value'),
+    State('collocation-before-input', 'value'),
+    State('collocation-after-input', 'value'),
+    State('current-dhlabids-store', 'data'),
+    State('all-places-store', 'data'),
+    prevent_initial_call=True
+)
+def run_collocation_search(n_clicks, words_value, before, after, current_books, all_places_json):
+    if not n_clicks:
+        raise PreventUpdate
+    if not words_value:
+        return html.Div("Enter one or more keywords to analyse collocations.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
+    if not current_books:
+        return html.Div("Corpus is empty. Build or upload a corpus first.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
+
+    words = [w.strip() for w in words_value.split(',') if w.strip()]
+    if not words:
+        return html.Div("No valid keywords provided.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
+
+    before = int(before or 50)
+    after = int(after or 50)
+
+    conn = get_db_connection()
+    try:
+        placeholders = ",".join(["?"] * len(current_books))
+        query = f"""
+            SELECT urn
+            FROM corpus
+            WHERE dhlabid IN ({placeholders})
+              AND urn IS NOT NULL
+        """
+        urns = pd.read_sql_query(query, conn, params=tuple(current_books))['urn'].dropna().tolist()
+    finally:
+        conn.close()
+
+    if not urns:
+        return html.Div("No URNs found for the current corpus; collocations require identifiable texts.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
+
+    sample_size = min(len(urns), 5000)
+
+    try:
+        coll = dh.Collocations(urns, words, before=before, after=after, samplesize=sample_size)
+        coll_df = coll.frame.copy()
+    except Exception as err:
+        return html.Div(f"Error retrieving collocations: {err}", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
+
+    if coll_df is None or coll_df.empty:
+        return html.Div("No collocations found for the selected keywords.", style={'color': '#475569', 'fontSize': '0.8rem'}), []
+
+    coll_df = coll_df.reset_index()
+    if 'index' in coll_df.columns:
+        coll_df = coll_df.rename(columns={'index': 'word'})
+    if 'counts' in coll_df.columns:
+        coll_df = coll_df.rename(columns={'counts': 'count'})
+    elif 'total' in coll_df.columns:
+        coll_df = coll_df.rename(columns={'total': 'count'})
+
+    coll_df['word'] = coll_df['word'].astype(str)
+    coll_df['lower_word'] = coll_df['word'].str.lower()
+
+    word_counts = coll_df.groupby('lower_word')['count'].sum().to_dict()
+    collocate_tokens = set(word_counts.keys())
+
+    if all_places_json:
+        places_df = pd.read_json(io.StringIO(all_places_json), orient='split')
+    else:
+        places_df = get_all_places_for_corpus(current_books)
+
+    matching_places = []
+    for _, row in places_df[['token', 'name']].dropna().drop_duplicates().iterrows():
+        place_name = str(row['name'])
+        tokens = re.findall(r"[0-9A-Za-zÀ-ÖØ-öø-ÿ]+", place_name.lower())
+        tokens = [tok for tok in tokens if tok]
+        if not tokens:
+            continue
+        if all(tok in collocate_tokens for tok in tokens):
+            total_count = int(sum(word_counts[tok] for tok in tokens))
+            matching_places.append({
+                'Place': place_name,
+                'Tokens': ", ".join(tokens),
+                'Total count': total_count,
+                'Token': row['token']
+            })
+
+    if not matching_places:
+        top = coll_df.sort_values(by='count', ascending=False).head(20)
+        rows = top[['word', 'count']].to_dict('records')
+        table = build_html_table(rows, [('word', 'Word'), ('count', 'Count')])
+        content = html.Div([
+            html.Div(
+                "No place matches found. Showing top collocations instead:",
+                style={'color': '#475569', 'fontSize': '0.8rem', 'marginBottom': '0.5rem'}
+            ),
+            table
+        ], style={'display': 'flex', 'flexDirection': 'column', 'flex': '1 1 auto', 'minHeight': 0})
+        return content, []
+
+    match_df_raw = pd.DataFrame(matching_places)
+
+    def merge_tokens(token_series):
+        pieces = []
+        for entry in token_series:
+            pieces.extend([p.strip() for p in entry.split(',') if p.strip()])
+        return ", ".join(sorted(set(pieces)))
+
+    match_df = (
+        match_df_raw
+        .groupby('Place', as_index=False)
+        .agg({
+            'Tokens': merge_tokens,
+            'Total count': 'sum',
+            'Token': 'first'
+        })
+        .sort_values(by='Total count', ascending=False)
+        .head(50)
+    )
+    table_rows = match_df[['Place', 'Tokens', 'Total count']].to_dict('records')
+    table = build_html_table(
+        table_rows,
+        [('Place', 'Place'), ('Tokens', 'Tokens'), ('Total count', 'Total count')]
+    )
+    content = html.Div([
+        table
+    ], style={'display': 'flex', 'flexDirection': 'column', 'flex': '1 1 auto', 'minHeight': 0})
+    tokens = match_df['Token'].dropna().astype(str).unique().tolist()
+    return content, tokens
+
+@app.callback(
+    Output('collocation-highlight', 'data'),
+    Input('apply-collocation-highlight', 'n_clicks'),
+    Input('clear-collocation-highlight', 'n_clicks'),
+    State('collocation-place-tokens', 'data'),
+    prevent_initial_call=True
+)
+def set_collocation_highlight(apply_clicks, clear_clicks, tokens):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    triggered = ctx.triggered[0]['prop_id'].split('.')[0]
+    if triggered == 'apply-collocation-highlight':
+        return tokens or []
+    if triggered == 'clear-collocation-highlight':
+        return []
+    return dash.no_update
+
+
+@app.callback(
+    Output('places-frequency-data', 'data'),
+    Output('places-sample-data', 'data'),
+    Output('places-collocation-data', 'data'),
+    Output('places-active-mode', 'data'),
+    Input('all-places-store', 'data'),
+    Input('corpus-max-places-slider', 'value'),
+    Input('resample-places', 'n_clicks'),
+    Input('collocation-place-tokens', 'data'),
+    Input('places-tabs', 'value')
+)
+def update_places_datasets(all_places_json, max_places, resample_n, collocation_tokens, active_tab):
+    import pandas as pd
+    max_places = max_places or 500
+    base_columns = ['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']
+    empty_json = pd.DataFrame(columns=base_columns).to_json(date_format='iso', orient='split')
+    if not all_places_json:
+        return empty_json, empty_json, empty_json, active_tab or 'frequency'
+
+    df = load_places_frame(all_places_json)
+    if df.empty:
+        return empty_json, empty_json, empty_json
+
+    freq_df = (
+        df.sort_values(by='frequency', ascending=False)
+        .head(max_places)
+        .reset_index(drop=True)
+    )
+    sample_df = sample_places(df, n=max_places).reset_index(drop=True)
+
+    tokens = set(collocation_tokens or [])
+    if tokens:
+        colloc_df = (
+            df[df['token'].isin(tokens)]
+            .sort_values(by='frequency', ascending=False)
+            .head(max_places)
+            .reset_index(drop=True)
+        )
+    else:
+        colloc_df = pd.DataFrame(columns=base_columns)
+
+    return (
+        freq_df.to_json(date_format='iso', orient='split'),
+        sample_df.to_json(date_format='iso', orient='split'),
+        colloc_df.to_json(date_format='iso', orient='split'),
+        active_tab or 'frequency'
+    )
+
+
+@app.callback(
+    Output('places-frequency-summary', 'children'),
+    Output('places-frequency-table', 'children'),
+    Input('places-frequency-data', 'data'),
+    Input('place-search', 'value'),
+    State('selected-place', 'data')
+)
+def display_frequency_places(freq_json, search_term, selected_place):
+    df = load_places_frame(freq_json)
+    df = filter_places_search(df, search_term)
+    summary, table = render_place_preview(df, selected_place, empty_message="Ingen steder tilgjengelig ennå.")
+    return summary, table
+
+
+@app.callback(
+    Output('places-sampling-summary', 'children'),
+    Output('places-sampling-table', 'children'),
+    Input('places-sample-data', 'data'),
+    Input('place-search', 'value'),
+    State('selected-place', 'data')
+)
+def display_sampling_places(sample_json, search_term, selected_place):
+    df = load_places_frame(sample_json)
+    df = filter_places_search(df, search_term)
+    summary, table = render_place_preview(df, selected_place, empty_message="Trykk «Resample Places» for å hente en ny liste.")
+    return summary, table
+
+
+@app.callback(
+    Output('places-collocation-summary', 'children'),
+    Output('places-collocation-table', 'children'),
+    Input('places-collocation-data', 'data'),
+    Input('place-search', 'value'),
+    State('selected-place', 'data')
+)
+def display_collocation_places(colloc_json, search_term, selected_place):
+    df = load_places_frame(colloc_json)
+    if df.empty:
+        return (
+            html.Div("Kjør et kollokasjonssøk for å fylle denne fanen.", style={'fontSize': '0.85rem'}),
+            html.Div("Ingen kollokasjoner funnet.", className="text-muted")
+        )
+    df = filter_places_search(df, search_term)
+    summary, table = render_place_preview(df, selected_place, empty_message="Ingen kollokasjonstreff som matcher søket.")
+    return summary, table
+
+
+def _download_places_frame(json_payload, filename_prefix):
+    df = load_places_frame(json_payload)
+    if df.empty:
+        raise PreventUpdate
+    columns = ['token', 'name', 'frequency', 'book_count', 'latitude', 'longitude']
+    safe_df = df.reindex(columns=columns)
+    return dcc.send_data_frame(safe_df.to_csv, f"{filename_prefix}.csv", index=False)
+
+
+@app.callback(
+    Output('download-places-frequency', 'data'),
+    Input('download-places-frequency-btn', 'n_clicks'),
+    State('places-frequency-data', 'data'),
+    prevent_initial_call=True
+)
+def download_frequency_places(n_clicks, freq_json):
+    return _download_places_frame(freq_json, "places_frequency")
+
+
+@app.callback(
+    Output('download-places-sampling', 'data'),
+    Input('download-places-sampling-btn', 'n_clicks'),
+    State('places-sample-data', 'data'),
+    prevent_initial_call=True
+)
+def download_sampling_places(n_clicks, sample_json):
+    return _download_places_frame(sample_json, "places_sampling")
+
+
+@app.callback(
+    Output('download-places-collocations', 'data'),
+    Input('download-places-collocation-btn', 'n_clicks'),
+    State('places-collocation-data', 'data'),
+    prevent_initial_call=True
+)
+def download_collocation_places(n_clicks, colloc_json):
+    return _download_places_frame(colloc_json, "places_collocations")
+
+
+@app.callback(
+    Output('current-filters', 'data', allow_duplicate=True),
+    Output('heatmap-subset-mode', 'data', allow_duplicate=True),
+    Input('apply-places-frequency', 'n_clicks'),
+    Input('apply-places-sampling', 'n_clicks'),
+    Input('apply-places-collocations', 'n_clicks'),
+    State('places-frequency-data', 'data'),
+    State('places-sample-data', 'data'),
+    State('places-collocation-data', 'data'),
+    State('places-active-mode', 'data'),
+    State('heatmap-subset-checkbox', 'value'),
+    State('place-search', 'value'),
+    State('corpus-max-places-slider', 'value'),
+    State('current-filters', 'data'),
+    prevent_initial_call=True
+)
+def apply_places_to_map(freq_clicks, sample_clicks, colloc_clicks,
+                        freq_json, sample_json, colloc_json,
+                        active_tab, heatmap_subset_value,
+                        search_term, max_places, current_filters):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger = ctx.triggered[0]['prop_id'].split('.')[0]
+    if trigger == 'apply-places-frequency':
+        mode = 'frequency'
+        df = load_places_frame(freq_json)
+    elif trigger == 'apply-places-sampling':
+        mode = 'sampling'
+        df = load_places_frame(sample_json)
+    elif trigger == 'apply-places-collocations':
+        mode = 'collocations'
+        df = load_places_frame(colloc_json)
+    else:
+        raise PreventUpdate
+
+    df = filter_places_search(df, search_term)
+    if df.empty:
+        raise PreventUpdate
+
+    tokens = df['token'].dropna().astype(str).tolist()
+    new_filters = (current_filters or {}).copy()
+    new_filters['selected_tokens'] = tokens
+    new_filters['max_places'] = max_places or len(tokens)
+    new_filters['places_source'] = mode
+    new_filters['corpus_source'] = 'Places'
+    subset_mode = 'subset' if heatmap_subset_value else 'all'
+    return new_filters, subset_mode
 
 # Add this callback to toggle the info modal
 
@@ -836,7 +1505,7 @@ def toggle_place_names_container(n_clicks, current_style):
         raise PreventUpdate
     
     new_style = dict(current_style)
-    new_style['display'] = 'block' if current_style.get('display') == 'none' else 'none'
+    new_style['display'] = 'flex' if current_style.get('display') == 'none' else 'none'
     return new_style
 
 # Close button callback
@@ -851,48 +1520,54 @@ app.clientside_callback(
     }
     """,
     Output('place-names-container', 'style', allow_duplicate=True),
-    [Input('close-places', 'n_clicks')],
+    [Input('close-place-names', 'n_clicks')],
     [State('place-names-container', 'style')],
     prevent_initial_call=True
 )
 
 
 @app.callback(
-    Output('filtered-data', 'data'),
+    [Output('filtered-data', 'data', allow_duplicate=True),
+     Output('current-dhlabids-store', 'data', allow_duplicate=True),
+     Output('current-filters', 'data')],
     [Input('current-filters', 'data'),
      Input('upload-state', 'data'),
-     Input('reset-corpus', 'n_clicks')],
-    [State('upload-corpus', 'filename')],
-    prevent_initial_call=False
+     Input('reset-corpus-confirm-modal', 'n_clicks')],
+    [State('popup-upload-corpus', 'filename'),
+     State('current-dhlabids-store', 'data')],
+    prevent_initial_call=True
 )
-def update_filtered_data(filters, upload_state, reset_clicks, filename):
-    print("!!! update_filtered_data TRIGGERED !!!")
+def update_filtered_data(filters, upload_state, reset_confirm_clicks, filename, current_books):
     ctx = callback_context
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
-    
-    if triggered_id == 'reset-corpus' and reset_clicks:
-        print("Resetting to default corpus...")
-        conn = get_db_connection()
-        default_corpus = pd.read_sql_query("SELECT * FROM corpus", conn)
-        conn.close()
-        default_corpus['Verk'] = default_corpus.apply(
-            lambda x: f"{x['title'] or 'Uten tittel'} av {x['author'] or 'Ingen'} ({x['year'] or 'n.d.'})", 
-            axis=1
-        )
-        return default_corpus.to_json(date_format='iso', orient='split')
-    
+    current_books = current_books or []
+    if triggered_id == 'reset-corpus-confirm-modal' and reset_confirm_clicks:
+        return pd.DataFrame().to_json(date_format='iso', orient='split'), [], {}
+    if triggered_id == 'upload-state' and upload_state:
+        try:
+            if isinstance(upload_state, dict) and 'uploaded' in upload_state:
+                pass
+            else:
+                return dash.no_update, dash.no_update, dash.no_update
+        except Exception as e:
+            return dash.no_update, dash.no_update, dash.no_update
     if not filters:
-        filters = default_filters
-    
-    if triggered_id == 'upload-state' and upload_state is not None:
-        print("Using uploaded data...")
-        upload_df = pd.read_json(io.StringIO(upload_state), orient='split')
-        if 'dhlabid' in upload_df.columns:
-            filters['uploaded_corpus'] = upload_df['dhlabid'].tolist()
-    
-    places_df = get_places_for_map(filters)
-    print(f"Cached {len(places_df)} places")
-    return places_df.to_json(date_format='iso', orient='split')
+        return pd.DataFrame().to_json(date_format='iso', orient='split'), [], {}
+    try:
+        selected_tokens = filters.get('selected_tokens') if filters else None
+        places_result = get_places_for_map(filters, books=current_books, selected_tokens=selected_tokens)
+        if isinstance(places_result, tuple):
+            places_df = places_result[0]
+        else:
+            places_df = places_result
+        # Debug: Log the shape and content of places_df
+        print(f"DEBUG: places_df shape: {places_df.shape}")
+        print(f"DEBUG: places_df head: {places_df.head()}")
+        json_output = places_df.to_json(date_format='iso', orient='split')
+        return json_output, dash.no_update, filters
+    except Exception as e:
+        print(f"Error in update_filtered_data: {e}")
+        return dash.no_update, dash.no_update, dash.no_update
 
 @app.callback(
     [Output('category-selection', 'data')] + [
@@ -923,287 +1598,637 @@ def update_category_selection(*args):
     return [selected_categories] + button_colors
 
 @app.callback(
-    Output('main-map', 'figure'),
+    [Output('main-map', 'figure'),
+     Output('view-type', 'data'),
+     Output('map-button', 'children')],
     [Input('filtered-data', 'data'),
-     Input('map-style', 'value'),
-     Input('marker-size-slider', 'value'),
-     Input('view-toggle', 'value'),
+     Input('map-button', 'n_clicks'),
      Input('heatmap-intensity', 'value'),
      Input('heatmap-radius', 'value'),
-     Input('cluster-toggle', 'value')]
+     Input('heatmap-colorscale', 'value'),
+     Input('top-cluster-toggle', 'value'),
+     Input('selected-place', 'data'),
+     Input('main-map', 'clickData'),
+     Input('marker-size-slider', 'value'),
+     Input('cluster-size-slider', 'value'),
+     Input('cluster-radius-slider', 'value'),
+     Input('collocation-highlight', 'data')],
+    [State('view-type', 'data'),
+     State('all-places-store', 'data')],
+    prevent_initial_call=True
 )
-def update_map(filtered_data_json, map_style, marker_size, view_type, heatmap_intensity, heatmap_radius, cluster_enabled):
-    print("!!! update_map TRIGGERED !!!")
-    cluster_enabled = len(cluster_enabled) > 0 if cluster_enabled else False  # True if checkbox is checked
-    print(f"Clustering enabled: {cluster_enabled}")
-    if filtered_data_json is None:
-        print("No cached data available")
-        return go.Figure()
-    
-    # Load cached data
-    places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split')
-    print(f"Number of places from cache: {len(places_df)}")
-    
-    fig = go.Figure()
-    if places_df.empty:
-        print("Returning empty figure")
-        fig.update_layout(
-            map=dict(style=map_style or 'open-street-map', center=dict(lat=60.5, lon=9.0), zoom=5),
-            margin=dict(l=0, r=0, t=0, b=0),
-            showlegend=False
-        )
-        return fig
-    
-    # Clean data
-    places_df = places_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', 'frequency'])
-    print(f"Places after cleaning: {len(places_df)}")
-    
-    # Logarithmic scale for marker sizes with constrained relative scaling
-    sizes = places_df['frequency'].fillna(1).copy()
-    sizes = np.log1p(sizes)  # Logarithmic transformation (log(1 + x))
-    min_size, max_size = sizes.min(), sizes.max()
-    base_size = 8 * marker_size  # Slightly smaller base size
-    size_range = 15 * marker_size  # Reduced range for more relative consistency
-    if min_size != max_size:
-        sizes = base_size + (sizes - min_size) / (max_size - min_size) * size_range
-    else:
-        sizes = [base_size] * len(sizes)
-    print(f"Marker sizes (log scale, constrained) - min: {sizes.min()}, max: {sizes.max()}")
-    
-    # Aggregate data for tooltips
-    places_df['hover_text'] = places_df.apply(
-        lambda row: f"{row['token']} ({row['name']})<br>Mentions: {int(row['frequency'])}<br>Books: {int(row['book_count'])}",
-        axis=1
-    )
-    
-    if cluster_enabled:
-        # Simple clustering based on zoom level with a wider radius (approx 200km)
-        zoom = 5  # Default zoom, to be updated with map-view-state if available
-        
-        # Increase the base threshold for larger clusters
-        # For reference, 1 degree of latitude is roughly 111km
-        # So for a 200km radius, we want a threshold around 1.8 degrees
-        base_threshold = 1.8  # Approximately 200km radius
-        threshold = max(0.1, base_threshold / (zoom / 5))  # Adjust with zoom but keep larger base value
-        
-        clustered = places_df.copy()
-        clustered['cluster'] = ((clustered['latitude'] / threshold).round() * 1000 + 
-                              (clustered['longitude'] / threshold).round()).astype(int)
-                
-        # Aggregate clustered points with unique place names
-        cluster_data = clustered.groupby('cluster').agg({
-            'latitude': 'mean',
-            'longitude': 'mean',
-            'frequency': 'sum',
-            'book_count': 'sum',
-            'token': lambda x: '<br>'.join(list(dict.fromkeys(x))),  # Unique tokens
-            'name': lambda x: '<br>'.join(list(dict.fromkeys(x))),  # Unique names
-            'hover_text': 'first'  # Use first for simplicity
-        }).reset_index()
-        cluster_data['count'] = clustered.groupby('cluster').size().values
-        cluster_data['hover_text'] = cluster_data.apply(
-            lambda row: f"""Cluster of {row['count']} places<br>Total Mentions: {int(row['frequency'])}<br>Total Books: {int(row['book_count'])}<br>Example place: {row['token'].split('<br>')[0]}""",
-            axis=1
-        )
-        cluster_data['size'] = np.log1p(cluster_data['count']) * marker_size * 5  # Size based on cluster count
-        
-        # Add clustered markers
-        fig.add_trace(go.Scattermap(
-            lat=cluster_data['latitude'],
-            lon=cluster_data['longitude'],
-            mode='markers',
-            marker=dict(size=cluster_data['size'], color='#1E40AF', opacity=0.7, sizemode='diameter'),
-            text=cluster_data['hover_text'],
-            hoverinfo='text',
-            visible=(view_type == 'map'),
-            name='Clusters'
-        ))
-    else:
-        # Add individual markers
-        fig.add_trace(go.Scattermap(
-            lat=places_df['latitude'],
-            lon=places_df['longitude'],
-            mode='markers',
-            marker=dict(size=sizes, color='#4285F4', opacity=0.7, sizemode='diameter'),
-            text=places_df['hover_text'],
-            hoverinfo='text',
-            customdata=places_df['token'],
-            visible=(view_type == 'map'),
-            name='Places'
-        ))
-    
-    heatmap_visible = view_type == 'heatmap'
-    print(f"Heatmap mode: {heatmap_visible}, Places available: {len(places_df)}")
-    if len(places_df) > 0 and heatmap_visible:
-        try:
-            x = places_df['longitude'].values
-            y = places_df['latitude'].values
-            z = places_df['frequency'].fillna(1).values
-            z = np.log1p(z)  # Logarithmic transformation for heatmap intensity
-            print(f"Raw heatmap data - x: {len(x)}, y: {len(y)}, z: {len(z)}")
-            mask = (~np.isnan(x)) & (~np.isnan(y)) & (~np.isnan(z)) & (~np.isinf(x)) & (~np.isinf(y)) & (~np.isinf(z))
-            x, y, z = x[mask], y[mask], z[mask]
-            print(f"Cleaned heatmap data - x: {len(x)}, y: {len(y)}, z: {len(z)}")
-            if len(x) < 2:
-                print("Not enough valid data for heatmap, using fallback")
-                fig.add_trace(go.Densitymap(
-                    lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap'
-                ))
+def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius, heatmap_colorscale, cluster_toggle, selected_place, click_data, marker_size, cluster_size, cluster_radius, collocation_highlight, current_view_type, all_places_json):
+    try:
+        ctx = callback_context
+        if not ctx.triggered:
+            view_type = 'points'  # Default view
+        else:
+            trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            if trigger_id == 'map-button':
+                view_type = 'heatmap' if current_view_type == 'points' else 'points'
             else:
-                heatmap_actual_radius = (heatmap_radius ** 0.5) * 10
+                view_type = current_view_type or 'points'  # Use current view type or default to points
 
-                fig.add_trace(go.Densitymap(
-                    lat=y,
-                    lon=x,
-                    z=z,
-                    radius=heatmap_actual_radius,  # Use this transformed value
-                    colorscale='Viridis',
-                    opacity=0.8 * (heatmap_intensity / 10),
-                    showscale=True,
-                    visible=True,
-                    name='Heatmap'
-                ))
-        except Exception as e:
-            print(f"Heatmap error: {e}")
-            fig.add_trace(go.Densitymap(
-                lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap'
-            ))
-    else:
-        fig.add_trace(go.Densitymap(visible=False, name='Heatmap'))
-    
-    fig.update_layout(
-        map=dict(style=map_style or 'open-street-map', center=dict(lat=60.5, lon=9.0), zoom=5),
-        margin=dict(l=0, r=0, t=0, b=0),
-        showlegend=False,
-        uirevision='constant'
-    )
-    print("Returning populated figure")
-    return fig
-
-@app.callback(
-    Output('place-list', 'children'),
-    [Input('filtered-data', 'data'),
-     Input('places-limit-dropdown', 'value'),
-     Input('place-search', 'value')]
-)
-def update_place_list(filtered_data_json, limit, search_term):
-    if filtered_data_json is None:
-        return html.Div("No places available")
-    
-    # Load cached data
-    places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split')
-    
-    if places_df.empty:
-        return html.Div("No places available")
-    
-    # Sort by frequency
-    places_df = places_df.sort_values(by='frequency', ascending=False)
-    
-    # Apply search filter if provided
-    if search_term and len(search_term) > 2:
-        search_term = search_term.lower()
-        places_df = places_df[
-            places_df['token'].str.lower().str.contains(search_term) | 
-            places_df['name'].str.lower().str.contains(search_term)
+        # Update button content based on view type
+        button_content = [
+            html.I(className="fas fa-fire" if view_type == 'heatmap' else "fas fa-map-marker-alt", 
+                   style={'marginRight': '8px'}),
+            "Heatmap View" if view_type == 'heatmap' else "Map View"
         ]
-    
-    # Limit to top N places
-    places_df = places_df.head(limit)
-    
-    # Create list items
-    place_items = []
-    for i, row in places_df.iterrows():
-        place_items.append(html.Div([
-            html.Div(f"{row['token']} ({row['name']})", style={'fontWeight': 'bold'}),
-            html.Div(f"Mentions: {int(row['frequency'])} • Books: {int(row['book_count'])}", 
-                     style={'fontSize': '0.8rem', 'color': '#666'})
-        ], style={'borderBottom': '1px solid #eee', 'padding': '5px 0'}))
-    
-    if not place_items:
-        return html.Div("No matching places found")
-    
-    return html.Div([
-        html.Div(f"Showing {len(place_items)} of {len(places_df)} places", 
-                 style={'marginBottom': '8px', 'fontSize': '0.8rem', 'color': '#666'}),
-        html.Div(place_items)
-    ])
 
+        # Create base figure with default view of Norway
+        fig = go.Figure()
+        
+        # Add a dummy trace to ensure the map displays
+        fig.add_trace(go.Scattermap(
+            lat=[60.5],
+            lon=[9.0],
+            mode='markers',
+            marker=dict(size=1, color='rgba(0,0,0,0)'),
+            hoverinfo='skip',
+            showlegend=False,
+            visible=(view_type == 'points')
+        ))
+        
+        if filtered_data_json is None and not all_places_json:
+            fig.update_layout(
+                map=dict(
+                    style='open-street-map',
+                    center=dict(lat=60.5, lon=9.0),
+                    zoom=4
+                ),
+                margin=dict(l=0, r=0, t=0, b=0),
+                showlegend=False,
+                uirevision='constant'
+            )
+            return fig, view_type, button_content
+        
+        required_columns = ['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']
+
+        # Load cached (sampled) data
+        places_df = pd.read_json(io.StringIO(filtered_data_json), orient='split') if filtered_data_json else pd.DataFrame(columns=required_columns)
+        for col in required_columns:
+            if col not in places_df.columns:
+                places_df[col] = np.nan
+
+        heatmap_df = None
+
+        if all_places_json:
+            try:
+                heatmap_df = pd.read_json(io.StringIO(all_places_json), orient='split')
+            except ValueError:
+                heatmap_df = None
+
+        if heatmap_df is not None:
+            for col in required_columns:
+                if col not in heatmap_df.columns:
+                    heatmap_df[col] = np.nan
+
+        # Clean datasets
+        places_df = places_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', 'frequency'])
+        if heatmap_df is not None:
+            heatmap_df = heatmap_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', 'frequency'])
+        else:
+            heatmap_df = places_df.copy()
+
+        sample_empty = places_df.empty
+        heatmap_empty = heatmap_df.empty
+
+        if sample_empty and (view_type != 'heatmap' or heatmap_empty):
+            fig.update_layout(
+                map=dict(
+                    style='open-street-map',
+                    center=dict(lat=60.5, lon=9.0),
+                    zoom=4
+                ),
+                margin=dict(l=0, r=0, t=0, b=0),
+                showlegend=False,
+                uirevision='constant'
+            )
+            return fig, view_type, button_content
+        
+        highlight_tokens = {str(t) for t in (collocation_highlight or []) if t}
+        use_clustering = False
+        if not sample_empty:
+            # Logarithmic scale for marker sizes with constrained relative scaling
+            sizes = places_df['frequency'].fillna(1).copy()
+            sizes = np.log1p(sizes)  # Logarithmic transformation (log(1 + x))
+            min_size, max_size = sizes.min(), sizes.max()
+            base_size = marker_size if marker_size is not None else 8  # Use slider value as base size
+            size_range = 15  # Reduced range for more relative consistency
+            if min_size != max_size:
+                sizes = base_size + (sizes - min_size) / (max_size - min_size) * size_range
+            else:
+                sizes = [base_size] * len(sizes)
+
+            if not isinstance(sizes, pd.Series):
+                sizes = pd.Series(sizes, index=places_df.index)
+
+            # Aggregate data for tooltips
+            places_df['hover_text'] = places_df.apply(
+                lambda row: f"{row['token']} ({row['name']})<br>Mentions: {int(row['frequency'])}<br>Books: {int(row['book_count'])}",
+                axis=1
+            )
+
+            # Determine if clustering is enabled
+            use_clustering = cluster_toggle and 'cluster' in cluster_toggle
+
+            clustered = pd.DataFrame()
+            if use_clustering:
+                # Convert cluster radius from km to degrees (approximate)
+                radius_km = cluster_radius if cluster_radius is not None else 50
+                radius_deg = radius_km / 111.32  # Convert km to degrees (approximate)
+
+                clustered = places_df.copy()
+                # Ensure we have valid numeric values for clustering
+                clustered['latitude'] = pd.to_numeric(clustered['latitude'], errors='coerce')
+                clustered['longitude'] = pd.to_numeric(clustered['longitude'], errors='coerce')
+                clustered = clustered.dropna(subset=['latitude', 'longitude'])
+
+                if not clustered.empty:
+                    clustered['cluster'] = ((clustered['latitude'] / radius_deg).round() * 1000 +
+                                            (clustered['longitude'] / radius_deg).round()).astype(int)
+
+                    # Store original points for each cluster for polygon creation
+                    cluster_points = {}
+                    for _, row in clustered.iterrows():
+                        cluster_id = row['cluster']
+                        if cluster_id not in cluster_points:
+                            cluster_points[cluster_id] = []
+                        cluster_points[cluster_id].append((row['longitude'], row['latitude']))
+
+                    # Aggregate clustered points with unique place names
+                    cluster_data = clustered.groupby('cluster').agg({
+                        'latitude': 'mean',
+                        'longitude': 'mean',
+                        'frequency': 'sum',
+                        'book_count': 'sum',
+                        'token': lambda x: '<br>'.join([str(t) for t in dict.fromkeys(x) if t is not None]),
+                        'name': lambda x: '<br>'.join([str(n) for n in dict.fromkeys(x) if n is not None]),
+                        'hover_text': 'first'
+                    }).reset_index()
+                    cluster_data['count'] = clustered.groupby('cluster').size().values
+                    cluster_data['hover_text'] = cluster_data.apply(
+                        lambda row: f"""Cluster of {row['count']} places<br>Total Mentions: {int(row['frequency'])}<br>Total Books: {int(row['book_count'])}<br>Example place: {row['token'].split('<br>')[0] if row['token'] else 'Unknown'}""",
+                        axis=1
+                    )
+
+                    # Use cluster_size slider to control cluster marker size
+                    base_cluster_size = cluster_size if cluster_size is not None else 3
+                    cluster_data['size'] = np.log1p(cluster_data['count']) * base_cluster_size * 2  # Reduced multiplier for more reasonable sizes
+
+                    # Add clustered markers
+                    fig.add_trace(go.Scattermap(
+                        lat=cluster_data['latitude'],
+                        lon=cluster_data['longitude'],
+                        mode='markers',
+                        marker=dict(size=cluster_data['size'], color='#1E40AF', opacity=0.7, sizemode='diameter'),
+                        text=cluster_data['hover_text'],
+                        hoverinfo='text',
+                        visible=(view_type == 'points'),
+                        name='Clusters'
+                    ))
+
+                    # If a cluster is clicked, add a polygon showing its coverage area
+                    if click_data and 'points' in click_data:
+                        point = click_data['points'][0]
+                        if 'Cluster of' in point.get('text', ''):
+                            try:
+                                # Find the clicked cluster
+                                clicked_lat = point['lat']
+                                clicked_lon = point['lon']
+
+                                # Find the cluster ID that matches these coordinates
+                                matching_clusters = cluster_data[
+                                    (cluster_data['latitude'] == clicked_lat) &
+                                    (cluster_data['longitude'] == clicked_lon)
+                                ]
+
+                                if not matching_clusters.empty:
+                                    clicked_cluster = matching_clusters['cluster'].iloc[0]
+
+                                    # Get the points for this cluster
+                                    points = cluster_points[clicked_cluster]
+
+                                    if len(points) == 2:
+                                        # For two points, create an oval aligned with the points
+                                        p1_lon, p1_lat = points[0]
+                                        p2_lon, p2_lat = points[1]
+
+                                        # Calculate center point
+                                        center_lat = (p1_lat + p2_lat) / 2
+                                        center_lon = (p1_lon + p2_lon) / 2
+
+                                        # Calculate distance between points
+                                        lat_diff = p2_lat - p1_lat
+                                        lon_diff = p2_lon - p1_lon
+                                        distance_km = math.sqrt(lat_diff**2 + lon_diff**2) * 111.32
+
+                                        # Calculate bearing between points
+                                        bearing = calculate_bearing(p1_lat, p1_lon, p2_lat, p2_lon)
+
+                                        # Create rotated ellipse
+                                        lats, lons = create_rotated_ellipse(
+                                            center_lat, center_lon,
+                                            distance_km/2,
+                                            bearing,
+                                            points=100
+                                        )
+
+                                        fig.add_trace(go.Scattermap(
+                                            lat=lats,
+                                            lon=lons,
+                                            mode='lines',
+                                            line=dict(color='#1E40AF', width=3),
+                                            fill='toself',
+                                            fillcolor='rgba(30, 64, 175, 0.3)',
+                                            hoverinfo='skip',
+                                            showlegend=False,
+                                            visible=True
+                                        ))
+
+                                    elif len(points) >= 3:
+                                        # For three or more points, use convex hull
+                                        points_array = np.array(points)
+
+                                        try:
+                                            # Calculate convex hull
+                                            hull = ConvexHull(points_array)
+
+                                            # Get the hull vertices
+                                            hull_points = points_array[hull.vertices]
+
+                                            # Add some padding to make the hull slightly larger
+                                            center = np.mean(hull_points, axis=0)
+                                            padding = 0.05  # 5% padding
+                                            padded_points = center + (1 + padding) * (hull_points - center)
+
+                                            # Ensure the polygon is closed by adding the first point at the end
+                                            padded_points = np.vstack([padded_points, padded_points[0]])
+
+                                            # Add the polygon
+                                            fig.add_trace(go.Scattermap(
+                                                lat=padded_points[:, 1],
+                                                lon=padded_points[:, 0],
+                                                mode='lines',
+                                                line=dict(color='#1E40AF', width=3),
+                                                fill='toself',
+                                                fillcolor='rgba(30, 64, 175, 0.3)',
+                                                hoverinfo='skip',
+                                                showlegend=False,
+                                                visible=True
+                                            ))
+                                        except Exception as e:
+                                            print(f"Error calculating convex hull: {e}")
+                                            # Fallback to circle if convex hull fails
+                                            radius_deg = radius_km / 111.32
+                                            angles = np.linspace(0, 2*np.pi, 100)
+                                            circle_lats = clicked_lat + radius_deg * np.cos(angles)
+                                            circle_lons = clicked_lon + radius_deg * np.sin(angles)
+
+                                            fig.add_trace(go.Scattermap(
+                                                lat=circle_lats,
+                                                lon=circle_lons,
+                                                mode='lines',
+                                                line=dict(color='#1E40AF', width=3),
+                                                fill='toself',
+                                                fillcolor='rgba(30, 64, 175, 0.3)',
+                                                hoverinfo='skip',
+                                                showlegend=False,
+                                                visible=True
+                                            ))
+                                    else:
+                                        # For single points, use a small circle
+                                        radius_deg = radius_km / 111.32
+                                        angles = np.linspace(0, 2*np.pi, 100)
+                                        circle_lats = clicked_lat + radius_deg * np.cos(angles)
+                                        circle_lons = clicked_lon + radius_deg * np.sin(angles)
+
+                                        fig.add_trace(go.Scattermap(
+                                            lat=circle_lats,
+                                            lon=circle_lons,
+                                            mode='lines',
+                                            line=dict(color='#1E40AF', width=3),
+                                            fill='toself',
+                                            fillcolor='rgba(30, 64, 175, 0.3)',
+                                            hoverinfo='skip',
+                                            showlegend=False,
+                                            visible=True
+                                        ))
+                            except Exception as e:
+                                print(f"Error handling cluster click: {e}")
+                                # Continue without showing the cluster polygon
+                                pass
+                else:
+                    print("No valid data for clustering")
+
+            # Add individual markers if not clustering or if clustering failed
+            if not use_clustering or clustered.empty:
+                if selected_place:
+                    selected_df = places_df[places_df['token'] == selected_place]
+                    unselected_df = places_df[places_df['token'] != selected_place]
+
+                    # Add unselected places first
+                    if not unselected_df.empty:
+                        fig.add_trace(go.Scattermap(
+                            lat=unselected_df['latitude'],
+                            lon=unselected_df['longitude'],
+                            mode='markers',
+                            marker=dict(size=sizes[unselected_df.index], color='#3b82f6', opacity=0.7, sizemode='diameter'),
+                            text=unselected_df['hover_text'],
+                            hoverinfo='text',
+                            customdata=unselected_df['token'].tolist(),
+                            visible=(view_type == 'points'),
+                            name='Places'
+                        ))
+
+                    # Add selected place with different color
+                    if not selected_df.empty:
+                        fig.add_trace(go.Scattermap(
+                            lat=selected_df['latitude'],
+                            lon=selected_df['longitude'],
+                            mode='markers',
+                            marker=dict(size=sizes[selected_df.index] * 1.2, color='#dc2626', opacity=0.9, sizemode='diameter'),
+                            text=selected_df['hover_text'],
+                            hoverinfo='text',
+                            customdata=selected_df['token'].tolist(),
+                            visible=(view_type == 'points'),
+                            name='Selected Place'
+                        ))
+                else:
+                    # No place selected, show all places normally
+                    fig.add_trace(go.Scattermap(
+                        lat=places_df['latitude'],
+                        lon=places_df['longitude'],
+                        mode='markers',
+                        marker=dict(size=sizes, color='#3b82f6', opacity=0.7, sizemode='diameter'),
+                        text=places_df['hover_text'],
+                        hoverinfo='text',
+                        customdata=places_df['token'].tolist(),
+                        visible=(view_type == 'points'),
+                        name='Places'
+                    ))
+
+            if highlight_tokens:
+                highlight_df = places_df[places_df['token'].astype(str).isin(highlight_tokens)]
+                if not highlight_df.empty:
+                    highlight_sizes = (sizes.loc[highlight_df.index] * 1.4).tolist()
+                    fig.add_trace(go.Scattermap(
+                        lat=highlight_df['latitude'],
+                        lon=highlight_df['longitude'],
+                        mode='markers',
+                        marker=dict(size=highlight_sizes, color='#ec4899', opacity=0.95, sizemode='diameter'),
+                        text=highlight_df['hover_text'],
+                        hoverinfo='text',
+                        customdata=highlight_df['token'].tolist(),
+                        visible=(view_type == 'points'),
+                        name='Collocation places'
+                    ))
+
+        heatmap_visible = view_type == 'heatmap'
+        if heatmap_visible and not heatmap_empty:
+            try:
+                x = heatmap_df['longitude'].values
+                y = heatmap_df['latitude'].values
+                z = heatmap_df['frequency'].fillna(1).values
+                z = np.log1p(z)
+                mask = (~np.isnan(x)) & (~np.isnan(y)) & (~np.isnan(z)) & (~np.isinf(x)) & (~np.isinf(y)) & (~np.isinf(z))
+                x, y, z = x[mask], y[mask], z[mask]
+                
+                if len(x) < 2:
+                    fig.add_trace(go.Densitymap(
+                        lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap', showscale=False
+                    ))
+                else:
+                    heatmap_actual_radius = (heatmap_radius ** 0.5) * 10
+                    fig.add_trace(go.Densitymap(
+                        lat=y,
+                        lon=x,
+                        z=z,
+                        radius=heatmap_actual_radius,
+                        colorscale=heatmap_colorscale,
+                        opacity=0.8 * (heatmap_intensity / 10),
+                        showscale=False,
+                        visible=True,
+                        name='Heatmap'
+                    ))
+            except Exception as e:
+                print(f"Heatmap error: {e}")
+                fig.add_trace(go.Densitymap(
+                    lat=[60.5], lon=[9.0], z=[0], radius=10, opacity=0.1, visible=True, name='Heatmap', showscale=False
+                ))
+        else:
+            fig.add_trace(go.Densitymap(visible=False, name='Heatmap', showscale=False))
+        
+        # Update layout
+        fig.update_layout(
+            map=dict(
+                style='open-street-map',
+                center=dict(lat=60.5, lon=9.0),
+                zoom=4
+            ),
+            margin=dict(l=0, r=0, t=0, b=0),
+            showlegend=False,
+            uirevision='constant',
+            hovermode='closest',
+            dragmode='pan',
+            clickmode='event'
+        )
+        
+        return fig, view_type, button_content
+    except Exception as e:
+        print(f"Error in update_map: {e}")
+        return dash.no_update, dash.no_update, dash.no_update
+
+
+# Add callback for place item clicks
+@app.callback(
+    [Output('selected-place', 'data', allow_duplicate=True),
+     Output('main-map', 'clickData', allow_duplicate=True)],
+    [Input({'type': 'place-item', 'index': dash.ALL}, 'n_clicks')],
+    [State({'type': 'place-item', 'index': dash.ALL}, 'id'),
+     State({'type': 'place-item', 'index': dash.ALL}, 'data-lat'),
+     State({'type': 'place-item', 'index': dash.ALL}, 'data-lon'),
+     State({'type': 'place-item', 'index': dash.ALL}, 'data-hover')],
+    prevent_initial_call=True
+)
+def handle_place_click(n_clicks, ids, lats, lons, hovers):
+    if not any(n_clicks):
+        raise PreventUpdate
+    
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    
+    triggered_id = ctx.triggered[0]['prop_id']
+    if not triggered_id:
+        raise PreventUpdate
+    
+    # Get the index of the clicked item
+    try:
+        # Parse the triggered ID to get the place token
+        triggered_id_dict = eval(triggered_id.split('.')[0])
+        clicked_idx = next(i for i, id_dict in enumerate(ids) if id_dict['index'] == triggered_id_dict['index'])
+    except (ValueError, SyntaxError, StopIteration):
+        raise PreventUpdate
+    
+    # Get the place data from the clicked item's data attributes
+    place_token = ids[clicked_idx]['index']
+    lat = lats[clicked_idx]
+    lon = lons[clicked_idx]
+    hover_text = hovers[clicked_idx]
+    
+    # Create click data structure using the stored data
+    click_data = {
+        'points': [{
+            'lat': lat,
+            'lon': lon,
+            'customdata': place_token,
+            'text': hover_text
+        }]
+    }
+    
+    return place_token, click_data
 
 # Callback to update place summary
 @app.callback(
     [Output('place-summary-container', 'style'),
      Output('place-summary', 'children')],
-    [Input('main-map', 'clickData')],
+    [Input('main-map', 'clickData'),
+     Input('selected-place', 'data')],
     [State('place-summary-container', 'style'),
-     State('current-filters', 'data')]
+     State('current-dhlabids-store', 'data')],
+    prevent_initial_call=True
 )
-def update_place_summary(click_data, current_style, filters):
-    print("Place summary callback triggered")
-    if click_data is None:
-        print("No click data")
-        return dash.no_update, dash.no_update
-    
-    try:
-        point = click_data['points'][0]
-        token = point['customdata']
-        text = point['text']
-        parts = text.split('<br>')
-        place_info = parts[0]
-        #print(place_info, token)
-        if '(' in place_info and ')' in place_info:
-            token_part = place_info.split('(')[0].strip()
-            modern_part = place_info.split('(')[1].split(')')[0].strip()
-        else:
-            token_part = place_info
-            modern_part = ""
-        frequency = 0
-        book_count = 0
-        if len(parts) > 1 and 'Mentions' in parts[1]:
-            mentions_part = parts[1].split('Mentions: ')
-            try:
-                frequency = int(mentions_part[1].split('<br>')[0].strip())
-                book_count = int(parts[2].split('Books: ')[1].strip())
-            except (ValueError, IndexError):
-                print("Could not parse frequency/book count")
-        
+def update_place_summary(click_data, selected_place, current_style, current_books):
+    current_books = current_books or []
+    ctx = callback_context
+    triggered = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
+    # If triggered by map click
+    if triggered == 'main-map':
         try:
-            books_df = get_place_details(token, filters)
-            print(books_df.columns)
-        except Exception as e:
-            print(f"Error getting place details: {e}")
-            books_df = pd.DataFrame(columns=['title', 'author', 'year', 'urn', 'frequency'])
-        
-        summary = html.Div([
-            html.Div([
-                html.H5(token_part, style={'marginBottom': '5px'}),
-                html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
-                html.P(f"Appears in {book_count} books with {frequency} total mentions", style={'marginTop': '5px'}),
-                html.Hr(style={'margin': '10px 0'})
-            ]),
-            html.Div([
-                html.H6(f"Books mentioning this place:", style={'marginBottom': '10px'}),
+            if not click_data or 'points' not in click_data or not click_data['points']:
+                return current_style, dash.no_update
+            point = click_data['points'][0]
+            token = point.get('customdata') or point.get('text')
+            # Try to extract modern name and hover text if available
+            hover_text = point.get('text', '')
+            modern_part = ''
+            frequency = 0
+            book_count = 0
+            # Parse hover_text for modern name, frequency, and book count
+            if '<br>' in hover_text:
+                parts = hover_text.split('<br>')
+                if len(parts) > 0:
+                    token_part = parts[0]
+                    if '(' in token_part and ')' in token_part:
+                        token = token_part.split('(')[0].strip()
+                        modern_part = token_part.split('(')[1].split(')')[0].strip()
+                if len(parts) > 1 and 'Mentions:' in parts[1] and 'Books:' in parts[2]:
+                    try:
+                        frequency = int(parts[1].replace('Mentions:', '').strip())
+                        book_count = int(parts[2].replace('Books:', '').strip())
+                    except Exception:
+                        pass
+            # Get book details for the place
+            books_df, total_books = get_place_details(token, current_books)
+            if not books_df.empty:
+                if 'total_mentions' in books_df.columns:
+                    frequency = int(books_df.iloc[0]['total_mentions'])
+                if 'total_books' in books_df.columns:
+                    book_count = int(books_df.iloc[0]['total_books'])
+                else:
+                    book_count = len(books_df)
+            summary = html.Div([
                 html.Div([
+                    html.H5(token, style={'marginBottom': '5px'}),
+                    html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
+                    html.P(f"Appears in {book_count:,} books with {frequency:,} total mentions", style={'marginTop': '5px'}),
+                    html.Hr(style={'margin': '10px 0'})
+                ]),
+                html.Div([
+                    html.H6(f"Books mentioning this place (showing {len(books_df):,} of {book_count:,}):", style={'marginBottom': '10px'}),
                     html.Div([
-                        html.Div(f"{row['title']} ({row['year']})", style={'fontWeight': '500'}),
                         html.Div([
-                            html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
-                            html.Span(f" • {int(row['book_count'])} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
-                        ], style={'display': 'flex', 'justifyContent': 'space-between'}),
-                        html.Div([
-                            html.A("View at National Library", href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{token}\"",
-                                   target="_blank", style={'fontSize': '13px', 'color': '#4285F4'})
-                            if pd.notna(row['urn']) else ""
-                        ])
-                    ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
-                    for i, row in books_df.iterrows() if pd.notna(row['title'])
-                ]) if not books_df.empty else html.Div("No book details available")
+                            html.A(
+                                f"{row['title']} ({row['year']})",
+                                href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{token}\"",
+                                target="_blank",
+                                style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
+                            ),
+                            html.Div([
+                                html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
+                                html.Span(f" • {int(row.get('mention_count', 1)):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                            ], style={'display': 'flex', 'justifyContent': 'space-between'})
+                        ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
+                        for i, row in books_df.iterrows() if pd.notna(row['title'])
+                    ]) if not books_df.empty else html.Div("No book details available")
+                ])
             ])
-        ])
-        new_style = dict(current_style)
-        new_style['display'] = 'block'
-        return new_style, summary
-    except Exception as e:
-        print(f"Error updating place summary: {e}")
+            new_style = dict(current_style)
+            new_style['display'] = 'flex'
+            return new_style, summary
+        except Exception as e:
+            print(f"Error updating place summary (map): {e}")
+            return dash.no_update, dash.no_update
+    # If triggered by list click
+    elif triggered == 'selected-place':
+        try:
+            if not selected_place:
+                return current_style, dash.no_update
+            # Use selected_place (token) to fetch and display the place info
+            token = selected_place
+            # Get book details for the place
+            books_df, total_books = get_place_details(token, current_books)
+            # Fallbacks for summary info
+            modern_part = ""
+            frequency = 0
+            book_count = 0
+            # Try to get modern name, frequency, and book count from books_df if available
+            if not books_df.empty:
+                # Try to get modern name from the first row if present
+                if 'modern' in books_df.columns:
+                    modern_part = books_df.iloc[0]['modern']
+                # Try to get total mentions and books from the columns if present
+                if 'total_mentions' in books_df.columns:
+                    frequency = int(books_df.iloc[0]['total_mentions'])
+                if 'total_books' in books_df.columns:
+                    book_count = int(books_df.iloc[0]['total_books'])
+                else:
+                    book_count = len(books_df)
+            summary = html.Div([
+                html.Div([
+                    html.H5(token, style={'marginBottom': '5px'}),
+                    html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
+                    html.P(f"Appears in {book_count:,} books with {frequency:,} total mentions", style={'marginTop': '5px'}),
+                    html.Hr(style={'margin': '10px 0'})
+                ]),
+                html.Div([
+                    html.H6(f"Books mentioning this place (showing {len(books_df):,} of {book_count:,}):", style={'marginBottom': '10px'}),
+                    html.Div([
+                        html.Div([
+                            html.A(
+                                f"{row['title']} ({row['year']})",
+                                href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{token}\"",
+                                target="_blank",
+                                style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
+                            ),
+                            html.Div([
+                                html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
+                                html.Span(f" • {int(row.get('mention_count', 1)):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                            ], style={'display': 'flex', 'justifyContent': 'space-between'})
+                        ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
+                        for i, row in books_df.iterrows() if pd.notna(row['title'])
+                    ]) if not books_df.empty else html.Div("No book details available")
+                ])
+            ])
+            new_style = dict(current_style)
+            new_style['display'] = 'flex'
+            return new_style, summary
+        except Exception as e:
+            print(f"Error updating place summary (list): {e}")
+            return dash.no_update, dash.no_update
+    else:
         return dash.no_update, dash.no_update
 
 # Callback for the close button on place summary
@@ -1223,34 +2248,16 @@ app.clientside_callback(
     prevent_initial_call=True
 )
 
-# Callback to toggle sidebar
-app.clientside_callback(
-    """
-    function(n_clicks, currentStyle) {
-        const newStyle = {...currentStyle};
-        if (newStyle.width === '0px' || newStyle.width === '0') {
-            newStyle.width = '300px';
-        } else {
-            newStyle.width = '0px';
-        }
-        return newStyle;
-    }
-    """,
-    Output('sidebar', 'style'),
-    [Input('sidebar-toggle', 'n_clicks')],
-    [State('sidebar', 'style')],
+# Callback to toggle heatmap settings visibility
+@app.callback(
+    Output('heatmap-settings', 'style'),
+    [Input('view-toggle', 'value')],
     prevent_initial_call=True
 )
-
-# Callback to toggle heatmap settings visibility
-@callback(
-    Output('heatmap-settings', 'style'),
-    [Input('view-toggle', 'value')]
-)
-def toggle_heatmap_settings(view):
-    if view == 'heatmap':
-        return {'display': 'block'}
-    return {'display': 'none'}
+def toggle_heatmap_settings(view_type):
+    if view_type is None:
+        raise PreventUpdate
+    return {'display': 'block'} if view_type == 'heatmap' else {'display': 'none'}
 
 # Callback to update map view state
 app.clientside_callback(
@@ -1267,120 +2274,1023 @@ app.clientside_callback(
     prevent_initial_call=True
 )
 
-
-
-# Callback to toggle category modal
-@app.callback(
-    Output('category-modal', 'is_open'),
-    [Input('category-toggle-button', 'n_clicks'),
-     Input('close-category-modal', 'n_clicks')],
-    [State('category-modal', 'is_open')]
-)
-def toggle_category_modal(n1, n2, is_open):
-    if n1 or n2:
-        return not is_open
-    return is_open
-
-# Sync category-selection with dropdown
-@app.callback(
-    Output('category-selection', 'data', allow_duplicate=True),
-    Input('category-dropdown', 'value'),
-    prevent_initial_call=True
-)
-def update_category_from_dropdown(value):
-    return value if value is not None else []
-
-# Sync dropdown with category-selection
-@app.callback(
-    Output('category-dropdown', 'value'),
-    Input('category-selection', 'data')
-)
-def sync_dropdown_with_selection(selected_categories):
-    return selected_categories if selected_categories else []
-
-
-
-# Callback to update corpus stats
-# Callback to update corpus stats
-# Callback to update corpus stats
+# Update corpus stats callback to be more efficient
 @app.callback(
     Output('corpus-stats', 'children'),
-    [Input('current-filters', 'data')]
+    [Input('current-filters', 'data')],
+    [State('current-dhlabids-store', 'data')],
+    prevent_initial_call=True
 )
-def update_corpus_stats(filters):
-    print("!!! update_corpus_stats TRIGGERED !!!")
+def update_corpus_stats(filters, current_books):
     if not filters:
         return "No filters available"
     
-    # Determine the corpus source
+    books = current_books or []
+    places = filters.get('selected_tokens', []) if filters else []
+    if not books:
+        return "No corpus loaded"
+    
     conn = get_db_connection()
-    if filters.get('uploaded_corpus'):
-        dhlabids = filters['uploaded_corpus']
-        print(f"Using uploaded corpus with {len(dhlabids)} dhlabids")
-        num_books = len(dhlabids)
+    try:
+        # Get book details for the current corpus
         book_query = f"""
-        SELECT dhlabid, year
+        SELECT dhlabid, year, category, title
+        FROM corpus
+        WHERE dhlabid IN ({','.join(['?'] * len(books))})
+        AND year IS NOT NULL
+        """
+        books_df = pd.read_sql_query(book_query, conn, params=tuple(books))
+        
+        print(f"DEBUG: Total books before year filter: {len(books_df)}")
+        print(f"DEBUG: Year range in books_df: {books_df['year'].min()}-{books_df['year'].max()}")
+        
+        # Apply year range filter if specified
+        if filters.get('year_range'):
+            min_year, max_year = filters['year_range']
+            print(f"DEBUG: Applying year range filter: {min_year}-{max_year}")
+            books_df = books_df[(books_df['year'] >= min_year) & (books_df['year'] <= max_year)]
+            print(f"DEBUG: Books after year filter: {len(books_df)}")
+            print(f"DEBUG: Year range after filter: {books_df['year'].min()}-{books_df['year'].max()}")
+        
+        num_books = len(books_df)
+        
+        # Get the period from metadata
+        if not books_df.empty:
+            min_year = int(books_df['year'].min())
+            max_year = int(books_df['year'].max())
+            year_range = f"{min_year}–{max_year}"
+        else:
+            year_range = "No period data"
+        
+        # Get total places and filtered places
+        places_df = get_places_for_map(filters, selected_tokens=places)
+        if places_df.empty:
+            return "No places match the current filters"
+        
+        total_places_shown = len(places_df)
+        total_mentions = int(places_df['frequency'].sum())
+        total_books = int(places_df['book_count'].sum())
+        category_count = len(filters['categories']) if filters['categories'] else 0
+        title_count = len(filters['titles']) if filters['titles'] else 0
+        
+        # Build the stats display
+        stats = [
+            html.P(f"Corpus source: {filters.get('corpus_source', 'No corpus selected')}"),
+            html.P(f"Number of books: {num_books}"),
+            html.P(f"Total places in corpus: {total_places_shown}"),
+            html.P(f"Period: {year_range}"),
+            html.P(f"Filters: {category_count} categories, {title_count} works"),
+            html.P(f"Places shown: {total_places_shown}"),
+            html.P(f"Total mentions: {total_mentions:,}")
+        ]
+        
+        # Add selected places information if available
+        if places:
+            stats.extend([
+                html.Hr(),
+                html.H5("Selected Places", className="mt-3"),
+                html.P(f"Number of selected places: {len(places)}"),
+                html.P("Selected places:", style={'marginBottom': '5px'}),
+                html.Div([
+                    html.Span(place, style={'marginRight': '10px', 'marginBottom': '5px'})
+                    for place in places
+                ], style={'display': 'flex', 'flexWrap': 'wrap', 'gap': '5px'})
+            ])
+        
+        return html.Div(stats)
+    finally:
+        conn.close()
+
+# Update corpus controls callback
+@app.callback(
+    Output('corpus-controls-container', 'style'),
+    [Input('corpus-button', 'n_clicks'),
+     Input('close-corpus', 'n_clicks')],
+    [State('corpus-controls-container', 'style')],
+    prevent_initial_call=True
+)
+def toggle_corpus_controls(n1, n2, current_style):
+    if n1 or n2:
+        new_style = dict(current_style)
+        new_style['display'] = 'flex' if current_style.get('display') == 'none' else 'none'
+        return new_style
+    return current_style
+
+# Update visualization controls callback
+@app.callback(
+    Output('visualization-controls-container', 'style'),
+    [Input('visualization-button', 'n_clicks'),
+     Input('close-visualization', 'n_clicks')],
+    [State('visualization-controls-container', 'style')],
+    prevent_initial_call=True
+)
+def toggle_visualization_controls(n1, n2, current_style):
+    if n1 or n2:
+        new_style = dict(current_style)
+        new_style['display'] = 'flex' if current_style.get('display') == 'none' else 'none'
+        return new_style
+    return current_style
+
+# Update button styles callback
+@app.callback(
+    [Output('corpus-button', 'style'),
+     Output('place-names-toggle', 'style'),
+     Output('visualization-button', 'style')],
+    [Input('corpus-controls-container', 'style'),
+     Input('place-names-container', 'style'),
+     Input('visualization-controls-container', 'style')],
+    [State('corpus-button', 'style'),
+     State('place-names-toggle', 'style'),
+     State('visualization-button', 'style')],
+    prevent_initial_call=True
+)
+def update_button_styles(corpus_style, places_style, viz_style, corpus_btn_style, places_btn_style, viz_btn_style):
+    # Base styles
+    base_style = {
+        'padding': '8px 16px',
+        'backgroundColor': 'white',
+        'color': '#475569',
+        'border': 'none',
+        'borderRadius': '20px',
+        'cursor': 'pointer',
+        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+        'transition': 'all 0.2s',
+        'fontSize': '14px',
+        'fontWeight': '500',
+        'lineHeight': '1.5'
+    }
+    
+    active_style = {
+        'padding': '8px 16px',
+        'backgroundColor': '#475569',
+        'color': 'white',
+        'border': 'none',
+        'borderRadius': '20px',
+        'cursor': 'pointer',
+        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+        'transition': 'all 0.2s',
+        'fontSize': '14px',
+        'fontWeight': '500',
+        'lineHeight': '1.5'
+    }
+    
+    # Update corpus button style
+    corpus_btn_style = active_style.copy() if corpus_style and corpus_style.get('display') == 'block' else base_style.copy()
+    
+    # Update places button style
+    places_btn_style = active_style.copy() if places_style and places_style.get('display') == 'block' else base_style.copy()
+    places_btn_style['marginLeft'] = '8px'
+    
+    # Update visualization button style - maintain position and size
+    viz_btn_style = {
+        'padding': '8px',
+        'backgroundColor': '#475569' if viz_style and viz_style.get('display') == 'block' else 'white',
+        'color': 'white' if viz_style and viz_style.get('display') == 'block' else '#475569',
+        'border': 'none',
+        'borderRadius': '50%',
+        'cursor': 'pointer',
+        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+        'transition': 'all 0.2s',
+        'width': '36px',
+        'height': '36px',
+        'display': 'flex',
+        'alignItems': 'center',
+        'justifyContent': 'center',
+        'fontSize': '14px',
+        'marginLeft': '8px',
+        'flexShrink': '0'
+    }
+    
+    return corpus_btn_style, places_btn_style, viz_btn_style
+
+# Add callback for category and title selection
+@app.callback(
+    [Output('current-filters', 'data', allow_duplicate=True)],
+    [Input('apply-filters', 'n_clicks')],
+    [State('category-dropdown', 'value'),
+     State('title-dropdown', 'value'),
+     State('popup-sample-size', 'value'),
+     State('popup-max-places-slider', 'value'),
+     State('year-range-slider', 'value'),
+     State('current-filters', 'data')],
+    prevent_initial_call=True
+)
+def update_corpus_from_selections(n_clicks, selected_categories, selected_titles, sample_size, max_places, year_range, current_filters):
+    if not n_clicks:
+        raise PreventUpdate
+    if current_filters is None:
+        current_filters = {}
+    # Update filters with new selections
+    new_filters = {
+        'categories': selected_categories or [],
+        'titles': selected_titles or [],
+        'sample_size': sample_size or 0,
+        'max_places': max_places or 0,
+        'year_range': year_range or [1814, 1905]  # Default to full range if not set
+    }
+    return new_filters
+
+
+
+def add_edge_points(points_array):
+    """Add edge points to ensure the convex hull covers the entire cluster area."""
+    if len(points_array) < 2:
+        return points_array
+    
+    # Calculate the bounding box
+    min_lon, min_lat = points_array.min(axis=0)
+    max_lon, max_lat = points_array.max(axis=0)
+    
+    # Add corner points with some padding
+    padding = 0.1  # 10% padding
+    lon_range = max_lon - min_lon
+    lat_range = max_lat - min_lat
+    
+    edge_points = np.array([
+        [min_lon - padding * lon_range, min_lat - padding * lat_range],  # Bottom left
+        [max_lon + padding * lon_range, min_lat - padding * lat_range],  # Bottom right
+        [max_lon + padding * lon_range, max_lat + padding * lat_range],  # Top right
+        [min_lon - padding * lon_range, max_lat + padding * lat_range]   # Top left
+    ])
+    
+    # Combine original points with edge points
+    return np.vstack([points_array, edge_points])
+
+def calculate_bearing(lat1, lon1, lat2, lon2):
+    """Calculate the bearing between two points."""
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    dlon = lon2 - lon1
+    y = math.sin(dlon) * math.cos(lat2)
+    x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+    bearing = math.atan2(y, x)
+    return math.degrees(bearing)
+
+def create_rotated_ellipse(center_lat, center_lon, radius_km, bearing, points=100):
+    """Create a rotated ellipse around a center point."""
+    # Convert radius from km to degrees (approximate)
+    radius_deg = radius_km / 111.32
+    
+    # Create points for the ellipse
+    angles = np.linspace(0, 2*np.pi, points)
+    
+    # Create the ellipse points
+    x = radius_deg * np.cos(angles)
+    y = radius_deg * np.sin(angles)
+    
+    # Rotate the points
+    bearing_rad = math.radians(bearing)
+    cos_bearing = math.cos(bearing_rad)
+    sin_bearing = math.sin(bearing_rad)
+    
+    x_rot = x * cos_bearing - y * sin_bearing
+    y_rot = x * sin_bearing + y * cos_bearing
+    
+    # Translate to center point
+    lats = center_lat + y_rot
+    lons = center_lon + x_rot
+    
+    return lats, lons
+
+# Add callback for loading state
+@app.callback(
+    Output('loading-overlay', 'style'),
+    [Input('build-corpus-btn', 'n_clicks'),  # Changed from apply-filters to build-corpus-btn
+     Input('main-map', 'figure')],
+    [State('loading-overlay', 'style')]
+)
+def update_loading_state(build_clicks, map_figure, current_style):
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # Show loading when build button is clicked
+    if trigger_id == 'build-corpus-btn' and build_clicks:
+        new_style = dict(current_style)
+        new_style['display'] = 'flex'
+        return new_style
+    
+    # Hide loading when map is updated
+    if trigger_id == 'main-map' and map_figure:
+        new_style = dict(current_style)
+        new_style['display'] = 'none'
+        return new_style
+    
+    return current_style
+
+# Add download endpoint
+@app.server.route('/download-map', methods=['GET'])
+def download_map():
+    try:
+        # Get data from query parameters
+        data_str = request.args.get('data')
+        if not data_str:
+            return 'No data provided', 400
+            
+        data = json.loads(data_str)
+        figure = data.get('figure')
+        format = data.get('format', 'png')
+        width = data.get('width', 3840)
+        height = data.get('height', 2160)
+        scale = data.get('scale', 2)
+        
+        # Create figure from JSON
+        fig = go.Figure(figure)
+        
+        # Update layout for download
+        fig.update_layout(
+            width=width,
+            height=height,
+            margin=dict(l=0, r=0, t=0, b=0),
+            showlegend=False
+        )
+        
+        # Generate image
+        if format == 'png':
+            img_bytes = fig.to_image(format='png', scale=scale)
+            mimetype = 'image/png'
+            filename = 'imagination_map.png'
+        elif format == 'pdf':
+            img_bytes = fig.to_image(format='pdf', scale=scale)
+            mimetype = 'application/pdf'
+            filename = 'imagination_map.pdf'
+        elif format == 'svg':
+            img_bytes = fig.to_image(format='svg', scale=scale)
+            mimetype = 'image/svg+xml'
+            filename = 'imagination_map.svg'
+        else:
+            return 'Invalid format', 400
+        
+        return send_file(
+            io.BytesIO(img_bytes),
+            mimetype=mimetype,
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        print(f"Error generating download: {e}")
+        return str(e), 500
+
+@app.callback(
+    [Output('download-map-file', 'data'),
+     Output('download-status', 'children'),
+     Output('clear-download-status-interval', 'disabled'),
+     Output('clear-download-status-interval', 'n_intervals')],
+    [Input('download-map', 'n_clicks')],
+    [State('download-format', 'value'),
+     State('download-resolution', 'value'),
+     State('main-map', 'figure')],
+    prevent_initial_call=True
+)
+def trigger_download(n_clicks, format, resolution, figure):
+    import dash
+    from dash import dcc, html
+    import plotly.graph_objects as go
+    import io
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    # Set resolution based on selection
+    resolution_map = {
+        'standard': {'width': 1920, 'height': 1080},
+        'high': {'width': 3840, 'height': 2160},
+        'publication': {'width': 6000, 'height': 4000}
+    }
+    # Get the selected resolution
+    dimensions = resolution_map.get(resolution, resolution_map['standard'])
+    try:
+        # Create figure from JSON
+        fig = go.Figure(figure)
+        fig.update_layout(
+            width=dimensions['width'],
+            height=dimensions['height'],
+            margin=dict(l=0, r=0, t=0, b=0),
+            showlegend=False
+        )
+        # Generate image bytes
+        if format == 'png':
+            img_bytes = fig.to_image(format='png', scale=2 if resolution in ['high', 'publication'] else 1)
+            filename = 'imagination_map.png'
+            mime = 'image/png'
+        elif format == 'pdf':
+            img_bytes = fig.to_image(format='pdf', scale=2 if resolution in ['high', 'publication'] else 1)
+            filename = 'imagination_map.pdf'
+            mime = 'application/pdf'
+        elif format == 'svg':
+            img_bytes = fig.to_image(format='svg', scale=2 if resolution in ['high', 'publication'] else 1)
+            filename = 'imagination_map.svg'
+            mime = 'image/svg+xml'
+        else:
+            return None, html.Div('Invalid format selected', style={'color': 'red'}), True, 0
+        # Enable the interval to clear the message
+        return dcc.send_bytes(lambda buf: buf.write(img_bytes), filename), html.Div('Download started...', style={'color': 'green', 'marginTop': '10px'}), False, 0
+    except Exception as e:
+        print(f"Error generating download: {e}")
+        return None, html.Div(f'Error generating download: {e}', style={'color': 'red'}), True, 0
+
+@app.callback(
+    Output('download-status', 'children', allow_duplicate=True),
+    [Input('clear-download-status-interval', 'n_intervals')],
+    [State('clear-download-status-interval', 'disabled')],
+    prevent_initial_call=True
+)
+def clear_download_status(n_intervals, disabled):
+    if not disabled and n_intervals > 0:
+        return ''
+    raise dash.exceptions.PreventUpdate
+
+@app.callback(
+    Output('clear-download-status-interval', 'disabled', allow_duplicate=True),
+    [Input('download-status', 'children')],
+    prevent_initial_call=True
+)
+def disable_interval_on_clear(status):
+    # Disable the interval if the status is cleared
+    if not status:
+        return True
+    raise dash.exceptions.PreventUpdate
+
+# Add new callback for data loading
+@app.callback(
+    Output('filtered-data', 'data'),
+    [Input('current-filters', 'data'),
+     Input('current-dhlabids-store', 'data')],
+    prevent_initial_call=True
+)
+def load_filtered_data(filters, books):
+    if not filters or not books:
+        return pd.DataFrame().to_json(date_format='iso', orient='split')
+    
+    try:
+        # Get places for the map
+        places = filters.get('selected_tokens') if filters else None
+        places_result = get_places_for_map(filters, books=books, selected_tokens=places)
+        if isinstance(places_result, tuple):
+            places_df = places_result[0]
+        else:
+            places_df = places_result
+        
+        # Debug: Log the shape and content of places_df
+        print(f"DEBUG: places_df shape: {places_df.shape}")
+        print(f"DEBUG: places_df head: {places_df.head()}")
+        
+        return places_df.to_json(date_format='iso', orient='split')
+    except Exception as e:
+        print(f"Error in load_filtered_data: {e}")
+        return dash.no_update
+
+# Add new callback for global place search
+@app.callback(
+    [Output('main-map', 'figure', allow_duplicate=True),
+     Output('place-summary-container', 'style', allow_duplicate=True),
+     Output('place-summary', 'children', allow_duplicate=True)],
+    [Input('global-place-search', 'value')],
+    [State('main-map', 'figure')],
+    prevent_initial_call=True
+)
+def handle_global_search(search_term, current_figure):
+    if not search_term or len(search_term) < 2:
+        raise PreventUpdate
+    
+    try:
+        conn = get_db_connection()
+        try:
+            # Search in both historical and modern names
+            query = """
+            SELECT 
+                p.token,
+                p.modern as name,
+                p.latitude,
+                p.longitude,
+                COUNT(DISTINCT b.dhlabid) as book_count,
+                COUNT(b.dhlabid) as frequency
+            FROM places p
+            JOIN books b ON p.token = b.token
+            WHERE (LOWER(p.token) LIKE LOWER(?) OR LOWER(p.modern) LIKE LOWER(?))
+            AND p.latitude IS NOT NULL 
+            AND p.longitude IS NOT NULL
+            AND p.latitude != '0'
+            AND p.longitude != '0'
+            GROUP BY p.token, p.modern, p.latitude, p.longitude
+            ORDER BY frequency DESC
+            LIMIT 1
+            """
+            
+            # Add wildcards for partial matching
+            search_pattern = f"%{search_term}%"
+            places_df = pd.read_sql_query(query, conn, params=(search_pattern, search_pattern))
+            
+            if places_df.empty:
+                return current_figure, dash.no_update, dash.no_update
+            
+            # Get the first matching place
+            place = places_df.iloc[0]
+            
+            # Create hover text
+            hover_text = f"{place['token']} ({place['name']})<br>Mentions: {int(place['frequency'])}<br>Books: {int(place['book_count'])}"
+            
+            # Update the map to center on the found place
+            fig = go.Figure(current_figure)
+            fig.update_layout(
+                map=dict(
+                    center=dict(lat=float(place['latitude']), lon=float(place['longitude'])),
+                    zoom=10
+                )
+            )
+            
+            # Get book details for the place
+            books_df, total_books = get_place_details(place['token'])
+            
+            # Create summary content
+            summary = html.Div([
+                html.Div([
+                    html.H5(place['token'], style={'marginBottom': '5px'}),
+                    html.P(f"Modern name: {place['name']}", style={'fontSize': '14px', 'color': '#666'}) if place['name'] else None,
+                    html.P(f"Appears in {len(books_df):,} books with {int(place['frequency']):,} total mentions", style={'marginTop': '5px'}),
+                    html.Hr(style={'margin': '10px 0'})
+                ]),
+                html.Div([
+                    html.H6(f"Books mentioning this place ({len(books_df):,} total):", style={'marginBottom': '10px'}),
+                    html.Div([
+                        html.Div([
+                            html.A(
+                                f"{row['title']} ({row['year']})",
+                                href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{place['token']}\"",
+                                target="_blank",
+                                style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
+                            ),
+                            html.Div([
+                                html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
+                                html.Span(f" • {int(row.get('mention_count', 1)):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
+                            ], style={'display': 'flex', 'justifyContent': 'space-between'})
+                        ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
+                        for i, row in books_df.iterrows() if pd.notna(row['title'])
+                    ]) if not books_df.empty else html.Div("No book details available")
+                ])
+            ])
+            
+            # Show the summary container
+            summary_style = {
+                'position': 'absolute',
+                'bottom': '80px',
+                'left': '20px',
+                'width': '350px',
+                'maxHeight': '500px',
+                'overflowY': 'auto',
+                'zIndex': 800,
+                'display': 'block',
+                'cursor': 'auto'
+            }
+            
+            return fig, summary_style, summary
+            
+        finally:
+            conn.close()
+            
+    except Exception as e:
+        print(f"Error in handle_global_search: {e}")
+        return current_figure, dash.no_update, dash.no_update
+
+@app.callback(
+    Output('similar-places-list', 'children'),
+    [Input('similar-place-search', 'value')],
+    [State('current-dhlabids-store', 'data')],
+    prevent_initial_call=True
+)
+def update_similar_places(search_term, current_books):
+    if not search_term or len(search_term) < 2:
+        return html.Div("Enter at least 2 characters to search", style={'color': '#666'})
+    
+    books = current_books or []
+    if not books:
+        return html.Div("No corpus loaded", style={'color': '#666'})
+
+    try:
+        conn = get_db_connection()
+        try:
+            # Search in both historical and modern names
+            query = """
+            SELECT 
+                p.token,
+                p.modern as name,
+                p.latitude,
+                p.longitude,
+                COUNT(DISTINCT b.dhlabid) as book_count,
+                SUM(b.book_count) as frequency
+            FROM places p
+            JOIN books b ON p.token = b.token
+            WHERE (LOWER(p.token) LIKE LOWER(?) OR LOWER(p.modern) LIKE LOWER(?))
+            AND b.dhlabid IN ({})
+            AND p.latitude IS NOT NULL 
+            AND p.longitude IS NOT NULL
+            AND p.latitude != '0'
+            AND p.longitude != '0'
+            GROUP BY p.token, p.modern, p.latitude, p.longitude
+            ORDER BY frequency DESC
+            LIMIT 50
+            """.format(','.join(['?'] * len(books)))
+            
+            # Add wildcards for partial matching
+            search_pattern = f"%{search_term}%"
+            places_df = pd.read_sql_query(query, conn, params=(search_pattern, search_pattern) + tuple(books))
+            
+            if places_df.empty:
+                return html.Div("No matching places found", style={'color': '#666'})
+            
+            # Create hover text
+            places_df['hover_text'] = places_df.apply(
+                lambda row: f"{row['token']} ({row['name']})<br>Mentions: {int(row['frequency'])}<br>Books: {int(row['book_count'])}",
+                axis=1
+            )
+            
+            return html.Div([
+                html.Div([
+                    html.Div([
+                        html.Div("Place", style={'flex': '2', 'fontWeight': 'bold', 'padding': '8px'}),
+                        html.Div("📚", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'}),
+                        html.Div("📝", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'})
+                    ], style={
+                        'display': 'flex',
+                        'borderBottom': '2px solid #eee',
+                        'marginBottom': '4px',
+                        'fontSize': '0.9rem'
+                    }),
+                    html.Div([
+                        html.Div([
+                            html.Div([
+                                html.Div(f"{row['token']}", style={'fontWeight': '500', 'fontSize': '0.9rem'}),
+                                html.Div(f"{row['name']}", style={'color': '#666', 'fontSize': '0.8rem'})
+                            ], style={'flex': '2', 'padding': '8px'}),
+                            html.Div(f"{int(row['book_count'])}", 
+                                    style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}),
+                            html.Div(f"{int(row['frequency'])}", 
+                                    style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'})
+                        ], style={
+                            'display': 'flex',
+                            'borderBottom': '1px solid #eee',
+                            'transition': 'background-color 0.2s',
+                            'cursor': 'pointer'
+                        }, 
+                        className='similar-place-item', 
+                        id={'type': 'similar-place-item', 'index': row['token']},
+                        **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
+                        for _, row in places_df.iterrows()
+                    ], style={'maxHeight': '300px', 'overflowY': 'auto'})
+                ], style={'border': '1px solid #eee', 'borderRadius': '4px'})
+            ], style={'backgroundColor': 'white', 'borderRadius': '8px', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'})
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"Error in update_similar_places: {e}")
+        return html.Div("Error searching for places", style={'color': 'red'})
+
+# Add callback for resampling places
+
+
+
+
+# Add a clientside callback for instant download status feedback
+app.clientside_callback(
+    """
+    function(n_clicks) {
+        if (n_clicks) {
+            return 'Download started...';
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output('download-status', 'children', allow_duplicate=True),
+    [Input('download-map', 'n_clicks')],
+    prevent_initial_call=True
+)
+
+
+
+@app.callback(
+    Output('test-info-output', 'children'),
+    [Input('test-info-btn', 'n_clicks')],
+    prevent_initial_call=True
+)
+def test_info_btn_callback(n_clicks):
+    print(f"[DEBUG] test_info_btn_callback triggered: n_clicks={n_clicks}")
+    return f"Button clicked {n_clicks} times."
+
+@app.callback(
+    [
+        Output('corpus-info-books', 'children'),
+        Output('corpus-info-authors', 'children'),
+        Output('corpus-info-places', 'children'),
+        Output('corpus-info-years', 'children'),
+        Output('corpus-browse-table', 'children'),
+    ],
+    [Input('filtered-data', 'data'), Input('corpus-table-filter', 'data')],
+    [State('current-dhlabids-store', 'data'),
+     State('current-filters', 'data')],
+    prevent_initial_call=True
+)
+def update_corpus_info_and_table(_, filter_data, current_books, current_filters):
+    books = current_books or []
+    selected_tokens = (current_filters or {}).get('selected_tokens', [])
+    if not books:
+        return "0", "0", "0", "", html.Div("No books in corpus.", style={'color': '#666'})
+    import pandas as pd
+    conn = get_db_connection()
+    try:
+        # Info section
+        query = f"""
+        SELECT COUNT(DISTINCT dhlabid) as book_count,
+               COUNT(DISTINCT author) as author_count,
+               MIN(year) as min_year,
+               MAX(year) as max_year
+        FROM corpus
+        WHERE dhlabid IN ({','.join(['?'] * len(books))})
+        AND year IS NOT NULL
+        """
+        info = pd.read_sql_query(query, conn, params=tuple(books)).iloc[0]
+        # Places count
+        places_query = f"""
+        SELECT COUNT(DISTINCT token) as place_count
+        FROM books
+        WHERE dhlabid IN ({','.join(['?'] * len(books))})
+        """
+        place_count = pd.read_sql_query(places_query, conn, params=tuple(books))['place_count'].iloc[0]
+        # Year range
+        if pd.notnull(info['min_year']) and pd.notnull(info['max_year']):
+            years = f"{int(info['min_year'])}–{int(info['max_year'])}"
+        else:
+            years = ""
+        # --- Build SQL filter for the table ---
+        where_clauses = [f"c.dhlabid IN ({','.join(['?'] * len(books))})"]
+        params = list(books)
+        if filter_data and filter_data.get('column') and filter_data.get('value') is not None:
+            col = filter_data['column']
+            val = filter_data['value']
+            if col == 'year':
+                where_clauses.append("c.year <= ?")
+                params.append(val)
+            elif col == 'placename_count':
+                # placename_count is a subquery, so filter after fetch
+                pass
+            elif col in ['title', 'author', 'category']:
+                where_clauses.append(f"LOWER(c.{col}) LIKE ?")
+                params.append(f"%{str(val).lower()}%")
+        where_sql = ' AND '.join(where_clauses)
+        table_query = f'''
+        SELECT c.title, c.author, c.category, c.year, c.urn,
+               (SELECT COUNT(DISTINCT b.token) FROM books b WHERE b.dhlabid = c.dhlabid) as placename_count
+        FROM corpus c
+        WHERE {where_sql}
+        ORDER BY c.year DESC, c.title
+        LIMIT 100
+        '''
+        df = pd.read_sql_query(table_query, conn, params=tuple(params))
+        # placename_count filter (must be applied after fetch)
+        if filter_data and filter_data.get('column') == 'placename_count' and filter_data.get('value') is not None:
+            val = filter_data['value']
+            df = df[df['placename_count'] <= val]
+        if df.empty:
+            table_section = html.Div("No books found in corpus.", style={'color': '#666'})
+        else:
+            table_rows = []
+            for _, row in df.iterrows():
+                title_text, full_title = truncate_text(row['title'] or '', 60)
+                author_text, full_author = truncate_text(row['author'] or '', 40)
+                title_cell = html.A(
+                    title_text or "(Untitled)",
+                    href=f"https://www.nb.no/items/{row['urn']}",
+                    target="_blank",
+                    title=full_title or "NB.no"
+                )
+                author_cell = html.Span(author_text, title=full_author) if full_author else ""
+                table_rows.append({
+                    'title': title_cell,
+                    'author': author_cell,
+                    'category': row['category'] or '',
+                    'year': int(row['year']) if pd.notnull(row['year']) else '',
+                    'placename_count': int(row['placename_count']) if pd.notnull(row['placename_count']) else ''
+                })
+            table_section = build_html_table(
+                table_rows,
+                [
+                    ('title', 'Title'),
+                    ('author', 'Author'),
+                    ('category', '≡'),
+                    ('year', '📅'),
+                    ('placename_count', '◆')
+                ],
+                table_class="table table-sm table-striped table-hover",
+                container_style={'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'auto'}
+            )
+
+        return (
+            f"{info['book_count']:,}",
+            f"{info['author_count']:,}",
+            f"{place_count:,}",
+            years,
+            table_section
+        )
+    except Exception as e:
+        print(f"Error in update_corpus_info_and_table: {e}")
+        return "0", "0", "0", "", html.Div("Error displaying corpus table.", style={'color': 'red'})
+    finally:
+        conn.close()
+
+
+
+@app.callback(
+    Output('corpus-download-unique', 'data'),
+    [Input('corpus-download-btn-unique', 'n_clicks')],
+    [State('current-dhlabids-store', 'data')],
+    prevent_initial_call=True
+)
+def download_corpus_excel(n_clicks, dhlabids):
+    if not n_clicks or not dhlabids:
+        raise dash.exceptions.PreventUpdate
+    print(f"Download triggered, first 5 dhlabids: {dhlabids[:5]}")
+    import pandas as pd
+    import io
+    conn = get_db_connection()
+    try:
+        # Fetch metadata for current corpus
+        query = f'''
+        SELECT dhlabid, title, author, year, category, urn
         FROM corpus
         WHERE dhlabid IN ({','.join(['?'] * len(dhlabids))})
-        AND year IS NOT NULL
-        """
-        books_df = pd.read_sql_query(book_query, conn, params=tuple(dhlabids))
-    elif filters.get('categories') and filters['categories']:
-        categories = filters['categories']
-        print(f"Using category-based corpus with categories: {categories}")
-        book_query = f"""
-        SELECT dhlabid, year
-        FROM corpus
-        WHERE category IN ({','.join(['?'] * len(categories))})
-        AND year IS NOT NULL
-        """
-        books_df = pd.read_sql_query(book_query, conn, params=tuple(categories))
-        num_books = len(books_df)
-    else:
-        print("Falling back to default Epikk sample")
-        book_query = """
-        SELECT dhlabid, year
-        FROM corpus
-        WHERE category = 'Diktning: Epikk'
-        AND year IS NOT NULL
-        LIMIT 50
-        """
-        books_df = pd.read_sql_query(book_query, conn)
-        num_books = len(books_df)
-    
-    # Get the period from metadata
-    if not books_df.empty:
-        min_year = int(books_df['year'].min())
-        max_year = int(books_df['year'].max())
-        year_range = f"{min_year}–{max_year}"
-    else:
-        year_range = "Unknown period"
-    
-    # Get total places and filtered places
-    places_df, total_places = get_places_for_map(filters, return_total=True)
-    if places_df.empty:
-        return "No places match the current filters"
-    
-    total_places_shown = len(places_df)
-    total_mentions = int(places_df['frequency'].sum())
-    total_books = int(places_df['book_count'].sum())
-    category_count = len(filters['categories']) if filters['categories'] else 0
-    title_count = len(filters['titles']) if filters['titles'] else 0
-    
-    conn.close()
-    
-    # Customize description based on corpus source
-    corpus_source = "Uploaded corpus" if filters.get('uploaded_corpus') else "Category-based corpus" if filters.get('categories') else "Default Epikk sample"
-    return html.Div([
-        html.P(f"Corpus source: {corpus_source}"),
-        html.P(f"Number of books: {num_books}"),
-        html.P(f"Total places in corpus: {total_places}"),  # Added back
-        html.P(f"Period: {year_range}"),
-        html.P(f"Filters: {category_count} categories, {title_count} works"),
-        html.P(f"Places shown: {total_places_shown}"),
-        html.P(f"Total mentions: {total_mentions:,}"),
-    ])
+        '''
+        df = pd.read_sql_query(query, conn, params=tuple(dhlabids))
+        if df.empty:
+            raise dash.exceptions.PreventUpdate
+        # Add URL column
+        df['url'] = df['urn'].apply(lambda urn: f"https://www.nb.no/items/{urn}" if pd.notnull(urn) else '')
+        # Reorder columns
+        df = df[['dhlabid', 'title', 'author', 'year', 'category', 'url']]
+        # Write to Excel in memory
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Corpus')
+        output.seek(0)
+        return dcc.send_bytes(lambda buf: buf.write(output.getvalue()), filename='imagination_corpus.xlsx')
+    except Exception as e:
+        print(f"Download error: {e}")
+        raise
+    finally:
+        conn.close()
+
+def get_all_places_for_corpus(book_ids):
+    """Return all valid places for a list of book IDs (no sampling, no limit)."""
+    import pandas as pd
+    if not book_ids:
+        return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+    conn = get_db_connection()
+    try:
+        query = f'''
+        SELECT 
+            b.token,
+            p.modern as name,
+            p.latitude,
+            p.longitude,
+            SUM(b.book_count) as frequency,
+            COUNT(DISTINCT b.dhlabid) as book_count
+        FROM books b
+        JOIN places p ON b.token = p.token
+        WHERE b.dhlabid IN ({','.join(['?'] * len(book_ids))})
+          AND p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+          AND p.latitude != '0' AND p.longitude != '0'
+        GROUP BY b.token, p.modern, p.latitude, p.longitude
+        '''
+        df = pd.read_sql_query(query, conn, params=tuple(book_ids))
+        df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
+        df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+        return df
+    finally:
+        conn.close()
+
+def sample_places(places_df, n=2000):
+    """Return a random sample of n places from a DataFrame."""
+    import pandas as pd
+    if places_df is None or places_df.empty:
+        return places_df
+    n = min(n, len(places_df))
+    return places_df.sample(n=n, random_state=None).reset_index(drop=True)
+
+@app.callback(
+    Output('all-places-store', 'data'),
+    [Input('current-dhlabids-store', 'data'),
+     Input('upload-state', 'data'),
+     Input('reset-corpus-btn-main', 'n_clicks')],
+    [State('all-places-store', 'data')],
+    prevent_initial_call=True
+)
+def update_all_places_store(book_ids, upload_state, reset_n_clicks, current_data):
+    import pandas as pd
+    import io
+    if not book_ids:
+        return pd.DataFrame().to_json(date_format='iso', orient='split')
+    df = get_all_places_for_corpus(book_ids)
+    return df.to_json(date_format='iso', orient='split')
+
+def truncate_text(value: str, length: int = 40) -> tuple[str, str]:
+    if not value:
+        return "", ""
+    text = str(value)
+    return (text if len(text) <= length else text[:length] + "…"), text
+
+
+def build_html_table(rows, columns, *, table_class="table table-sm table-striped", container_style=None):
+    header_cells = [html.Th(label, scope="col") for _, label in columns]
+    body_rows = []
+    for row in rows:
+        cells = []
+        for key, _ in columns:
+            cells.append(html.Td(row.get(key, "")))
+        body_rows.append(html.Tr(cells))
+    table = html.Table(
+        [html.Thead(html.Tr(header_cells)), html.Tbody(body_rows)],
+        className=table_class,
+        style={'margin': 0, 'tableLayout': 'fixed', 'width': '100%'}
+    )
+    wrapper_style = {'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'auto'}
+    if container_style:
+        wrapper_style.update(container_style)
+    return html.Div(table, className="table-flex-container", style=wrapper_style)
+
+
+def load_places_frame(json_payload):
+    import pandas as pd
+    import io
+    if not json_payload:
+        return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
+    return pd.read_json(io.StringIO(json_payload), orient='split')
+
+
+def filter_places_search(df, search_term):
+    if df is None or df.empty:
+        return df
+    if not search_term or len(search_term.strip()) < 3:
+        return df
+    term = search_term.strip().lower()
+    mask = (
+        df['token'].astype(str).str.lower().str.contains(term, na=False) |
+        df['name'].astype(str).str.lower().str.contains(term, na=False)
+    )
+    return df[mask]
+
+
+def render_place_preview(df, selected_place, empty_message="Ingen steder tilgjengelig."):
+    if df is None or df.empty:
+        return html.Div(empty_message, className="text-muted"), html.Div()
+
+    df = df.copy()
+    df['hover_text'] = df.apply(
+        lambda row: f"{row.get('token', '')} ({row.get('name', '')})<br>Modern name: {row.get('name', '')}<br>Mentions: {int(row.get('frequency', 0))}<br>Books: {int(row.get('book_count', 0))}",
+        axis=1
+    )
+
+    summary = html.Div(
+        f"Viser {len(df)} steder.",
+        style={'fontSize': '0.85rem'}
+    )
+
+    rows = [
+        html.Div([
+            html.Div([
+                html.Div(f"{row['token']}", style={'fontWeight': '500', 'fontSize': '0.9rem'}),
+                html.Div(f"{row['name']}", style={'color': '#666', 'fontSize': '0.8rem'})
+            ], style={'flex': '2', 'padding': '8px'}),
+            html.Div(f"{int(row['book_count'])}",
+                    style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}),
+            html.Div(f"{int(row['frequency'])}",
+                    style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'})
+        ], style={
+            'display': 'flex',
+            'borderBottom': '1px solid #eee',
+            'transition': 'background-color 0.2s',
+            'cursor': 'pointer',
+            'backgroundColor': '#ffebee' if selected_place == row['token'] else 'transparent'
+        },
+        className='place-item',
+        id={'type': 'place-item', 'index': row['token']},
+        **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
+        for _, row in df.iterrows()
+    ]
+
+    table = html.Div([
+        html.Div([
+            html.Div("Sted", style={'flex': '2', 'fontWeight': 'bold', 'padding': '8px'}),
+            html.Div("📚", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'}),
+            html.Div("📝", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'})
+        ], style={
+            'display': 'flex',
+            'borderBottom': '2px solid #eee',
+            'marginBottom': '4px',
+            'fontSize': '0.9rem'
+        }),
+        html.Div(rows, style={'maxHeight': '360px', 'overflowY': 'auto'})
+    ], style={'border': '1px solid #eee', 'borderRadius': '4px', 'padding': '4px'})
+
+    return summary, table
+
 
 # Run Server
 if __name__ == '__main__':
-    app.run_server(debug=True, host='0.0.0.0', port=8065, dev_tools_hot_reload=False)
+    app.run(debug=True, host='0.0.0.0', port=8065, dev_tools_hot_reload=False)

@@ -499,8 +499,10 @@ app.layout = html.Div([
                 html.H4("Place Details", style={'marginBottom': '0', 'fontWeight': '400', 'flex': '1'}),
                 
                 html.Button(
-                    html.I(className="fa fa-times"),
+                    "×",
                     id='close-summary',
+                    className="btn-close dialog-close-btn",
+                    title="Close",
                     style={
                         'background': 'none',
                         'border': 'none',
