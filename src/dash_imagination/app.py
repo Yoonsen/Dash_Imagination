@@ -17,7 +17,6 @@ import dhlab as dh
 import re
 import json
 from flask import request, send_file
-from dash import dash_table
 from typing import Tuple
 
 #=== initialize
@@ -26,6 +25,7 @@ from typing import Tuple
 is_production = os.getenv('ENVIRONMENT', 'development') == 'production'
 is_chromebook = os.getenv('ENVIRONMENT', 'development') == 'chromebook'
 app_name = os.getenv('APP_NAME', 'imagination-map')  # Default to 'imagination_map' if not set
+assets_version = os.getenv('ASSETS_VERSION', 'v20251115')
 
 if is_production:
     db_path = "/app/src/dash_imagination/data/imagination.db"
@@ -65,6 +65,8 @@ else:
         ],
         suppress_callback_exceptions=True
     )
+
+app._assets_version = assets_version
 
 server = app.server
 
@@ -601,24 +603,34 @@ app.layout = html.Div([
                 html.I(className="fa fa-grip-horizontal me-2"),
                 html.H5("Place Details", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
                 html.Button(
-                    "×",
+                    html.I(className="fa fa-times"),
                     id='close-summary',
-                    className="btn-close dialog-close-btn",
-                    title="Close"
+                    className="btn-close"
                 )
             ], className="d-flex justify-content-between align-items-center")
         ], className="bg-danger-subtle text-dark", id='summary-header'),
         dbc.CardBody([
-            html.Div(id='place-summary')
-        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
-    ], id='place-summary-container', className="position-absolute", style={
+            html.Div(id='place-summary', style={
+                'flex': '1 1 auto',
+                'minHeight': 0,
+                'overflowY': 'auto'
+            })
+        ], style={
+            'flex': '1 1 auto',
+            'minHeight': 0,
+            'display': 'flex',
+            'flexDirection': 'column'
+        })
+    ], id='place-summary-container', className="position-absolute flex-column", style={
         'width': '350px',
-        'height': '500px',
+        'minWidth': '300px',
+        'minHeight': '320px',
         'zIndex': 800,
         'display': 'none',
         'top': '100px',  # Position below the top button container
         'left': '20px',  # Align with other containers
-        'cursor': 'grab'  # Change cursor to grab
+        'cursor': 'grab',
+        'flexDirection': 'column'
     }),
 
     # Place Names Container
@@ -628,10 +640,9 @@ app.layout = html.Div([
                 html.I(className="fa fa-map-marker me-2"),
                 html.H5("Place Names", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
                 html.Button(
-                    "×",
+                    html.I(className="fa fa-times"),
                     id='close-place-names',
-                    className="btn-close dialog-close-btn",
-                    title="Close"
+                    className="btn-close"
                 )
             ], className="d-flex justify-content-between align-items-center", id='place-names-header')
         ], className="bg-warning-subtle text-dark"),
@@ -666,17 +677,33 @@ app.layout = html.Div([
                 html.H5("Results", className="mb-3"),
                 html.Div(id='place-names-list', children=[
                     html.P("Type in the search box to find places", className="text-muted")
-                ])
-            ])
-        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
-    ], id='place-names-container', className="position-absolute", style={
+                ], style={
+                    'flex': '1 1 auto',
+                    'minHeight': 0,
+                    'overflowY': 'auto'
+                })
+            ], style={
+                'flex': '1 1 auto',
+                'minHeight': 0,
+                'display': 'flex',
+                'flexDirection': 'column'
+            })
+        ], style={
+            'flex': '1 1 auto',
+            'minHeight': 0,
+            'display': 'flex',
+            'flexDirection': 'column'
+        })
+    ], id='place-names-container', className="position-absolute flex-column", style={
         'width': '350px',
-        'height': '500px',
+        'minWidth': '320px',
+        'minHeight': '360px',
         'zIndex': 800,
         'display': 'none',
         'top': '60px',
         'right': '10px',  # Initial right position
-        'cursor': 'grab'  # Change cursor to grab
+        'cursor': 'grab',
+        'flexDirection': 'column'
     }),
 
     # Add place similarity dialog
@@ -699,7 +726,7 @@ app.layout = html.Div([
     dcc.Store(id='corpus-operation', data='intersection'),
 
     # Add the new corpus builder card
-    create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list),
+    create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list, titles_list=titles_list),
     # Add interval for clearing download status
     dcc.Interval(id='clear-download-status-interval', interval=6000, n_intervals=0, disabled=True),
     dcc.Store(id='all-places-store'),  # Store for caching all places for current corpus
@@ -754,76 +781,72 @@ app.index_string = '''
                 opacity: 0.7;
             }
             /* Resize handle styles */
-            .resize-handle {
+            .ui-resizable-handle {
                 position: absolute;
-                background: #94a3b8;
+                background: rgba(148, 163, 184, 0.45);
                 border-radius: 2px;
                 opacity: 0;
                 transition: opacity 0.2s;
-                z-index: 1000;
+                z-index: 1200;
             }
-            .resize-handle:hover {
+            .ui-resizable-handle:hover,
+            .ui-resizable-handle:active {
                 opacity: 1;
             }
-            .resize-handle.e {
-                width: 8px;
-                height: 100%;
-                right: -4px;
-                top: 0;
-                cursor: e-resize;
-            }
-            .resize-handle.s {
-                width: 100%;
-                height: 8px;
-                bottom: -4px;
+            .ui-resizable-n,
+            .ui-resizable-s {
                 left: 0;
-                cursor: s-resize;
+                right: 0;
+                height: 6px;
+                cursor: ns-resize;
             }
-            .resize-handle.se {
+            .ui-resizable-n {
+                top: -3px;
+            }
+            .ui-resizable-s {
+                bottom: -3px;
+            }
+            .ui-resizable-e,
+            .ui-resizable-w {
+                top: 0;
+                bottom: 0;
+                width: 6px;
+                cursor: ew-resize;
+            }
+            .ui-resizable-e {
+                right: -3px;
+            }
+            .ui-resizable-w {
+                left: -3px;
+            }
+            .ui-resizable-se,
+            .ui-resizable-ne,
+            .ui-resizable-sw,
+            .ui-resizable-nw {
                 width: 12px;
                 height: 12px;
+                border-radius: 50%;
+                cursor: pointer;
+            }
+            .ui-resizable-se {
                 right: -6px;
                 bottom: -6px;
                 cursor: se-resize;
-                border-radius: 50%;
             }
-            .resize-handle.w {
-                width: 8px;
-                height: 100%;
-                left: -4px;
-                top: 0;
-                cursor: w-resize;
-            }
-            .resize-handle.n {
-                width: 100%;
-                height: 8px;
-                top: -4px;
-                left: 0;
-                cursor: n-resize;
-            }
-            .resize-handle.sw {
-                width: 12px;
-                height: 12px;
-                left: -6px;
-                bottom: -6px;
-                cursor: sw-resize;
-                border-radius: 50%;
-            }
-            .resize-handle.ne {
-                width: 12px;
-                height: 12px;
+            .ui-resizable-ne {
                 right: -6px;
                 top: -6px;
                 cursor: ne-resize;
-                border-radius: 50%;
             }
-            .resize-handle.nw {
-                width: 12px;
-                height: 12px;
+            .ui-resizable-sw {
+                left: -6px;
+                bottom: -6px;
+                cursor: sw-resize;
+            }
+            .ui-resizable-nw {
                 left: -6px;
                 top: -6px;
                 cursor: nw-resize;
-                border-radius: 50%;
             }
         </style>
     </head>
@@ -1177,18 +1200,16 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
 
     if not matching_places:
         top = coll_df.sort_values(by='count', ascending=False).head(20)
-        return html.Div([
-            html.Div("No place matches found. Showing top collocations instead:", style={'color': '#475569', 'fontSize': '0.8rem', 'marginBottom': '0.5rem'}),
-            dash_table.DataTable(
-                columns=[{'name': 'Word', 'id': 'word'}, {'name': 'Count', 'id': 'count'}],
-                data=top[['word', 'count']].to_dict('records'),
-                style_table={'overflowX': 'auto', 'fontSize': '0.75rem'},
-                style_cell={'padding': '4px'},
-                page_action='none',
-                fixed_rows={'headers': True},
-                sort_action='native'
-            )
-        ]), []
+        rows = top[['word', 'count']].to_dict('records')
+        table = build_html_table(rows, [('word', 'Word'), ('count', 'Count')])
+        content = html.Div([
+            html.Div(
+                "No place matches found. Showing top collocations instead:",
+                style={'color': '#475569', 'fontSize': '0.8rem', 'marginBottom': '0.5rem'}
+            ),
+            table
+        ], style={'display': 'flex', 'flexDirection': 'column', 'flex': '1 1 auto', 'minHeight': 0})
+        return content, []
 
     match_df_raw = pd.DataFrame(matching_places)
 
@@ -1209,32 +1230,16 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
         .sort_values(by='Total count', ascending=False)
         .head(50)
     )
-    table = dash_table.DataTable(
-        columns=[
-            {'name': 'Place', 'id': 'Place'},
-            {'name': 'Tokens', 'id': 'Tokens'},
-            {'name': 'Total count', 'id': 'Total count'},
-            {'name': 'Token', 'id': 'Token'}
-        ],
-        data=match_df.to_dict('records'),
-        style_table={'overflowX': 'auto', 'fontSize': '0.75rem'},
-        style_cell={
-            'padding': '4px',
-            'whiteSpace': 'pre-line',
-            'textAlign': 'left'
-        },
-        style_data_conditional=[
-            {
-                'if': {'column_id': 'Token'},
-                'display': 'none'
-            }
-        ],
-        page_action='none',
-        fixed_rows={'headers': True},
-        sort_action='native'
+    table_rows = match_df[['Place', 'Tokens', 'Total count']].to_dict('records')
+    table = build_html_table(
+        table_rows,
+        [('Place', 'Place'), ('Tokens', 'Tokens'), ('Total count', 'Total count')]
     )
+    content = html.Div([
+        table
+    ], style={'display': 'flex', 'flexDirection': 'column', 'flex': '1 1 auto', 'minHeight': 0})
     tokens = match_df['Token'].dropna().astype(str).unique().tolist()
-    return table, tokens
+    return content, tokens
 
 @app.callback(
     Output('collocation-highlight', 'data'),
@@ -1278,7 +1283,7 @@ def toggle_place_names_container(n_clicks, current_style):
         raise PreventUpdate
     
     new_style = dict(current_style)
-    new_style['display'] = 'block' if current_style.get('display') == 'none' else 'none'
+    new_style['display'] = 'flex' if current_style.get('display') == 'none' else 'none'
     return new_style
 
 # Close button callback
@@ -2045,7 +2050,7 @@ def update_place_summary(click_data, selected_place, current_style, current_book
                 ])
             ])
             new_style = dict(current_style)
-            new_style['display'] = 'block'
+            new_style['display'] = 'flex'
             return new_style, summary
         except Exception as e:
             print(f"Error updating place summary (map): {e}")
@@ -2102,7 +2107,7 @@ def update_place_summary(click_data, selected_place, current_style, current_book
                 ])
             ])
             new_style = dict(current_style)
-            new_style['display'] = 'block'
+            new_style['display'] = 'flex'
             return new_style, summary
         except Exception as e:
             print(f"Error updating place summary (list): {e}")
@@ -2251,7 +2256,7 @@ def update_corpus_stats(filters, current_books):
 def toggle_corpus_controls(n1, n2, current_style):
     if n1 or n2:
         new_style = dict(current_style)
-        new_style['display'] = 'block' if current_style.get('display') == 'none' else 'none'
+        new_style['display'] = 'flex' if current_style.get('display') == 'none' else 'none'
         return new_style
     return current_style
 
@@ -2266,7 +2271,7 @@ def toggle_corpus_controls(n1, n2, current_style):
 def toggle_visualization_controls(n1, n2, current_style):
     if n1 or n2:
         new_style = dict(current_style)
-        new_style['display'] = 'block' if current_style.get('display') == 'none' else 'none'
+        new_style['display'] = 'flex' if current_style.get('display') == 'none' else 'none'
         return new_style
     return current_style
 
@@ -2447,7 +2452,7 @@ def update_loading_state(build_clicks, map_figure, current_style):
     # Show loading when build button is clicked
     if trigger_id == 'build-corpus-btn' and build_clicks:
         new_style = dict(current_style)
-        new_style['display'] = 'block'
+        new_style['display'] = 'flex'
         return new_style
     
     # Hide loading when map is updated
@@ -2930,70 +2935,37 @@ def update_corpus_info_and_table(_, filter_data, current_books, current_filters)
         if df.empty:
             table_section = html.Div("No books found in corpus.", style={'color': '#666'})
         else:
-            # Wrap DataTable in a div to move horizontal scrollbar to the top
-            table_section = html.Div([
-                dash_table.DataTable(
-                    columns=[
-                        {"name": "Title", "id": "title", "presentation": "markdown"},
-                        {"name": "Author", "id": "author"},
-                        {"name": "≡", "id": "category"},
-                        {"name": "📅\ufe0e", "id": "year"},
-                        {"name": "◆", "id": "placename_count"}
-                    ],
-                    data=[{
-                        **row.to_dict(),
-                        "title": f"[ {(row['title'] or '')[:20] + ('…' if row['title'] and len(row['title']) > 20 else '')} ](https://www.nb.no/items/{row['urn']})",
-                        "author": (row['author'] or '')[:20] + ('…' if row['author'] and len(row['author']) > 20 else ''),
-                        "_title_full": row['title'] or '',
-                        "_author_full": row['author'] or ''
-                    } for _, row in df.iterrows()],
-                    tooltip_data=[
-                        {"title": {"value": row['title'] or '', "type": "markdown"}, "author": {"value": row['author'] or '', "type": "markdown"}} for _, row in df.iterrows()
-                    ],
-                    style_header={
-                        'backgroundColor': '#f8fafc',
-                        'color': '#4B6CB7',
-                        'fontWeight': '500',
-                        'fontSize': '0.85rem',
-                        'borderBottom': '1px solid #e5e7eb',
-                    },
-                    style_table={
-                        "maxHeight": "350px",
-                        "overflowY": "auto",
-                        "overflowX": "hidden",
-                        "minWidth": "100%"
-                    },
-                    style_cell={
-                        "fontSize": "0.75rem",
-                        "padding": "2px 4px",
-                        "whiteSpace": "pre-line",
-                        "overflow": "hidden",
-                        "textOverflow": "ellipsis",
-                        "maxWidth": "90px",
-                        "minWidth": "40px",
-                        "wordBreak": "break-word"
-                    },
-                    style_cell_conditional=[
-                        {"if": {"column_id": "title"}, "maxWidth": "110px", "minWidth": "60px"},
-                        {"if": {"column_id": "author"}, "maxWidth": "80px", "minWidth": "40px"},
-                        {"if": {"column_id": "category"}, "maxWidth": "60px", "minWidth": "40px", "textAlign": "center"},
-                        {"if": {"column_id": "year"}, "maxWidth": "36px", "minWidth": "26px", "textAlign": "center"},
-                        {"if": {"column_id": "placename_count"}, "maxWidth": "36px", "minWidth": "26px", "textAlign": "center"}
-                    ],
-                    style_data_conditional=[
-                        {"if": {"row_index": "odd"}, "backgroundColor": "#f6f6f6"}
-                    ],
-                    markdown_options={"link_target": "_blank"},
-                    page_action="none",
-                    fixed_rows={"headers": True},
-                    sort_action="native",
-                    fill_width=True,
-                    id="corpus-browse-datatable",
-                    tooltip_duration=None
+            table_rows = []
+            for _, row in df.iterrows():
+                title_text, full_title = truncate_text(row['title'] or '', 60)
+                author_text, full_author = truncate_text(row['author'] or '', 40)
+                title_cell = html.A(
+                    title_text or "(Untitled)",
+                    href=f"https://www.nb.no/items/{row['urn']}",
+                    target="_blank",
+                    title=full_title or "NB.no"
                 )
-            ], style={
-                "width": "100%"
-            })
+                author_cell = html.Span(author_text, title=full_author) if full_author else ""
+                table_rows.append({
+                    'title': title_cell,
+                    'author': author_cell,
+                    'category': row['category'] or '',
+                    'year': int(row['year']) if pd.notnull(row['year']) else '',
+                    'placename_count': int(row['placename_count']) if pd.notnull(row['placename_count']) else ''
+                })
+            table_section = build_html_table(
+                table_rows,
+                [
+                    ('title', 'Title'),
+                    ('author', 'Author'),
+                    ('category', '≡'),
+                    ('year', '📅'),
+                    ('placename_count', '◆')
+                ],
+                table_class="table table-sm table-striped table-hover",
+                container_style={'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'auto'}
+            )
+
         return (
             f"{info['book_count']:,}",
             f"{info['author_count']:,}",
@@ -3120,6 +3092,33 @@ def update_filtered_data_auto_resample(all_places_json, filters, resample_clicks
     # Always resample on any change
     sampled_df = sample_places(all_places_df, n=n)
     return sampled_df.to_json(date_format='iso', orient='split')
+
+
+def truncate_text(value: str, length: int = 40) -> tuple[str, str]:
+    if not value:
+        return "", ""
+    text = str(value)
+    return (text if len(text) <= length else text[:length] + "…"), text
+
+
+def build_html_table(rows, columns, *, table_class="table table-sm table-striped", container_style=None):
+    header_cells = [html.Th(label, scope="col") for _, label in columns]
+    body_rows = []
+    for row in rows:
+        cells = []
+        for key, _ in columns:
+            cells.append(html.Td(row.get(key, "")))
+        body_rows.append(html.Tr(cells))
+    table = html.Table(
+        [html.Thead(html.Tr(header_cells)), html.Tbody(body_rows)],
+        className=table_class,
+        style={'margin': 0, 'tableLayout': 'fixed', 'width': '100%'}
+    )
+    wrapper_style = {'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'auto'}
+    if container_style:
+        wrapper_style.update(container_style)
+    return html.Div(table, className="table-flex-container", style=wrapper_style)
+
 
 # Run Server
 if __name__ == '__main__':

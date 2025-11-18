@@ -1,10 +1,66 @@
 import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State, callback, dash, ctx, no_update
 import pandas as pd
+from functools import lru_cache
 from ...utils.corpus_build import corpus_builder, get_corpus_stats, count_words
 from ...utils.db import get_db_connection
 import dhlab as dh
-from dash import dcc
+
+DEFAULT_YEAR_RANGE = [1814, 1905]
+
+
+def _format_title_label(title: str, year) -> str:
+    if not title:
+        return ""
+    year_str = "(n.d.)"
+    if year:
+        try:
+            year_int = int(year)
+            year_str = f"({year_int})"
+        except (ValueError, TypeError):
+            pass
+    return f"{title} {year_str}"
+
+
+def _split_authors(author_value):
+    if not author_value:
+        return []
+    authors = []
+    for piece in str(author_value).split('/'):
+        trimmed = piece.strip()
+        if trimmed:
+            authors.append(trimmed)
+    return authors
+
+
+@lru_cache(maxsize=1)
+def get_filter_metadata():
+    conn = get_db_connection()
+    try:
+        df = pd.read_sql_query(
+            """
+            SELECT title, author, category, year
+            FROM corpus
+            WHERE title IS NOT NULL
+            """,
+            conn
+        )
+    finally:
+        conn.close()
+
+    if df.empty:
+        return pd.DataFrame(columns=['title_label', 'author', 'category'])
+
+    df['title_label'] = [_format_title_label(row['title'], row['year']) for _, row in df.iterrows()]
+    df['category'] = df['category'].astype(str).str.strip().replace({'nan': '', 'None': ''})
+    df['authors_list'] = df['author'].apply(_split_authors)
+
+    exploded = df.explode('authors_list')
+    exploded['author'] = exploded['authors_list'].astype(str).str.strip()
+    filtered = exploded[['title_label', 'author', 'category']].dropna(subset=['title_label'])
+    filtered['author'] = filtered['author'].replace({'None': '', 'nan': ''}).str.strip()
+    filtered['category'] = filtered['category'].replace({'None': '', 'nan': ''}).str.strip()
+    return filtered.drop_duplicates()
 
 
 def apply_book_operation(current_books, incoming_books, operation):
@@ -44,14 +100,80 @@ def fetch_place_tokens(book_ids):
         return []
     return df['token'].dropna().astype(str).tolist()
 
-def create_corpus_builder_card(categories_list=None, authors_list=None, default_filters=None):
+
+def parse_title_label(label):
+    """Split a label of the form 'Title (Year)' into title + optional year."""
+    if not label:
+        return None, None
+    text = str(label).strip()
+    if ' (' not in text or not text.endswith(')'):
+        return text, None
+    base, year_part = text.rsplit('(', 1)
+    base = base.strip()
+    year_text = year_part.rstrip(')').strip()
+    if year_text.lower().startswith('n.d'):
+        return base, None
+    try:
+        return base, int(year_text)
+    except ValueError:
+        return base, None
+
+
+def fetch_dhlabids_for_titles(title_labels):
+    """Resolve dropdown labels to their matching dhlabids."""
+    if not title_labels:
+        return []
+
+    title_map = {}
+    for label in title_labels:
+        title, year = parse_title_label(label)
+        if not title:
+            continue
+        title_map.setdefault(title, set()).add(year)
+
+    if not title_map:
+        return []
+
+    conn = get_db_connection()
+    try:
+        placeholders = ','.join(['?'] * len(title_map))
+        df = pd.read_sql_query(
+            f"SELECT dhlabid, title, year FROM corpus WHERE title IN ({placeholders})",
+            conn,
+            params=list(title_map.keys())
+        )
+    finally:
+        conn.close()
+
+    dhlabids = []
+    for _, row in df.iterrows():
+        row_title = row['title']
+        row_year = row['year']
+        allowed_years = title_map.get(row_title, set())
+        if not allowed_years:
+            continue
+        if None in allowed_years:
+            dhlabids.append(int(row['dhlabid']))
+            continue
+        try:
+            row_year_int = int(row_year) if row_year is not None else None
+        except (ValueError, TypeError):
+            row_year_int = None
+        if row_year_int in allowed_years:
+            dhlabids.append(int(row['dhlabid']))
+    return dhlabids
+
+
+def create_corpus_builder_card(categories_list=None, authors_list=None, titles_list=None, default_filters=None):
     """Creates a Bootstrap card component for corpus building."""
     if categories_list is None:
         categories_list = []
     if authors_list is None:
         authors_list = []
+    if titles_list is None:
+        titles_list = []
     if default_filters is None:
-        default_filters = {'categories': []}
+        default_filters = {'categories': [], 'titles': []}
 
     return dbc.Card([
         dbc.CardHeader([
@@ -75,11 +197,11 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                         html.Label("Year Range", className="form-label"),
                         dcc.RangeSlider(
                             id='corpus-year-range',
-                            min=1814,
-                            max=1905,
+                            min=DEFAULT_YEAR_RANGE[0],
+                            max=DEFAULT_YEAR_RANGE[1],
                             step=1,
-                            value=[1814, 1905],
-                            marks={i: str(i) for i in range(1814, 1906, 10)},
+                            value=DEFAULT_YEAR_RANGE.copy(),
+                            marks={i: str(i) for i in range(DEFAULT_YEAR_RANGE[0], DEFAULT_YEAR_RANGE[1] + 1, 10)},
                             className="mb-3"
                         )
                     ], className="mb-4"),
@@ -101,6 +223,16 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, default_
                             value=default_filters.get('authors', []),
                             multi=True,
                             placeholder="Select authors..."
+                        )
+                    ], className="mb-4"),
+                    html.Div([
+                        html.Label("Select Titles", className="form-label"),
+                        dcc.Dropdown(
+                            id='corpus-title-dropdown',
+                            options=[{'label': title, 'value': title} for title in titles_list],
+                            value=default_filters.get('titles', []),
+                            multi=True,
+                            placeholder="Search and select works..."
                         )
                     ], className="mb-4"),
                     html.Div([
@@ -273,6 +405,7 @@ def toggle_card_visibility(n1, n2, builder_style, controls_style):
     [Input("build-corpus-btn", "n_clicks")],
     [State("corpus-category-dropdown", "value"),
      State("corpus-author-dropdown", "value"),
+     State("corpus-title-dropdown", "value"),
      State("corpus-year-range", "value"),
      State("corpus-max-places-slider", "value"),
      State("current-filters", "data"),
@@ -284,6 +417,7 @@ def build_corpus_and_show_stats(
     n_clicks,
     categories,
     authors,
+    titles,
     year_range,
     max_places,
     current_filters,
@@ -298,31 +432,136 @@ def build_corpus_and_show_stats(
     # Show spinner/message while building
     status = dbc.Spinner("Preparing books...", color="primary", size="sm", fullscreen=False, spinner_style={"width": "1.5rem", "height": "1.5rem"})
     new_filters = current_filters.copy()
-    new_filters['categories'] = categories if categories else []
-    new_filters['authors'] = authors if authors else []
-    new_filters['year_range'] = year_range if year_range else [1814, 1905]
+    categories = categories or []
+    authors = authors or []
+    titles = titles or []
+    year_range = list(year_range or DEFAULT_YEAR_RANGE)
+    new_filters['categories'] = categories
+    new_filters['authors'] = authors
+    new_filters['titles'] = titles
+    new_filters['year_range'] = year_range
     new_filters['max_places'] = max_places
     new_filters['corpus_source'] = 'Corpus Builder'
     op = (operation or "intersection").lower()
     new_filters['last_operation'] = op
-    category = categories[0] if categories else None
-    author = authors[0] if authors else None
-    dhlabids = corpus_builder.build_corpus(
-        category=category,
-        year_range=tuple(year_range) if year_range else None,
-        author=author
-    )
+
+    metadata_filters_applied = bool(categories) or bool(authors) or (year_range != DEFAULT_YEAR_RANGE)
+    metadata_books = set()
+    if metadata_filters_applied:
+        category = categories[0] if categories else None
+        target_years = tuple(year_range) if year_range else None
+        if authors:
+            for author in authors:
+                metadata_books.update(
+                    corpus_builder.build_corpus(
+                        category=category,
+                        year_range=target_years,
+                        author=author
+                    )
+                )
+        else:
+            metadata_books.update(
+                corpus_builder.build_corpus(
+                    category=category,
+                    year_range=target_years,
+                    author=None
+                )
+            )
+
+    title_books = set(fetch_dhlabids_for_titles(titles))
+
+    if titles:
+        if metadata_filters_applied:
+            incoming_books = sorted(metadata_books & title_books or title_books)
+        else:
+            incoming_books = sorted(title_books)
+    else:
+        incoming_books = sorted(metadata_books)
+
+    if not incoming_books:
+        status_error = html.Span("Fant ingen bøker for filteret", style={"color": "#dc2626", "fontWeight": "500"})
+        return dash.no_update, status_error, dash.no_update
+
     current_books = current_books or []
-    updated_books = apply_book_operation(current_books, dhlabids, operation=op)
+    updated_books = apply_book_operation(current_books, incoming_books, operation=op)
     place_tokens = fetch_place_tokens(updated_books)
     # Optionally, show a success message
     status_done = html.Span("Books added!", style={"color": "#059669", "fontWeight": "500"})
     new_filters['selected_tokens'] = place_tokens
     return new_filters, status_done, updated_books
 
+
+def _build_option_list(values):
+    return [{'label': value, 'value': value} for value in values]
+
+
+def _sanitize_selection(selected, allowed):
+    if not selected:
+        return []
+    allowed_set = set(allowed)
+    return [value for value in selected if value in allowed_set]
+
+
+@callback(
+    [
+        Output("corpus-category-dropdown", "options"),
+        Output("corpus-author-dropdown", "options"),
+        Output("corpus-title-dropdown", "options"),
+        Output("corpus-category-dropdown", "value", allow_duplicate=True),
+        Output("corpus-author-dropdown", "value", allow_duplicate=True),
+        Output("corpus-title-dropdown", "value", allow_duplicate=True),
+    ],
+    [
+        Input("corpus-category-dropdown", "value"),
+        Input("corpus-author-dropdown", "value"),
+        Input("corpus-title-dropdown", "value"),
+    ],
+    prevent_initial_call="initial_duplicate"
+)
+def synchronize_metadata_filters(selected_categories, selected_authors, selected_titles):
+    metadata = get_filter_metadata()
+    if metadata.empty:
+        return dash.no_update, dash.no_update, dash.no_update, selected_categories, selected_authors, selected_titles
+
+    filtered = metadata.copy()
+    if selected_categories:
+        filtered = filtered[filtered['category'].isin(selected_categories)]
+    if selected_authors:
+        filtered = filtered[filtered['author'].isin(selected_authors)]
+    if selected_titles:
+        filtered = filtered[filtered['title_label'].isin(selected_titles)]
+
+    if filtered.empty:
+        filtered = metadata
+
+    available_categories = sorted([value for value in filtered['category'].dropna().unique() if value])
+    available_authors = sorted([value for value in filtered['author'].dropna().unique() if value])
+    available_titles = sorted([value for value in filtered['title_label'].dropna().unique() if value])
+
+    if not available_categories:
+        available_categories = sorted([value for value in metadata['category'].dropna().unique() if value])
+    if not available_authors:
+        available_authors = sorted([value for value in metadata['author'].dropna().unique() if value])
+    if not available_titles:
+        available_titles = sorted([value for value in metadata['title_label'].dropna().unique() if value])
+
+    sanitized_categories = _sanitize_selection(selected_categories, available_categories)
+    sanitized_authors = _sanitize_selection(selected_authors, available_authors)
+    sanitized_titles = _sanitize_selection(selected_titles, available_titles)
+
+    return (
+        _build_option_list(available_categories),
+        _build_option_list(available_authors),
+        _build_option_list(available_titles),
+        sanitized_categories,
+        sanitized_authors,
+        sanitized_titles,
+    )
+
 @callback(
     [Output("corpus-category-dropdown", "value"),
      Output("corpus-author-dropdown", "value"),
+     Output("corpus-title-dropdown", "value"),
      Output("corpus-year-range", "value"),
      Output("corpus-max-places-slider", "value"),
      Output("current-filters", "data", allow_duplicate=True),
@@ -336,23 +575,24 @@ def build_corpus_and_show_stats(
 )
 def reset_corpus_filters(n_clicks_timestamp, n_clicks, color, title):
     """Require double-click to confirm reset. On first click, change color/title. On second click within 3s, reset."""
-    ctx = callback_context
+    ctx = dash.callback_context
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
     # Store last click timestamp in a hidden div or use local state
     if color != "danger":
         # First click: warn
-        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, "danger", "Click again to confirm reset"
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, "danger", "Click again to confirm reset"
     else:
         # Second click: reset
         default_filters = {
             'categories': [],
             'authors': [],
-            'year_range': [1814, 1905],
+            'titles': [],
+            'year_range': DEFAULT_YEAR_RANGE.copy(),
             'max_places': 500,
             'corpus_source': 'Corpus Builder'
         }
-        return [], [], [1814, 1905], 500, default_filters, "secondary", "Clear Filters (double-click to confirm)"
+        return [], [], [], DEFAULT_YEAR_RANGE.copy(), 500, default_filters, "secondary", "Clear Filters (double-click to confirm)"
 
 # New simplified callback: only updates filters/global state
 @callback(
