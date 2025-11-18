@@ -49,9 +49,13 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Verified the Dash app runs via `pdm run env PYTHONPATH=src python src/dash_imagination/app.py`, ensuring Plotly 6 trace classes (`go.Scattermap`, `go.Densitymap`) are available in local debugging sessions.
 - Let the heatmap render from the full corpus stored in `all-places-store` while keeping scatter markers sampled, so users get dense overviews without overwhelming mobile devices.
 - Moved component imports (corpus/map/place dialogs) below the Dash app instantiation to guarantee callback registration on Cloud Run and other WSGI hosts.
+- Introduced Places-pane tabs (Frekvens, Sampling, Kollokasjoner) so users can inspect og nedlaste underlister før de aktiverer kartvisningen. Hver fane respekterer `max_places` og har egen “Vis steder”-knapp og CSV-eksport.
+- Collokasjonshighlight er erstattet av en kollokasjonsfane i Places og et register over valgte tokens (`selected_tokens`), så heatmap/kart forholder seg til samme domino som andre faner.
+- Nedlastingsknapper ble lagt til for alle tre Places-lister (token, moderne navn, frekvens, bokfrekvens, lat/lon).
 
 **Notes**:
 - Follow-up: monitor other callbacks for accidental imports of `dash_imagination.utils.global_state`; none remain after updating `app.py`.
+- Follow-up: vurder en checkbox i Places-panelet for “Bruk denne listen i heatmap” slik at brukeren kan tvinge heatmapet til å følge fanens subsett i stedet for hele korpuset.
 
 ### November 12, 2025
 **Progress**:

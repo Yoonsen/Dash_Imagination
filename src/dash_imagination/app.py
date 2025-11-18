@@ -671,6 +671,15 @@ app.layout = html.Div([
                 ], id='resample-places', className="btn btn-primary w-100")
             ], className="mb-4"),
             html.Div([
+                html.Div([
+                    dbc.Checklist(
+                        options=[{"label": "Bruk underliste i heatmap", "value": "subset"}],
+                        value=[],
+                        id='heatmap-subset-checkbox',
+                        switch=True,
+                        persistence=True
+                    )
+                ], className="mb-2", style={'fontSize': '0.85rem'}),
                 dcc.Tabs(
                     id='places-tabs',
                     value='frequency',
@@ -750,6 +759,8 @@ app.layout = html.Div([
     dcc.Store(id='places-frequency-data'),
     dcc.Store(id='places-sample-data'),
     dcc.Store(id='places-collocation-data'),
+    dcc.Store(id='places-active-mode', data='frequency'),
+    dcc.Store(id='heatmap-subset-mode', data='all'),
 
     # Add the new corpus builder card
     create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list, titles_list=titles_list),
@@ -1290,18 +1301,20 @@ def set_collocation_highlight(apply_clicks, clear_clicks, tokens):
     Output('places-frequency-data', 'data'),
     Output('places-sample-data', 'data'),
     Output('places-collocation-data', 'data'),
+    Output('places-active-mode', 'data'),
     Input('all-places-store', 'data'),
     Input('corpus-max-places-slider', 'value'),
     Input('resample-places', 'n_clicks'),
-    Input('collocation-place-tokens', 'data')
+    Input('collocation-place-tokens', 'data'),
+    Input('places-tabs', 'value')
 )
-def update_places_datasets(all_places_json, max_places, resample_n, collocation_tokens):
+def update_places_datasets(all_places_json, max_places, resample_n, collocation_tokens, active_tab):
     import pandas as pd
     max_places = max_places or 500
     base_columns = ['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']
     empty_json = pd.DataFrame(columns=base_columns).to_json(date_format='iso', orient='split')
     if not all_places_json:
-        return empty_json, empty_json, empty_json
+        return empty_json, empty_json, empty_json, active_tab or 'frequency'
 
     df = load_places_frame(all_places_json)
     if df.empty:
@@ -1328,7 +1341,8 @@ def update_places_datasets(all_places_json, max_places, resample_n, collocation_
     return (
         freq_df.to_json(date_format='iso', orient='split'),
         sample_df.to_json(date_format='iso', orient='split'),
-        colloc_df.to_json(date_format='iso', orient='split')
+        colloc_df.to_json(date_format='iso', orient='split'),
+        active_tab or 'frequency'
     )
 
 
@@ -1420,12 +1434,15 @@ def download_collocation_places(n_clicks, colloc_json):
 
 @app.callback(
     Output('current-filters', 'data', allow_duplicate=True),
+    Output('heatmap-subset-mode', 'data', allow_duplicate=True),
     Input('apply-places-frequency', 'n_clicks'),
     Input('apply-places-sampling', 'n_clicks'),
     Input('apply-places-collocations', 'n_clicks'),
     State('places-frequency-data', 'data'),
     State('places-sample-data', 'data'),
     State('places-collocation-data', 'data'),
+    State('places-active-mode', 'data'),
+    State('heatmap-subset-checkbox', 'value'),
     State('place-search', 'value'),
     State('corpus-max-places-slider', 'value'),
     State('current-filters', 'data'),
@@ -1433,6 +1450,7 @@ def download_collocation_places(n_clicks, colloc_json):
 )
 def apply_places_to_map(freq_clicks, sample_clicks, colloc_clicks,
                         freq_json, sample_json, colloc_json,
+                        active_tab, heatmap_subset_value,
                         search_term, max_places, current_filters):
     ctx = dash.callback_context
     if not ctx.triggered:
@@ -1460,7 +1478,8 @@ def apply_places_to_map(freq_clicks, sample_clicks, colloc_clicks,
     new_filters['max_places'] = max_places or len(tokens)
     new_filters['places_source'] = mode
     new_filters['corpus_source'] = 'Places'
-    return new_filters
+    subset_mode = 'subset' if heatmap_subset_value else 'all'
+    return new_filters, subset_mode
 
 # Add this callback to toggle the info modal
 
