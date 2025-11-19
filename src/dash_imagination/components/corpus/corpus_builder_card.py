@@ -195,7 +195,8 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
             className="bg-success-subtle text-dark"
         ),
         dbc.CardBody([
-            dbc.Tabs([
+            html.Div(
+                dbc.Tabs([
                 dbc.Tab([
                     # Metadata Tab Content
                     html.Div([
@@ -343,9 +344,10 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                         dbc.Button("Clear highlight", id='clear-collocation-highlight', color='secondary', outline=True, size='sm', className="w-100 mb-3")
                     ])
                 ], label="Collocations", tab_id="collocations"),
-            ], id="corpus-builder-tabs", active_tab="metadata", className="flex-grow-1", style={'display': 'flex', 'flexDirection': 'column', 'minHeight': 0})
+                ], id="corpus-builder-tabs", active_tab="metadata", className="flex-grow-1")
+            , className="flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'})
         ], style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
-    ], id="corpus-builder-card", className="shadow position-absolute m-3 dialog-card d-flex flex-column", style={
+    ], id="corpus-builder-card", className="shadow position-absolute m-3 dialog-card", style={
         "width": f"{DEFAULT_CARD_SIZES['corpus-builder']['width']}px",
         "height": f"{DEFAULT_CARD_SIZES['corpus-builder']['height']}px",
         "zIndex": 800,
@@ -384,16 +386,10 @@ def toggle_card_visibility(n1, n2, builder_style, controls_style):
     controls_style = controls_style or {}
     
     if button_id == "open-corpus-builder":
-        # Show builder card and ensure controls stay visible
-        builder_style["display"] = "block"
-        builder_style["width"] = "350px"
-        builder_style["height"] = "500px"
-        builder_style["zIndex"] = 800
-        builder_style["top"] = "60px"
-        builder_style["left"] = "100px"
-        # Remove transform if present
+        # Show builder card and ensure controls stay visible without overriding size presets
+        builder_style["display"] = "flex"
         builder_style.pop("transform", None)
-        controls_style["display"] = "block"
+        controls_style["display"] = "flex"
         return builder_style, controls_style
     elif button_id == "close-corpus-builder":
         # Hide builder card but keep controls visible

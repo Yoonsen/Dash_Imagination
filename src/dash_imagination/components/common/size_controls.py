@@ -17,6 +17,11 @@ CARD_DEFAULT_PRESET = {
 
 DEFAULT_CARD_SIZES = {key: SIZE_PRESETS[value].copy() for key, value in CARD_DEFAULT_PRESET.items()}
 
+# Fine-tune initial dimensions (simulate manual W+/H+ adjustments)
+DEFAULT_CARD_SIZES['corpus-controls']['width'] += 80  # One W+ click
+DEFAULT_CARD_SIZES['corpus-builder']['height'] += 160  # Two H+ clicks
+DEFAULT_CARD_SIZES['places']['height'] += 160  # Two H+ clicks
+
 
 def size_control_buttons(component_id: str):
     return html.Div([

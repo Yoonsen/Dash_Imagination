@@ -156,7 +156,7 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
         ], style={'flex': '1 1 auto', 'minHeight': 0, 'display': 'flex', 'flexDirection': 'column', 'gap': '0.75rem'}),
         # Hidden resample-container div to suppress callback errors
         html.Div(id='resample-container', style={'display': 'none'})
-    ], id='corpus-controls-container', className="position-absolute m-3 dialog-card d-flex flex-column", style={
+    ], id='corpus-controls-container', className="position-absolute m-3 dialog-card", style={
         'width': f"{DEFAULT_CARD_SIZES['corpus-controls']['width']}px",
         'height': f"{DEFAULT_CARD_SIZES['corpus-controls']['height']}px",
         'zIndex': 800,
@@ -347,7 +347,7 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
             # Status message
             html.Div(id='download-status', className="mt-2")
         ], style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'})
-    ], id='visualization-controls-container', className="position-absolute dialog-card d-flex flex-column", style={
+    ], id='visualization-controls-container', className="position-absolute dialog-card", style={
         'width': f"{DEFAULT_CARD_SIZES['visualization-controls']['width']}px",
         'height': f"{DEFAULT_CARD_SIZES['visualization-controls']['height']}px",
         'zIndex': 800,

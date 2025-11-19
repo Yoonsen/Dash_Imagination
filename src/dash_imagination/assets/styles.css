@@ -55,15 +55,51 @@ body, html {
     font-size: 0.7rem;
 }
 
-.places-tabs {
+.places-tab-panel {
     flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
     min-height: 0;
 }
 
-.places-tab-panel {
-    height: 100%;
+.places-tab-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+}
+
+.places-tab-pill {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #475569;
+    background-color: #e2e8f0;
+    border-radius: 999px;
+    padding: 2px 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.places-icon-btn {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid #dfe3eb;
+    color: #475569;
+    background-color: #fff;
+    box-shadow: none;
+    padding: 0;
+}
+
+.places-icon-btn:hover {
+    color: #0f172a;
+    border-color: #c4cad6;
+    background-color: #f8fafc;
+}
+
+.places-icon-btn .fas {
+    font-size: 0.75rem;
 }
 
 

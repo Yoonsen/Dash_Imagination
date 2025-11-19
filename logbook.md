@@ -43,6 +43,18 @@ This logbook tracks the development progress, decisions, and challenges of the I
 
 ## Development Log
 
+### November 19, 2025
+**Progress**:
+- Finished debugging the new W±/H± sizing workflow so every dialog honors its private entry in `dialog-size-store`.
+- Let the Places card keep its table inside the frame by making the tabs flex vertically with `overflow` containment on the card body.
+- Stopped the Corpus Builder from forcing 350×500 when opened via Corpus Controls; it now reuses the previously stored size.
+- Restored the classic “hidden on load” behavior so floating cards stay out of sight until their buttons are clicked.
+- Tuned default presets (one W+ for Corpus Controls, two H+ for Corpus Builder and Places) so common laptop sizes look right on first open.
+
+**Notes**:
+- Once a few sessions settle we can revisit the default presets per card; the store already supports swapping them without code changes.
+- Keep an eye out for other callbacks that might run on first render without `prevent_initial_call` and flip visibility unexpectedly.
+
 ### November 13, 2025
 **Progress**:
 - Replaced the remaining reference to the global `CorpusState` with session-local data from `current-dhlabids-store`, preventing corpus changes from bleeding across users on Cloud Run.

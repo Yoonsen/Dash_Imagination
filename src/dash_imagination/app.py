@@ -210,9 +210,56 @@ def _apply_size_to_style(store, card_key, current_style):
     return style
 
 
-def build_places_tab(summary_id, table_id, download_btn_id, download_id, apply_btn_id):
+def build_places_tab(summary_id, table_id, download_btn_id, download_id, apply_btn_id,
+                     action_prefix=None, include_resample=False,
+                     activate_btn_id=None, source_key=None, activate_title=None):
+    def _normalize_prefix(prefix):
+        if prefix is None:
+            return []
+        if isinstance(prefix, (list, tuple)):
+            return list(prefix)
+        return [prefix]
+
+    action_children = _normalize_prefix(action_prefix)
+    if activate_btn_id and source_key:
+        action_children.append(
+            dbc.Button(
+                html.I(className="far fa-lightbulb"),
+                id=activate_btn_id,
+                color="light",
+                size="sm",
+                className="places-icon-btn places-lamp-btn",
+                title=activate_title or "Vis denne listen på kartet",
+                n_clicks=0
+            )
+        )
+    if include_resample:
+        action_children.append(
+            dbc.Button(
+                html.I(className="fas fa-sync-alt"),
+                id='resample-places',
+                color="light",
+                size="sm",
+                className="places-icon-btn",
+                title="Resample places"
+            )
+        )
+    action_children.append(
+        dbc.Button(
+            html.I(className="fas fa-arrow-down"),
+            id=download_btn_id,
+            color="light",
+            size="sm",
+            className="places-icon-btn",
+            title="Last ned CSV"
+        )
+    )
+
+    toolbar = html.Div(action_children, className="places-tab-toolbar") if action_children else None
+
     return html.Div([
         html.Div(id=summary_id, className="text-muted", style={'fontSize': '0.85rem', 'flex': '0 0 auto'}),
+        toolbar,
         html.Div(id=table_id, style={
             'flex': '1 1 auto',
             'minHeight': 0,
@@ -222,12 +269,14 @@ def build_places_tab(summary_id, table_id, download_btn_id, download_id, apply_b
             'padding': '4px',
             'backgroundColor': '#fff'
         }),
-        html.Div([
-            dbc.Button("Last ned CSV", id=download_btn_id, color="secondary", className="w-100 mb-2"),
-            dbc.Button("Vis steder", id=apply_btn_id, color="primary", className="w-100")
-        ], style={'flex': '0 0 auto'}),
         dcc.Download(id=download_id)
-    ], className="places-tab-panel", style={'display': 'flex', 'flexDirection': 'column', 'height': '100%', 'minHeight': 0, 'gap': '0.5rem'})
+    ], className="places-tab-panel", style={
+        'display': 'flex',
+        'flexDirection': 'column',
+        'flex': '1 1 auto',
+        'minHeight': 0,
+        'gap': '0.5rem'
+    })
 
 # Database Connection & Queries
 def pdquery(conn, query, params=()):
@@ -780,7 +829,7 @@ app.layout = html.Div([
             'display': 'flex',
             'flexDirection': 'column'
         })
-    ], id='place-summary-container', className="position-absolute dialog-card d-flex flex-column", style={
+    ], id='place-summary-container', className="position-absolute dialog-card", style={
         'width': f"{DEFAULT_CARD_SIZES['place-summary']['width']}px",
         'height': f"{DEFAULT_CARD_SIZES['place-summary']['height']}px",
         'minWidth': '300px',
@@ -828,11 +877,7 @@ app.layout = html.Div([
                     value=500,
                     marks={i: str(i) for i in range(500, 2001, 500)},
                     className="mb-3"
-                ),
-                html.Button([
-                    html.I(className="fas fa-sync-alt me-2"),
-                    "Resample Places"
-                ], id='resample-places', className="btn btn-primary w-100")
+                )
             ], className="mb-4"),
             html.Div([
                 html.Div([
@@ -844,46 +889,62 @@ app.layout = html.Div([
                         persistence=True
                     )
                 ], className="mb-2", style={'fontSize': '0.85rem', 'flex': '0 0 auto'}),
-                dcc.Tabs(
-                    id='places-tabs',
-                    value='frequency',
-                    children=[
-                        dcc.Tab(label="Frekvens", value='frequency', children=[
-                            build_places_tab(
-                                'places-frequency-summary',
-                                'places-frequency-table',
-                                'download-places-frequency-btn',
-                                'download-places-frequency',
-                                'apply-places-frequency'
-                            )
-                        ]),
-                        dcc.Tab(label="Sampling", value='sampling', children=[
-                            build_places_tab(
-                                'places-sampling-summary',
-                                'places-sampling-table',
-                                'download-places-sampling-btn',
-                                'download-places-sampling',
-                                'apply-places-sampling'
-                            )
-                        ]),
-                        dcc.Tab(label="Kollokasjoner", value='collocations', children=[
-                            build_places_tab(
-                                'places-collocation-summary',
-                                'places-collocation-table',
-                                'download-places-collocation-btn',
-                                'download-places-collocations',
-                                'apply-places-collocations'
-                            )
-                        ])
-                    ],
-                    className="flex-grow-1 places-tabs"
+                html.Div(
+                    dbc.Tabs(
+                        [
+                            dbc.Tab([
+                                build_places_tab(
+                                    'places-frequency-summary',
+                                    'places-frequency-table',
+                                    'download-places-frequency-btn',
+                                    'download-places-frequency',
+                                    'apply-places-frequency',
+                                    action_prefix=html.Span("Frekvenskutt", className="places-tab-pill"),
+                                    activate_btn_id='activate-places-frequency',
+                                    source_key='frequency',
+                                    activate_title="Vis frekvenslisten på kartet"
+                                )
+                            ], label="Frekvens", tab_id="frequency"),
+                            dbc.Tab([
+                                build_places_tab(
+                                    'places-sampling-summary',
+                                    'places-sampling-table',
+                                    'download-places-sampling-btn',
+                                    'download-places-sampling',
+                                    'apply-places-sampling',
+                                    include_resample=True,
+                                    activate_btn_id='activate-places-sampling',
+                                    source_key='sampling',
+                                    activate_title="Vis eksempellisten på kartet"
+                                )
+                            ], label="Sampling", tab_id="sampling"),
+                            dbc.Tab([
+                                build_places_tab(
+                                    'places-collocation-summary',
+                                    'places-collocation-table',
+                                    'download-places-collocation-btn',
+                                    'download-places-collocations',
+                                    'apply-places-collocations',
+                                    activate_btn_id='activate-places-collocations',
+                                    source_key='collocations',
+                                    activate_title="Vis kollokasjonslisten på kartet"
+                                )
+                            ], label="Kollokasjoner", tab_id="collocations"),
+                        ],
+                        id='places-tabs',
+                        active_tab='frequency',
+                        className="flex-grow-1"
+                    ),
+                    className="flex-grow-1 d-flex flex-column",
+                    style={'minHeight': 0, 'gap': '0.75rem'}
                 )
             ], id='place-names-list', style={
                 'flex': '1 1 auto',
                 'minHeight': 0,
                 'display': 'flex',
                 'flexDirection': 'column',
-                'gap': '0.5rem'
+                'gap': '0.5rem',
+                'overflow': 'hidden'
             })
         ], style={
             'flex': '1 1 auto',
@@ -891,7 +952,7 @@ app.layout = html.Div([
             'display': 'flex',
             'flexDirection': 'column'
         })
-    ], id='place-names-container', className="position-absolute dialog-card d-flex flex-column", style={
+    ], id='place-names-container', className="position-absolute dialog-card", style={
         'width': f"{DEFAULT_CARD_SIZES['places']['width']}px",
         'height': f"{DEFAULT_CARD_SIZES['places']['height']}px",
         'minWidth': '320px',
@@ -1473,10 +1534,13 @@ def set_collocation_highlight(apply_clicks, clear_clicks, tokens):
     Input('corpus-max-places-slider', 'value'),
     Input('resample-places', 'n_clicks'),
     Input('collocation-place-tokens', 'data'),
-    Input('places-tabs', 'value')
+    Input('places-tabs', 'active_tab'),
+    State('places-sample-data', 'data')
 )
-def update_places_datasets(all_places_json, max_places, resample_n, collocation_tokens, active_tab):
+def update_places_datasets(all_places_json, max_places, resample_n, collocation_tokens, active_tab, current_sample_json):
     import pandas as pd
+    ctx = dash.callback_context
+    triggered = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
     max_places = max_places or 500
     base_columns = ['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']
     empty_json = pd.DataFrame(columns=base_columns).to_json(date_format='iso', orient='split')
@@ -1492,7 +1556,15 @@ def update_places_datasets(all_places_json, max_places, resample_n, collocation_
         .head(max_places)
         .reset_index(drop=True)
     )
-    sample_df = sample_places(df, n=max_places).reset_index(drop=True)
+    recompute_sample = triggered in ('all-places-store', 'resample-places') or current_sample_json is None
+    if recompute_sample:
+        sample_df = sample_places(df, n=max_places).reset_index(drop=True)
+    else:
+        sample_df = load_places_frame(current_sample_json)
+        if sample_df.empty:
+            sample_df = sample_places(df, n=max_places).reset_index(drop=True)
+        else:
+            sample_df = sample_df.head(max_places).reset_index(drop=True)
 
     tokens = set(collocation_tokens or [])
     if tokens:
@@ -1630,6 +1702,9 @@ def handle_size_buttons(n_clicks, store):
     Input('apply-places-frequency', 'n_clicks'),
     Input('apply-places-sampling', 'n_clicks'),
     Input('apply-places-collocations', 'n_clicks'),
+    Input('activate-places-frequency', 'n_clicks'),
+    Input('activate-places-sampling', 'n_clicks'),
+    Input('activate-places-collocations', 'n_clicks'),
     State('places-frequency-data', 'data'),
     State('places-sample-data', 'data'),
     State('places-collocation-data', 'data'),
@@ -1641,6 +1716,7 @@ def handle_size_buttons(n_clicks, store):
     prevent_initial_call=True
 )
 def apply_places_to_map(freq_clicks, sample_clicks, colloc_clicks,
+                        freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks,
                         freq_json, sample_json, colloc_json,
                         active_tab, heatmap_subset_value,
                         search_term, max_places, current_filters):
@@ -1648,13 +1724,13 @@ def apply_places_to_map(freq_clicks, sample_clicks, colloc_clicks,
     if not ctx.triggered:
         raise PreventUpdate
     trigger = ctx.triggered[0]['prop_id'].split('.')[0]
-    if trigger == 'apply-places-frequency':
+    if trigger in ('apply-places-frequency', 'activate-places-frequency'):
         mode = 'frequency'
         df = load_places_frame(freq_json)
-    elif trigger == 'apply-places-sampling':
+    elif trigger in ('apply-places-sampling', 'activate-places-sampling'):
         mode = 'sampling'
         df = load_places_frame(sample_json)
-    elif trigger == 'apply-places-collocations':
+    elif trigger in ('apply-places-collocations', 'activate-places-collocations'):
         mode = 'collocations'
         df = load_places_frame(colloc_json)
     else:
@@ -1672,6 +1748,30 @@ def apply_places_to_map(freq_clicks, sample_clicks, colloc_clicks,
     new_filters['corpus_source'] = 'Places'
     subset_mode = 'subset' if heatmap_subset_value else 'all'
     return new_filters, subset_mode
+
+
+@app.callback(
+    Output('activate-places-frequency', 'children'),
+    Output('activate-places-frequency', 'color'),
+    Output('activate-places-sampling', 'children'),
+    Output('activate-places-sampling', 'color'),
+    Output('activate-places-collocations', 'children'),
+    Output('activate-places-collocations', 'color'),
+    Input('current-filters', 'data')
+)
+def update_places_lamps(current_filters):
+    active = (current_filters or {}).get('places_source', 'frequency')
+
+    def lamp_props(source):
+        is_active = active == source
+        icon_class = 'fas fa-lightbulb' if is_active else 'far fa-lightbulb'
+        color = 'warning' if is_active else 'light'
+        return html.I(className=icon_class), color
+
+    freq_icon, freq_color = lamp_props('frequency')
+    sample_icon, sample_color = lamp_props('sampling')
+    colloc_icon, colloc_color = lamp_props('collocations')
+    return freq_icon, freq_color, sample_icon, sample_color, colloc_icon, colloc_color
 
 
 @app.callback(
@@ -1740,7 +1840,8 @@ def toggle_info_modal(n1, n2, is_open):
 @app.callback(
     Output('place-names-container', 'style'),
     [Input('place-names-toggle', 'n_clicks')],
-    [State('place-names-container', 'style')]
+    [State('place-names-container', 'style')],
+    prevent_initial_call=True
 )
 def toggle_place_names_container(n_clicks, current_style):
     if n_clicks is None:
