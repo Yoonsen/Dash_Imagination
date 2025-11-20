@@ -210,7 +210,8 @@ def _apply_size_to_style(store, card_key, current_style):
 
 def build_places_tab(summary_id, table_id, download_btn_id, download_id, apply_btn_id,
                      action_prefix=None, include_resample=False,
-                     activate_btn_id=None, source_key=None, activate_title=None):
+                     activate_btn_id=None, source_key=None, activate_title=None,
+                     highlight_toggle_id=None, extra_controls=None):
     def _normalize_prefix(prefix):
         if prefix is None:
             return []
@@ -228,6 +229,18 @@ def build_places_tab(summary_id, table_id, download_btn_id, download_id, apply_b
                 size="sm",
                 className="places-icon-btn places-lamp-btn",
                 title=activate_title or "Vis denne listen på kartet",
+                n_clicks=0
+            )
+        )
+    if highlight_toggle_id:
+        action_children.append(
+            dbc.Button(
+                html.I(className="far fa-highlighter"),
+                id=highlight_toggle_id,
+                color="light",
+                size="sm",
+                className="places-icon-btn",
+                title="Toggle collocation highlight",
                 n_clicks=0
             )
         )
@@ -255,7 +268,10 @@ def build_places_tab(summary_id, table_id, download_btn_id, download_id, apply_b
 
     toolbar = html.Div(action_children, className="places-tab-toolbar") if action_children else None
 
-    return html.Div([
+    children = []
+    if extra_controls is not None:
+        children.append(extra_controls)
+    children.extend([
         html.Div(id=summary_id, className="text-muted", style={'fontSize': '0.85rem', 'flex': '0 0 auto'}),
         toolbar,
         html.Div(id=table_id, style={
@@ -268,12 +284,69 @@ def build_places_tab(summary_id, table_id, download_btn_id, download_id, apply_b
             'backgroundColor': '#fff'
         }),
         dcc.Download(id=download_id)
-    ], className="places-tab-panel", style={
+    ])
+
+    return html.Div(children, className="places-tab-panel", style={
         'display': 'flex',
         'flexDirection': 'column',
         'flex': '1 1 auto',
         'minHeight': 0,
         'gap': '0.5rem'
+    })
+
+
+def create_collocation_controls():
+    return html.Div([
+        html.Label("Keywords (comma-separated)", className="form-label"),
+        dbc.Input(
+            id='collocation-words-input',
+            type='text',
+            placeholder='e.g. krig, krigen',
+            size='sm',
+            className="mb-2"
+        ),
+        html.Div([
+            html.Span("Before", className="me-1 text-muted small"),
+            dbc.Input(
+                id='collocation-before-input',
+                type='number',
+                min=1,
+                max=200,
+                step=1,
+                value=50,
+                size='sm',
+                style={'maxWidth': '90px'}
+            ),
+            html.Span("After", className="ms-3 me-1 text-muted small"),
+            dbc.Input(
+                id='collocation-after-input',
+                type='number',
+                min=1,
+                max=200,
+                step=1,
+                value=50,
+                size='sm',
+                style={'maxWidth': '90px'}
+            ),
+            dbc.Button(
+                html.Span("Go", className="px-2"),
+                id='run-collocations',
+                color='secondary',
+                size='sm',
+                className="ms-3"
+            )
+        ], className="d-flex align-items-center flex-wrap gap-1 mb-2"),
+        dcc.Loading(
+            html.Div(id='collocation-results', className="text-muted", style={'minHeight': '1.5rem'}),
+            type='default'
+        )
+    ], className="collocation-controls", style={
+        'flex': '0 0 auto',
+        'border': '1px solid #e2e8f0',
+        'borderRadius': '6px',
+        'padding': '0.75rem',
+        'backgroundColor': '#fff',
+        'boxShadow': '0 1px 2px rgba(15,23,42,0.05)'
     })
 
 # Database Connection & Queries
@@ -859,24 +932,28 @@ app.layout = html.Div([
         ),
         dbc.CardBody([
             html.Div([
-                html.Label("Search Places", className="form-label"),
-                dcc.Input(
-                    id='place-search',
-                    type='text',
-                    placeholder='Type to search...',
-                    className="form-control mb-3"
-                ),
-                html.Label("Maximum Places", className="form-label"),
-                dcc.Slider(
-                    id='corpus-max-places-slider',
-                    min=100,
-                    max=2000,
-                    step=100,
-                    value=500,
-                    marks={i: str(i) for i in range(500, 2001, 500)},
-                    className="mb-3"
-                )
-            ], className="mb-4"),
+                html.Div([
+                    html.Label("Search", className="form-label mb-1"),
+                    dcc.Input(
+                        id='place-search',
+                        type='text',
+                        placeholder='Type to search...',
+                        className="form-control"
+                    )
+                ], className="flex-fill me-md-3 mb-3 mb-md-0"),
+                html.Div([
+                    html.Label("Max places", className="form-label mb-1"),
+                    dcc.Slider(
+                        id='corpus-max-places-slider',
+                        min=100,
+                        max=2000,
+                        step=100,
+                        value=500,
+                        marks={i: str(i) for i in range(500, 2001, 500)},
+                        className="mb-1"
+                    )
+                ], className="flex-fill")
+            ], className="mb-3 d-flex flex-column flex-md-row"),
             html.Div([
                 html.Div([
                     dbc.Checklist(
@@ -925,7 +1002,9 @@ app.layout = html.Div([
                                     'apply-places-collocations',
                                     activate_btn_id='activate-places-collocations',
                                     source_key='collocations',
-                                    activate_title="Vis kollokasjonslisten på kartet"
+                                    activate_title="Vis kollokasjonslisten på kartet",
+                                    highlight_toggle_id='toggle-collocation-highlight',
+                                    extra_controls=create_collocation_controls()
                                 )
                             ], label="Kollokasjoner", tab_id="collocations"),
                         ],
@@ -1486,17 +1565,11 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
             })
 
     if not matching_places:
-        top = coll_df.sort_values(by='count', ascending=False).head(20)
-        rows = top[['word', 'count']].to_dict('records')
-        table = build_html_table(rows, [('word', 'Word'), ('count', 'Count')])
-        content = html.Div([
-            html.Div(
-                "No place matches found. Showing top collocations instead:",
-                style={'color': '#475569', 'fontSize': '0.8rem', 'marginBottom': '0.5rem'}
-            ),
-            table
-        ], style={'display': 'flex', 'flexDirection': 'column', 'flex': '1 1 auto', 'minHeight': 0})
-        return content, []
+        message = html.Div(
+            "Fant ingen steder som matcher dette kollokasjonssøket. Prøv andre søkeord eller vindu.",
+            style={'color': '#475569', 'fontSize': '0.85rem'}
+        )
+        return message, []
 
     match_df_raw = pd.DataFrame(matching_places)
 
@@ -1517,34 +1590,41 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
         .sort_values(by='Total count', ascending=False)
         .head(50)
     )
-    table_rows = match_df[['Place', 'Tokens', 'Total count']].to_dict('records')
-    table = build_html_table(
-        table_rows,
-        [('Place', 'Place'), ('Tokens', 'Tokens'), ('Total count', 'Total count')]
-    )
-    content = html.Div([
-        table
-    ], style={'display': 'flex', 'flexDirection': 'column', 'flex': '1 1 auto', 'minHeight': 0})
     tokens = match_df['Token'].dropna().astype(str).unique().tolist()
-    return content, tokens
+    summary = html.Div(
+        f"Fant {len(tokens)} steder. Se tabellen under for detaljer.",
+        style={'color': '#0f172a', 'fontSize': '0.85rem'}
+    )
+    return summary, tokens
 
 @app.callback(
     Output('collocation-highlight', 'data'),
-    Input('apply-collocation-highlight', 'n_clicks'),
-    Input('clear-collocation-highlight', 'n_clicks'),
+    Input('toggle-collocation-highlight', 'n_clicks'),
+    State('collocation-highlight', 'data'),
     State('collocation-place-tokens', 'data'),
     prevent_initial_call=True
 )
-def set_collocation_highlight(apply_clicks, clear_clicks, tokens):
-    ctx = dash.callback_context
-    if not ctx.triggered:
+def toggle_collocation_highlight(n_clicks, current_highlight, tokens):
+    if not n_clicks:
         raise PreventUpdate
-    triggered = ctx.triggered[0]['prop_id'].split('.')[0]
-    if triggered == 'apply-collocation-highlight':
-        return tokens or []
-    if triggered == 'clear-collocation-highlight':
+    tokens = tokens or []
+    if current_highlight:
         return []
-    return dash.no_update
+    if not tokens:
+        raise PreventUpdate
+    return tokens
+
+
+@app.callback(
+    Output('toggle-collocation-highlight', 'color'),
+    Output('toggle-collocation-highlight', 'children'),
+    Input('collocation-highlight', 'data')
+)
+def style_collocation_highlight_button(highlight_tokens):
+    is_active = bool(highlight_tokens)
+    color = 'warning' if is_active else 'light'
+    icon_class = 'fas fa-highlighter' if is_active else 'far fa-highlighter'
+    return color, html.I(className=icon_class)
 
 
 @app.callback(

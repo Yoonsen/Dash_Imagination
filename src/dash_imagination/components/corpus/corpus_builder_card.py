@@ -301,57 +301,6 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                         )
                     ])
                 ], label="Content", tab_id="content"),
-                dbc.Tab([
-                    html.Div([
-                        html.Label("Keywords (comma-separated)", className="form-label"),
-                        dbc.Input(
-                            id='collocation-words-input',
-                            type='text',
-                            placeholder='e.g. krig, krigen',
-                            size='sm',
-                            className="mb-3"
-                        ),
-                        dbc.Row([
-                            dbc.Col([
-                                dbc.Label("Words before", className="form-label"),
-                                dbc.Input(
-                                    id='collocation-before-input',
-                                    type='number',
-                                    min=1,
-                                    max=200,
-                                    step=1,
-                                    value=50,
-                                    size='sm'
-                                )
-                            ], width=6),
-                            dbc.Col([
-                                dbc.Label("Words after", className="form-label"),
-                                dbc.Input(
-                                    id='collocation-after-input',
-                                    type='number',
-                                    min=1,
-                                    max=200,
-                                    step=1,
-                                    value=50,
-                                    size='sm'
-                                )
-                            ], width=6),
-                        ], className="g-2 mb-3"),
-                        dbc.Button(
-                            "Find collocations",
-                            id='run-collocations',
-                            color='secondary',
-                            size='sm',
-                            className="w-100 mb-3"
-                        ),
-                        dcc.Loading(
-                            html.Div(id='collocation-results', style={'maxHeight': '200px', 'overflowY': 'auto'}),
-                            type='default'
-                        ),
-                        dbc.Button("Highlight places", id='apply-collocation-highlight', color='danger', size='sm', className="w-100 mb-2"),
-                        dbc.Button("Clear highlight", id='clear-collocation-highlight', color='secondary', outline=True, size='sm', className="w-100 mb-3")
-                    ])
-                ], label="Collocations", tab_id="collocations"),
                 ], id="corpus-builder-tabs", active_tab="metadata", className="flex-grow-1")
             , className="flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'})
         ], style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
