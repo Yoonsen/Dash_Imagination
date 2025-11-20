@@ -71,9 +71,7 @@ app._assets_version = assets_version
 
 server = app.server
 
-from dash_imagination.components.map import create_map_controls
 from dash_imagination.components.corpus import create_corpus_controls, create_visualization_controls, create_corpus_builder_card
-from dash_imagination.components.places.place_similarity import create_place_similarity_controls
 from dash_imagination.components.places.place_similarity_dialog import create_place_similarity_dialog
 from dash_imagination.components.common.size_controls import (
     SIZE_PRESETS,
@@ -975,7 +973,6 @@ app.layout = html.Div([
     dcc.Store(id='map-view-state'),
     dcc.Store(id='current-filters', data={}),  # Initialize with empty dict
     dcc.Store(id='upload-state', data=None),
-    dcc.Store(id='category-selection', data=[]),  # Initialize with empty list
 
     # Change view-type from Div to Store
     dcc.Store(id='view-type', data='points'),
@@ -1699,9 +1696,6 @@ def handle_size_buttons(n_clicks, store):
 @app.callback(
     Output('current-filters', 'data', allow_duplicate=True),
     Output('heatmap-subset-mode', 'data', allow_duplicate=True),
-    Input('apply-places-frequency', 'n_clicks'),
-    Input('apply-places-sampling', 'n_clicks'),
-    Input('apply-places-collocations', 'n_clicks'),
     Input('activate-places-frequency', 'n_clicks'),
     Input('activate-places-sampling', 'n_clicks'),
     Input('activate-places-collocations', 'n_clicks'),
@@ -1715,8 +1709,7 @@ def handle_size_buttons(n_clicks, store):
     State('current-filters', 'data'),
     prevent_initial_call=True
 )
-def apply_places_to_map(freq_clicks, sample_clicks, colloc_clicks,
-                        freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks,
+def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks,
                         freq_json, sample_json, colloc_json,
                         active_tab, heatmap_subset_value,
                         search_term, max_places, current_filters):
@@ -1724,13 +1717,13 @@ def apply_places_to_map(freq_clicks, sample_clicks, colloc_clicks,
     if not ctx.triggered:
         raise PreventUpdate
     trigger = ctx.triggered[0]['prop_id'].split('.')[0]
-    if trigger in ('apply-places-frequency', 'activate-places-frequency'):
+    if trigger == 'activate-places-frequency':
         mode = 'frequency'
         df = load_places_frame(freq_json)
-    elif trigger in ('apply-places-sampling', 'activate-places-sampling'):
+    elif trigger == 'activate-places-sampling':
         mode = 'sampling'
         df = load_places_frame(sample_json)
-    elif trigger in ('apply-places-collocations', 'activate-places-collocations'):
+    elif trigger == 'activate-places-collocations':
         mode = 'collocations'
         df = load_places_frame(colloc_json)
     else:
@@ -1911,34 +1904,6 @@ def update_filtered_data(filters, upload_state, reset_confirm_clicks, filename, 
     except Exception as e:
         print(f"Error in update_filtered_data: {e}")
         return dash.no_update, dash.no_update, dash.no_update
-
-@app.callback(
-    [Output('category-selection', 'data')] + [
-        Output({'type': 'category-button', 'index': cat}, 'color')
-        for cat in categories_list
-    ],
-    [Input({'type': 'category-button', 'index': cat}, 'n_clicks')
-     for cat in categories_list],
-    [State('category-selection', 'data')]
-)
-def update_category_selection(*args):
-    ctx = callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    
-    selected_categories = args[-1] if args[-1] else []
-    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    category = eval(triggered_id)['index']
-    
-    if category in selected_categories:
-        selected_categories.remove(category)
-    else:
-        selected_categories.append(category)
-    
-    # Update button colors
-    button_colors = ['primary' if cat in selected_categories else 'secondary' for cat in categories_list]
-    
-    return [selected_categories] + button_colors
 
 @app.callback(
     [Output('main-map', 'figure'),
@@ -2591,17 +2556,6 @@ app.clientside_callback(
     prevent_initial_call=True
 )
 
-# Callback to toggle heatmap settings visibility
-@app.callback(
-    Output('heatmap-settings', 'style'),
-    [Input('view-toggle', 'value')],
-    prevent_initial_call=True
-)
-def toggle_heatmap_settings(view_type):
-    if view_type is None:
-        raise PreventUpdate
-    return {'display': 'block'} if view_type == 'heatmap' else {'display': 'none'}
-
 # Callback to update map view state
 app.clientside_callback(
     """
@@ -2618,92 +2572,6 @@ app.clientside_callback(
 )
 
 # Update corpus stats callback to be more efficient
-@app.callback(
-    Output('corpus-stats', 'children'),
-    [Input('current-filters', 'data')],
-    [State('current-dhlabids-store', 'data')],
-    prevent_initial_call=True
-)
-def update_corpus_stats(filters, current_books):
-    if not filters:
-        return "No filters available"
-    
-    books = current_books or []
-    places = filters.get('selected_tokens', []) if filters else []
-    if not books:
-        return "No corpus loaded"
-    
-    conn = get_db_connection()
-    try:
-        # Get book details for the current corpus
-        book_query = f"""
-        SELECT dhlabid, year, category, title
-        FROM corpus
-        WHERE dhlabid IN ({','.join(['?'] * len(books))})
-        AND year IS NOT NULL
-        """
-        books_df = pd.read_sql_query(book_query, conn, params=tuple(books))
-        
-        print(f"DEBUG: Total books before year filter: {len(books_df)}")
-        print(f"DEBUG: Year range in books_df: {books_df['year'].min()}-{books_df['year'].max()}")
-        
-        # Apply year range filter if specified
-        if filters.get('year_range'):
-            min_year, max_year = filters['year_range']
-            print(f"DEBUG: Applying year range filter: {min_year}-{max_year}")
-            books_df = books_df[(books_df['year'] >= min_year) & (books_df['year'] <= max_year)]
-            print(f"DEBUG: Books after year filter: {len(books_df)}")
-            print(f"DEBUG: Year range after filter: {books_df['year'].min()}-{books_df['year'].max()}")
-        
-        num_books = len(books_df)
-        
-        # Get the period from metadata
-        if not books_df.empty:
-            min_year = int(books_df['year'].min())
-            max_year = int(books_df['year'].max())
-            year_range = f"{min_year}–{max_year}"
-        else:
-            year_range = "No period data"
-        
-        # Get total places and filtered places
-        places_df = get_places_for_map(filters, selected_tokens=places)
-        if places_df.empty:
-            return "No places match the current filters"
-        
-        total_places_shown = len(places_df)
-        total_mentions = int(places_df['frequency'].sum())
-        total_books = int(places_df['book_count'].sum())
-        category_count = len(filters['categories']) if filters['categories'] else 0
-        title_count = len(filters['titles']) if filters['titles'] else 0
-        
-        # Build the stats display
-        stats = [
-            html.P(f"Corpus source: {filters.get('corpus_source', 'No corpus selected')}"),
-            html.P(f"Number of books: {num_books}"),
-            html.P(f"Total places in corpus: {total_places_shown}"),
-            html.P(f"Period: {year_range}"),
-            html.P(f"Filters: {category_count} categories, {title_count} works"),
-            html.P(f"Places shown: {total_places_shown}"),
-            html.P(f"Total mentions: {total_mentions:,}")
-        ]
-        
-        # Add selected places information if available
-        if places:
-            stats.extend([
-                html.Hr(),
-                html.H5("Selected Places", className="mt-3"),
-                html.P(f"Number of selected places: {len(places)}"),
-                html.P("Selected places:", style={'marginBottom': '5px'}),
-                html.Div([
-                    html.Span(place, style={'marginRight': '10px', 'marginBottom': '5px'})
-                    for place in places
-                ], style={'display': 'flex', 'flexWrap': 'wrap', 'gap': '5px'})
-            ])
-        
-        return html.Div(stats)
-    finally:
-        conn.close()
-
 # Update corpus controls callback
 @app.callback(
     Output('corpus-controls-container', 'style'),
@@ -2805,35 +2673,6 @@ def update_button_styles(corpus_style, places_style, viz_style, corpus_btn_style
     }
     
     return corpus_btn_style, places_btn_style, viz_btn_style
-
-# Add callback for category and title selection
-@app.callback(
-    [Output('current-filters', 'data', allow_duplicate=True)],
-    [Input('apply-filters', 'n_clicks')],
-    [State('category-dropdown', 'value'),
-     State('title-dropdown', 'value'),
-     State('popup-sample-size', 'value'),
-     State('popup-max-places-slider', 'value'),
-     State('year-range-slider', 'value'),
-     State('current-filters', 'data')],
-    prevent_initial_call=True
-)
-def update_corpus_from_selections(n_clicks, selected_categories, selected_titles, sample_size, max_places, year_range, current_filters):
-    if not n_clicks:
-        raise PreventUpdate
-    if current_filters is None:
-        current_filters = {}
-    # Update filters with new selections
-    new_filters = {
-        'categories': selected_categories or [],
-        'titles': selected_titles or [],
-        'sample_size': sample_size or 0,
-        'max_places': max_places or 0,
-        'year_range': year_range or [1814, 1905]  # Default to full range if not set
-    }
-    return new_filters
-
-
 
 def add_edge_points(points_array):
     """Add edge points to ensure the convex hull covers the entire cluster area."""
@@ -3194,104 +3033,6 @@ def handle_global_search(search_term, current_figure):
         print(f"Error in handle_global_search: {e}")
         return current_figure, dash.no_update, dash.no_update
 
-@app.callback(
-    Output('similar-places-list', 'children'),
-    [Input('similar-place-search', 'value')],
-    [State('current-dhlabids-store', 'data')],
-    prevent_initial_call=True
-)
-def update_similar_places(search_term, current_books):
-    if not search_term or len(search_term) < 2:
-        return html.Div("Enter at least 2 characters to search", style={'color': '#666'})
-    
-    books = current_books or []
-    if not books:
-        return html.Div("No corpus loaded", style={'color': '#666'})
-
-    try:
-        conn = get_db_connection()
-        try:
-            # Search in both historical and modern names
-            query = """
-            SELECT 
-                p.token,
-                p.modern as name,
-                p.latitude,
-                p.longitude,
-                COUNT(DISTINCT b.dhlabid) as book_count,
-                SUM(b.book_count) as frequency
-            FROM places p
-            JOIN books b ON p.token = b.token
-            WHERE (LOWER(p.token) LIKE LOWER(?) OR LOWER(p.modern) LIKE LOWER(?))
-            AND b.dhlabid IN ({})
-            AND p.latitude IS NOT NULL 
-            AND p.longitude IS NOT NULL
-            AND p.latitude != '0'
-            AND p.longitude != '0'
-            GROUP BY p.token, p.modern, p.latitude, p.longitude
-            ORDER BY frequency DESC
-            LIMIT 50
-            """.format(','.join(['?'] * len(books)))
-            
-            # Add wildcards for partial matching
-            search_pattern = f"%{search_term}%"
-            places_df = pd.read_sql_query(query, conn, params=(search_pattern, search_pattern) + tuple(books))
-            
-            if places_df.empty:
-                return html.Div("No matching places found", style={'color': '#666'})
-            
-            # Create hover text
-            places_df['hover_text'] = places_df.apply(
-                lambda row: f"{row['token']} ({row['name']})<br>Mentions: {int(row['frequency'])}<br>Books: {int(row['book_count'])}",
-                axis=1
-            )
-            
-            return html.Div([
-                html.Div([
-                    html.Div([
-                        html.Div("Place", style={'flex': '2', 'fontWeight': 'bold', 'padding': '8px'}),
-                        html.Div("📚", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'}),
-                        html.Div("📝", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'})
-                    ], style={
-                        'display': 'flex',
-                        'borderBottom': '2px solid #eee',
-                        'marginBottom': '4px',
-                        'fontSize': '0.9rem'
-                    }),
-                    html.Div([
-                        html.Div([
-                            html.Div([
-                                html.Div(f"{row['token']}", style={'fontWeight': '500', 'fontSize': '0.9rem'}),
-                                html.Div(f"{row['name']}", style={'color': '#666', 'fontSize': '0.8rem'})
-                            ], style={'flex': '2', 'padding': '8px'}),
-                            html.Div(f"{int(row['book_count'])}", 
-                                    style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}),
-                            html.Div(f"{int(row['frequency'])}", 
-                                    style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'})
-                        ], style={
-                            'display': 'flex',
-                            'borderBottom': '1px solid #eee',
-                            'transition': 'background-color 0.2s',
-                            'cursor': 'pointer'
-                        }, 
-                        className='similar-place-item', 
-                        id={'type': 'similar-place-item', 'index': row['token']},
-                        **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
-                        for _, row in places_df.iterrows()
-                    ], style={'maxHeight': '300px', 'overflowY': 'auto'})
-                ], style={'border': '1px solid #eee', 'borderRadius': '4px'})
-            ], style={'backgroundColor': 'white', 'borderRadius': '8px', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'})
-        finally:
-            conn.close()
-    except Exception as e:
-        print(f"Error in update_similar_places: {e}")
-        return html.Div("Error searching for places", style={'color': 'red'})
-
-# Add callback for resampling places
-
-
-
-
 # Add a clientside callback for instant download status feedback
 app.clientside_callback(
     """
@@ -3306,17 +3047,6 @@ app.clientside_callback(
     [Input('download-map', 'n_clicks')],
     prevent_initial_call=True
 )
-
-
-
-@app.callback(
-    Output('test-info-output', 'children'),
-    [Input('test-info-btn', 'n_clicks')],
-    prevent_initial_call=True
-)
-def test_info_btn_callback(n_clicks):
-    print(f"[DEBUG] test_info_btn_callback triggered: n_clicks={n_clicks}")
-    return f"Button clicked {n_clicks} times."
 
 @app.callback(
     [
