@@ -449,10 +449,11 @@ def build_corpus_and_show_stats(
     metadata_filters_applied = bool(categories) or bool(authors) or (year_range != DEFAULT_YEAR_RANGE)
     metadata_books = set()
     if metadata_filters_applied:
-        category = categories[0] if categories else None
         target_years = tuple(year_range) if year_range else None
-        if authors:
-            for author in authors:
+        category_filters = categories or [None]
+        author_filters = authors or [None]
+        for category in category_filters:
+            for author in author_filters:
                 metadata_books.update(
                     corpus_builder.build_corpus(
                         category=category,
@@ -460,14 +461,6 @@ def build_corpus_and_show_stats(
                         author=author
                     )
                 )
-        else:
-            metadata_books.update(
-                corpus_builder.build_corpus(
-                    category=category,
-                    year_range=target_years,
-                    author=None
-                )
-            )
 
     title_books = set(fetch_dhlabids_for_titles(titles))
 
@@ -524,27 +517,33 @@ def synchronize_metadata_filters(selected_categories, selected_authors, selected
     if metadata.empty:
         return dash.no_update, dash.no_update, dash.no_update, selected_categories, selected_authors, selected_titles
 
-    filtered = metadata.copy()
-    if selected_categories:
-        filtered = filtered[filtered['category'].isin(selected_categories)]
+    filtered_for_categories = metadata.copy()
     if selected_authors:
-        filtered = filtered[filtered['author'].isin(selected_authors)]
+        filtered_for_categories = filtered_for_categories[filtered_for_categories['author'].isin(selected_authors)]
     if selected_titles:
-        filtered = filtered[filtered['title_label'].isin(selected_titles)]
+        filtered_for_categories = filtered_for_categories[filtered_for_categories['title_label'].isin(selected_titles)]
+    if filtered_for_categories.empty:
+        filtered_for_categories = metadata
 
-    if filtered.empty:
-        filtered = metadata
+    filtered_for_authors = metadata.copy()
+    if selected_categories:
+        filtered_for_authors = filtered_for_authors[filtered_for_authors['category'].isin(selected_categories)]
+    if selected_titles:
+        filtered_for_authors = filtered_for_authors[filtered_for_authors['title_label'].isin(selected_titles)]
+    if filtered_for_authors.empty:
+        filtered_for_authors = metadata
 
-    available_categories = sorted([value for value in filtered['category'].dropna().unique() if value])
-    available_authors = sorted([value for value in filtered['author'].dropna().unique() if value])
-    available_titles = sorted([value for value in filtered['title_label'].dropna().unique() if value])
+    filtered_for_titles = metadata.copy()
+    if selected_categories:
+        filtered_for_titles = filtered_for_titles[filtered_for_titles['category'].isin(selected_categories)]
+    if selected_authors:
+        filtered_for_titles = filtered_for_titles[filtered_for_titles['author'].isin(selected_authors)]
+    if filtered_for_titles.empty:
+        filtered_for_titles = metadata
 
-    if not available_categories:
-        available_categories = sorted([value for value in metadata['category'].dropna().unique() if value])
-    if not available_authors:
-        available_authors = sorted([value for value in metadata['author'].dropna().unique() if value])
-    if not available_titles:
-        available_titles = sorted([value for value in metadata['title_label'].dropna().unique() if value])
+    available_categories = sorted([value for value in filtered_for_categories['category'].dropna().unique() if value])
+    available_authors = sorted([value for value in filtered_for_authors['author'].dropna().unique() if value])
+    available_titles = sorted([value for value in filtered_for_titles['title_label'].dropna().unique() if value])
 
     sanitized_categories = _sanitize_selection(selected_categories, available_categories)
     sanitized_authors = _sanitize_selection(selected_authors, available_authors)
