@@ -115,34 +115,44 @@ def render_place_preview(df, selected_place, empty_message="Ingen steder tilgjen
         style={'fontSize': '0.85rem'}
     )
 
-    rows = [
-        html.Div([
+    rows = []
+    for _, row in df.iterrows():
+        rows.append(
             html.Div([
-                html.Div(f"{row['token']}", style={'fontWeight': '500', 'fontSize': '0.9rem'}),
-                html.Div(f"{row['name']}", style={'color': '#666', 'fontSize': '0.8rem'})
-            ], style={'flex': '2', 'padding': '8px'}),
-            html.Div(f"{int(row['book_count'])}",
-                     style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}),
-            html.Div(f"{int(row['frequency'])}",
-                     style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'})
-        ], style={
-            'display': 'flex',
-            'borderBottom': '1px solid #eee',
-            'transition': 'background-color 0.2s',
-            'cursor': 'pointer',
-            'backgroundColor': '#ffebee' if selected_place == row['token'] else 'transparent'
-        },
-            className='place-item',
-            id={'type': 'place-item', 'index': row['token']},
-            **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
-        for _, row in df.iterrows()
-    ]
+                html.Div(
+                    f"{row.get('token', '')}",
+                    style={'flex': '1.2', 'padding': '8px', 'fontWeight': '500', 'fontSize': '0.9rem'}
+                ),
+                html.Div(
+                    f"{row.get('name', '') or '—'}",
+                    style={'flex': '1.2', 'padding': '8px', 'color': '#475569', 'fontSize': '0.85rem', 'overflow': 'hidden', 'textOverflow': 'ellipsis', 'whiteSpace': 'nowrap'}
+                ),
+                html.Div(
+                    f"{int(row.get('book_count', 0))}",
+                    style={'flex': '0.7', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}
+                ),
+                html.Div(
+                    f"{int(row.get('frequency', 0))}",
+                    style={'flex': '0.7', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}
+                )
+            ], style={
+                'display': 'flex',
+                'borderBottom': '1px solid #eee',
+                'transition': 'background-color 0.2s',
+                'cursor': 'pointer',
+                'backgroundColor': '#fff7ed' if selected_place == row['token'] else 'transparent'
+            },
+                className='place-item',
+                id={'type': 'place-item', 'index': row['token']},
+                **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
+        )
 
     table = html.Div([
         html.Div([
-            html.Div("Sted", style={'flex': '2', 'fontWeight': 'bold', 'padding': '8px'}),
-            html.Div("📚", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'}),
-            html.Div("📝", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'})
+            html.Div("Historisk", style={'flex': '1.2', 'fontWeight': '600', 'padding': '8px'}),
+            html.Div("Moderne", style={'flex': '1.2', 'fontWeight': '600', 'padding': '8px'}),
+            html.Div("📚", style={'flex': '0.7', 'fontWeight': '600', 'padding': '8px', 'textAlign': 'center'}),
+            html.Div("📝", style={'flex': '0.7', 'fontWeight': '600', 'padding': '8px', 'textAlign': 'center'})
         ], style={
             'display': 'flex',
             'borderBottom': '2px solid #eee',
@@ -266,13 +276,23 @@ def build_places_tab(summary_id, table_id, download_btn_id, download_id, apply_b
         )
     )
 
-    toolbar = html.Div(action_children, className="places-tab-toolbar") if action_children else None
+    summary_block = html.Div(
+        id=summary_id,
+        className="text-muted",
+        style={'fontSize': '0.85rem'}
+    )
+    if action_children:
+        toolbar = html.Div([
+            summary_block,
+            html.Div(action_children, className="d-flex align-items-center gap-2 flex-wrap justify-content-end")
+        ], className="places-tab-toolbar d-flex align-items-center justify-content-between")
+    else:
+        toolbar = summary_block
 
     children = []
     if extra_controls is not None:
         children.append(extra_controls)
     children.extend([
-        html.Div(id=summary_id, className="text-muted", style={'fontSize': '0.85rem', 'flex': '0 0 auto'}),
         toolbar,
         html.Div(id=table_id, style={
             'flex': '1 1 auto',
@@ -1623,8 +1643,8 @@ def toggle_collocation_highlight(n_clicks, current_highlight, tokens):
 def style_collocation_highlight_button(highlight_tokens):
     is_active = bool(highlight_tokens)
     color = 'warning' if is_active else 'light'
-    icon_class = 'fas fa-highlighter' if is_active else 'far fa-highlighter'
-    return color, html.I(className=icon_class)
+    icon_style = {'opacity': 0.95 if is_active else 0.6}
+    return color, html.I(className='fas fa-highlighter', style=icon_style)
 
 
 @app.callback(
