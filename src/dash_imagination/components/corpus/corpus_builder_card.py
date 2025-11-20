@@ -280,6 +280,14 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                             value=1,
                             className="form-control mb-3"
                         ),
+                        html.Div([
+                            html.Label("Combine with existing corpus", className="form-label mb-1"),
+                            dbc.ButtonGroup([
+                                dbc.Button("+", id='corpus-op-union-content', n_clicks=0, size="sm", color="secondary", outline=True, title="Add to current corpus"),
+                                dbc.Button("&", id='corpus-op-intersection-content', n_clicks=0, size="sm", color="secondary", outline=True, title="Keep only overlap"),
+                                dbc.Button("-", id='corpus-op-diff-content', n_clicks=0, size="sm", color="secondary", outline=True, title="Remove from current corpus"),
+                            ], size="sm")
+                        ], className="mb-4"),
                         dcc.Loading(
                             id="build-content-corpus-loading",
                             type="default",
@@ -635,9 +643,11 @@ def build_content_corpus_and_show_stats(n_clicks, wordforms, min_count, current_
         dhlabid_sums = counts_df.sum(axis=0)
         selected_dhlabids = [int(dhl) for dhl, total in dhlabid_sums.items() if total >= (min_count or 1)]
     except Exception as e:
-        return dash.no_update, dash.no_update
+        error = html.Span(f"Error during content search: {e}", style={"color": "#dc2626"})
+        return dash.no_update, error, dash.no_update
     if not selected_dhlabids:
-        return dash.no_update, dash.no_update
+        no_matches = html.Span("Fant ingen bøker som matcher innholdssøket.", style={"color": "#dc2626", "fontWeight": "500"})
+        return dash.no_update, no_matches, dash.no_update
     op = (operation or "intersection").lower()
     updated_books = apply_book_operation(current_books, selected_dhlabids, operation=op)
     place_tokens = fetch_place_tokens(updated_books)

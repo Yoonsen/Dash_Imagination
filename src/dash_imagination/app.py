@@ -1307,6 +1307,9 @@ def update_state_and_filters(contents, filename, current_filters, operation, cur
     Input('corpus-op-union-builder', 'n_clicks'),
     Input('corpus-op-intersection-builder', 'n_clicks'),
     Input('corpus-op-diff-builder', 'n_clicks'),
+    Input('corpus-op-union-content', 'n_clicks'),
+    Input('corpus-op-intersection-content', 'n_clicks'),
+    Input('corpus-op-diff-content', 'n_clicks'),
     State('corpus-operation', 'data'),
     prevent_initial_call=True
 )
@@ -1317,6 +1320,9 @@ def set_corpus_operation(
     union_builder,
     intersection_builder,
     diff_builder,
+    union_content,
+    intersection_content,
+    diff_content,
     current_operation,
 ):
     ctx = dash.callback_context
@@ -1330,6 +1336,9 @@ def set_corpus_operation(
         'corpus-op-union-builder': 'union',
         'corpus-op-intersection-builder': 'intersection',
         'corpus-op-diff-builder': 'difference',
+        'corpus-op-union-content': 'union',
+        'corpus-op-intersection-content': 'intersection',
+        'corpus-op-diff-content': 'difference',
     }
     return mapping.get(triggered, (current_operation or 'intersection'))
 
@@ -1366,6 +1375,22 @@ def style_corpus_operation_controls(operation):
     Input('corpus-operation', 'data')
 )
 def style_corpus_operation_builder(operation):
+    c_union, o_union = _operation_button_styles(operation, 'union')
+    c_intersection, o_intersection = _operation_button_styles(operation, 'intersection')
+    c_diff, o_diff = _operation_button_styles(operation, 'difference')
+    return c_union, c_intersection, c_diff, o_union, o_intersection, o_diff
+
+
+@app.callback(
+    Output('corpus-op-union-content', 'color'),
+    Output('corpus-op-intersection-content', 'color'),
+    Output('corpus-op-diff-content', 'color'),
+    Output('corpus-op-union-content', 'outline'),
+    Output('corpus-op-intersection-content', 'outline'),
+    Output('corpus-op-diff-content', 'outline'),
+    Input('corpus-operation', 'data')
+)
+def style_corpus_operation_content(operation):
     c_union, o_union = _operation_button_styles(operation, 'union')
     c_intersection, o_intersection = _operation_button_styles(operation, 'intersection')
     c_diff, o_diff = _operation_button_styles(operation, 'difference')
