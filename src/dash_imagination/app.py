@@ -360,7 +360,7 @@ CARD_LAUNCHER_CONFIG = [
     {
         'chip_id': 'card-chip-corpus',
         'label': 'Corpus',
-        'subtitle': 'Ctrl',
+        'subtitle': 'View',
         'color_class': 'chip-corpus',
         'title': 'Toggle Corpus Controls'
     },
@@ -388,7 +388,7 @@ CARD_LAUNCHER_CONFIG = [
     {
         'chip_id': 'card-chip-builder',
         'label': 'Corpus',
-        'subtitle': 'Builder',
+        'subtitle': 'Modify',
         'color_class': 'chip-builder',
         'title': 'Toggle Corpus Builder'
     },
