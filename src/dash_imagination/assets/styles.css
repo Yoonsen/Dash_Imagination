@@ -168,6 +168,36 @@ body, html {
     flex: 1 1 auto;
 }
 
+.map-mode-toggle {
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.3rem;
+}
+
+.map-mode-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.map-mode-button-group .btn {
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.25rem 0.9rem;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    border: 1px solid #cbd5f5;
+    color: #475569;
+    background-color: #fff;
+}
+
+.map-mode-button-group .btn.active {
+    background-color: #475569;
+    color: #fff;
+    border-color: #475569;
+}
+
 .places-icon-btn {
     width: 28px;
     height: 28px;

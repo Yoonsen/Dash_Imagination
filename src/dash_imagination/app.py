@@ -777,7 +777,6 @@ app.layout = html.Div([
 
             # Buttons container
             html.Div([
-                # Tools button
                 html.Button(
                     html.I(className="fas fa-sliders-h"),
                     id='visualization-button',
@@ -798,47 +797,13 @@ app.layout = html.Div([
                         'fontSize': '14px',
                         'flexShrink': '0'  # Prevent the button from shrinking
                     }
-                ),
-
-                # Corpus and Places buttons
-                html.Button("Corpus", id='corpus-button', style={
-                    'padding': '8px 16px',
-                    'backgroundColor': 'white',
-                    'color': '#475569',
-                    'border': 'none',
-                    'borderRadius': '20px',
-                    'cursor': 'pointer',
-                    'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                    'transition': 'all 0.2s',
-                    'fontSize': '14px',
-                    'fontWeight': '500',
-                    'lineHeight': '1.5',
-                    'flexShrink': '0',  # Prevent the button from shrinking
-                    'marginLeft': '8px'  # Add margin between buttons
-                }),
-                html.Button("Places", id='place-names-toggle', style={
-                    'padding': '8px 16px',
-                    'backgroundColor': 'white',
-                    'color': '#475569',
-                    'border': 'none',
-                    'borderRadius': '20px',
-                    'cursor': 'pointer',
-                    'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                    'transition': 'all 0.2s',
-                    'fontSize': '14px',
-                    'fontWeight': '500',
-                    'lineHeight': '1.5',
-                    'flexShrink': '0',  # Prevent the button from shrinking
-                    'marginLeft': '8px'  # Add margin between buttons
-                })
+                )
             ], style={
                 'display': 'flex',
-                'flexDirection': 'row',  # Default to horizontal layout
                 'alignItems': 'center',
-                'flexWrap': 'wrap',  # Allow wrapping only when needed
-                'gap': '8px',  # Add gap between wrapped items
-                'marginLeft': '8px',  # Add margin between search and buttons
-                'flexShrink': '0'  # Prevent container from shrinking
+                'gap': '8px',
+                'marginLeft': '8px',
+                'flexShrink': '0'
             })
         ], style={
             'display': 'flex',
@@ -854,35 +819,24 @@ app.layout = html.Div([
             'maxWidth': 'calc(100% - 180px)'  # Reserve space for map view button
         }),
 
-        # Right section with map view button
+        # Right section with map/heatmap toggle
         html.Div([
-            html.Button([
-                html.I(className="fas fa-map-marker-alt", style={'marginRight': '8px'}),
-                "Map View"
-            ], id='map-button', style={
-                'padding': '8px 16px',
-                'backgroundColor': 'white',
-                'color': '#475569',
-                'border': 'none',
-                'borderRadius': '20px',
-                'cursor': 'pointer',
-                'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                'transition': 'all 0.2s',
-                'fontSize': '14px',
-                'fontWeight': '500',
-                'lineHeight': '1.5',
-                'display': 'flex',
-                'alignItems': 'center',
-                'whiteSpace': 'nowrap',  # Prevent text wrapping
-                'flexShrink': '0'  # Prevent button from shrinking
-            })
+            html.Div([
+                html.Span("Kartvisning", className="map-mode-label"),
+                dbc.ButtonGroup([
+                    dbc.Button("Map", id='map-mode-map', n_clicks=0, color="primary", size="sm",
+                               active=True, className="map-mode-btn"),
+                    dbc.Button("Heatmap", id='map-mode-heat', n_clicks=0, color="light", size="sm",
+                               active=False, outline=True, className="map-mode-btn")
+                ], size="sm", className="map-mode-button-group")
+            ], className="map-mode-toggle d-flex align-items-center gap-2")
         ], style={
             'position': 'absolute',
             'right': '20px',
             'top': '20px',
             'zIndex': 1000,
             'pointerEvents': 'auto',
-            'flexShrink': '0'  # Prevent container from shrinking
+            'flexShrink': '0'
         }),
     ], style={
         'position': 'fixed',
@@ -1192,13 +1146,6 @@ app.index_string = '''
             }
             #place-summary-container.dragging {
                 opacity: 0.7;
-            }
-            /* Button hover effects */
-            #corpus-button:hover, #place-names-toggle:hover {
-                background-color: #1e293b !important;
-            }
-            #map-button:hover, #heatmap-button:hover {
-                background-color: #1d4ed8 !important;
             }
             #visualization-button:hover {
                 background-color: #1e293b !important;
@@ -2124,17 +2071,16 @@ def toggle_info_modal(n1, n2, is_open):
 
 @app.callback(
     Output('place-names-container', 'style'),
-    [Input('place-names-toggle', 'n_clicks'),
-     Input('card-chip-places', 'n_clicks')],
-    [State('place-names-container', 'style')],
+    Input('card-chip-places', 'n_clicks'),
+    State('place-names-container', 'style'),
     prevent_initial_call=True
 )
-def toggle_place_names_container(main_btn, chip_btn, current_style):
+def toggle_place_names_container(chip_btn, current_style):
     ctx = dash.callback_context
     if not ctx.triggered:
         raise PreventUpdate
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    if trigger_id not in ('place-names-toggle', 'card-chip-places'):
+    if trigger_id != 'card-chip-places':
         raise PreventUpdate
 
     new_style = dict(current_style or {})
@@ -2280,12 +2226,39 @@ def update_filtered_data(filters, upload_state, reset_confirm_clicks, filename, 
         print(f"Error in update_filtered_data: {e}")
         return dash.no_update, dash.no_update, dash.no_update
 
+
 @app.callback(
-    [Output('main-map', 'figure'),
-     Output('view-type', 'data'),
-     Output('map-button', 'children')],
+    Output('view-type', 'data'),
+    Input('map-mode-map', 'n_clicks'),
+    Input('map-mode-heat', 'n_clicks'),
+    State('view-type', 'data'),
+    prevent_initial_call=True
+)
+def set_map_view_mode(map_clicks, heat_clicks, current_view):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger = ctx.triggered[0]['prop_id'].split('.')[0]
+    if trigger == 'map-mode-map':
+        return 'points'
+    if trigger == 'map-mode-heat':
+        return 'heatmap'
+    return current_view or 'points'
+
+
+@app.callback(
+    Output('map-mode-map', 'active'),
+    Output('map-mode-heat', 'active'),
+    Input('view-type', 'data')
+)
+def style_map_mode_buttons(view_type):
+    is_heat = (view_type == 'heatmap')
+    return (not is_heat), is_heat
+
+@app.callback(
+    Output('main-map', 'figure'),
     [Input('filtered-data', 'data'),
-     Input('map-button', 'n_clicks'),
+     Input('view-type', 'data'),
      Input('heatmap-intensity', 'value'),
      Input('heatmap-radius', 'value'),
      Input('heatmap-colorscale', 'value'),
@@ -2296,28 +2269,14 @@ def update_filtered_data(filters, upload_state, reset_confirm_clicks, filename, 
      Input('cluster-size-slider', 'value'),
      Input('cluster-radius-slider', 'value'),
      Input('collocation-highlight', 'data')],
-    [State('view-type', 'data'),
-     State('all-places-store', 'data')],
+    [State('all-places-store', 'data')],
     prevent_initial_call=True
 )
-def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius, heatmap_colorscale, cluster_toggle, selected_place, click_data, marker_size, cluster_size, cluster_radius, collocation_highlight, current_view_type, all_places_json):
+def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius, heatmap_colorscale,
+               cluster_toggle, selected_place, click_data, marker_size, cluster_size,
+               cluster_radius, collocation_highlight, all_places_json):
     try:
-        ctx = callback_context
-        if not ctx.triggered:
-            view_type = 'points'  # Default view
-        else:
-            trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-            if trigger_id == 'map-button':
-                view_type = 'heatmap' if current_view_type == 'points' else 'points'
-            else:
-                view_type = current_view_type or 'points'  # Use current view type or default to points
-
-        # Update button content based on view type
-        button_content = [
-            html.I(className="fas fa-fire" if view_type == 'heatmap' else "fas fa-map-marker-alt", 
-                   style={'marginRight': '8px'}),
-            "Heatmap View" if view_type == 'heatmap' else "Map View"
-        ]
+        view_type = view_type or 'points'
 
         # Create base figure with default view of Norway
         fig = go.Figure()
@@ -2344,7 +2303,7 @@ def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius
                 showlegend=False,
                 uirevision='constant'
             )
-            return fig, view_type, button_content
+            return fig
         
         required_columns = ['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']
 
@@ -2388,7 +2347,7 @@ def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius
                 showlegend=False,
                 uirevision='constant'
             )
-            return fig, view_type, button_content
+            return fig
         
         highlight_tokens = {str(t) for t in (collocation_highlight or []) if t}
         use_clustering = False
@@ -2718,10 +2677,10 @@ def update_map(filtered_data_json, map_clicks, heatmap_intensity, heatmap_radius
             clickmode='event'
         )
         
-        return fig, view_type, button_content
+        return fig
     except Exception as e:
         print(f"Error in update_map: {e}")
-        return dash.no_update, dash.no_update, dash.no_update
+        return go.Figure()
 
 
 # Add callback for place item clicks
@@ -2950,18 +2909,17 @@ app.clientside_callback(
 # Update corpus controls callback
 @app.callback(
     Output('corpus-controls-container', 'style'),
-    [Input('corpus-button', 'n_clicks'),
-     Input('close-corpus', 'n_clicks'),
+    [Input('close-corpus', 'n_clicks'),
      Input('card-chip-corpus', 'n_clicks')],
     [State('corpus-controls-container', 'style')],
     prevent_initial_call=True
 )
-def toggle_corpus_controls(open_btn, close_btn, chip_btn, current_style):
+def toggle_corpus_controls(close_btn, chip_btn, current_style):
     ctx = dash.callback_context
     if not ctx.triggered:
         raise PreventUpdate
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    if trigger_id not in ('corpus-button', 'close-corpus', 'card-chip-corpus'):
+    if trigger_id not in ('close-corpus', 'card-chip-corpus'):
         raise PreventUpdate
     new_style = dict(current_style or {})
     if trigger_id == 'close-corpus':
@@ -2995,61 +2953,18 @@ def toggle_visualization_controls(open_btn, close_btn, chip_btn, current_style):
         new_style['display'] = 'flex' if current_display == 'none' else 'none'
     return new_style
 
-# Update button styles callback
+# Update visualization button style callback
 @app.callback(
-    [Output('corpus-button', 'style'),
-     Output('place-names-toggle', 'style'),
-     Output('visualization-button', 'style')],
-    [Input('corpus-controls-container', 'style'),
-     Input('place-names-container', 'style'),
-     Input('visualization-controls-container', 'style')],
-    [State('corpus-button', 'style'),
-     State('place-names-toggle', 'style'),
-     State('visualization-button', 'style')],
+    Output('visualization-button', 'style'),
+    Input('visualization-controls-container', 'style'),
+    State('visualization-button', 'style'),
     prevent_initial_call=True
 )
-def update_button_styles(corpus_style, places_style, viz_style, corpus_btn_style, places_btn_style, viz_btn_style):
-    # Base styles
+def update_visualization_button_style(viz_style, current_style):
     base_style = {
-        'padding': '8px 16px',
+        'padding': '8px',
         'backgroundColor': 'white',
         'color': '#475569',
-        'border': 'none',
-        'borderRadius': '20px',
-        'cursor': 'pointer',
-        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-        'transition': 'all 0.2s',
-        'fontSize': '14px',
-        'fontWeight': '500',
-        'lineHeight': '1.5'
-    }
-    
-    active_style = {
-        'padding': '8px 16px',
-        'backgroundColor': '#475569',
-        'color': 'white',
-        'border': 'none',
-        'borderRadius': '20px',
-        'cursor': 'pointer',
-        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-        'transition': 'all 0.2s',
-        'fontSize': '14px',
-        'fontWeight': '500',
-        'lineHeight': '1.5'
-    }
-    
-    # Update corpus button style
-    corpus_btn_style = active_style.copy() if corpus_style and corpus_style.get('display') == 'block' else base_style.copy()
-    
-    # Update places button style
-    places_btn_style = active_style.copy() if places_style and places_style.get('display') == 'block' else base_style.copy()
-    places_btn_style['marginLeft'] = '8px'
-    
-    # Update visualization button style - maintain position and size
-    viz_btn_style = {
-        'padding': '8px',
-        'backgroundColor': '#475569' if viz_style and viz_style.get('display') == 'block' else 'white',
-        'color': 'white' if viz_style and viz_style.get('display') == 'block' else '#475569',
         'border': 'none',
         'borderRadius': '50%',
         'cursor': 'pointer',
@@ -3061,11 +2976,12 @@ def update_button_styles(corpus_style, places_style, viz_style, corpus_btn_style
         'alignItems': 'center',
         'justifyContent': 'center',
         'fontSize': '14px',
-        'marginLeft': '8px',
         'flexShrink': '0'
     }
-    
-    return corpus_btn_style, places_btn_style, viz_btn_style
+    active_style = base_style.copy()
+    active_style['backgroundColor'] = '#475569'
+    active_style['color'] = 'white'
+    return active_style if viz_style and viz_style.get('display') == 'block' else base_style
 
 
 def _chip_class(base_class, style_dict):
