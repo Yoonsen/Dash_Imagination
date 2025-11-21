@@ -357,74 +357,92 @@ def create_collocation_card():
 
 
 CARD_LAUNCHER_CONFIG = [
-    {
-        'chip_id': 'card-chip-corpus',
-        'label': 'Corpus',
-        'subtitle': 'View',
-        'color_class': 'chip-corpus',
-        'title': 'Toggle Corpus Controls'
-    },
-    {
-        'chip_id': 'card-chip-places',
-        'label': 'Places',
-        'subtitle': 'Liste',
-        'color_class': 'chip-places',
-        'title': 'Toggle Places dialog'
-    },
-    {
-        'chip_id': 'card-chip-summary',
-        'label': 'Places',
-        'subtitle': 'Info',
-        'color_class': 'chip-summary',
-        'title': 'Show Place Details'
-    },
-    {
-        'chip_id': 'card-chip-visualization',
-        'label': 'Viz',
-        'subtitle': 'Ctrl',
-        'color_class': 'chip-visualization',
-        'title': 'Toggle Visualization Controls'
-    },
-    {
-        'chip_id': 'card-chip-builder',
-        'label': 'Corpus',
-        'subtitle': 'Modify',
-        'color_class': 'chip-builder',
-        'title': 'Toggle Corpus Builder'
-    },
-    {
-        'chip_id': 'card-chip-collocations',
-        'label': 'Places',
-        'subtitle': 'Coll',
-        'color_class': 'chip-collocations',
-        'title': 'Toggle Collocations'
-    },
-    {
-        'chip_id': 'card-chip-similarity',
-        'label': 'Places',
-        'subtitle': 'Sim',
-        'color_class': 'chip-similarity',
-        'title': 'Toggle Place Similarity'
-    }
+    # Corpus group
+    [
+        {
+            'chip_id': 'card-chip-corpus',
+            'label': 'Corpus',
+            'subtitle': 'View',
+            'color_class': 'chip-corpus',
+            'title': 'Toggle Corpus View'
+        },
+        {
+            'chip_id': 'card-chip-builder',
+            'label': 'Corpus',
+            'subtitle': 'Modify',
+            'color_class': 'chip-builder',
+            'title': 'Toggle Corpus Modify'
+        },
+    ],
+    # Places group
+    [
+        {
+            'chip_id': 'card-chip-places',
+            'label': 'Places',
+            'subtitle': 'Liste',
+            'color_class': 'chip-places',
+            'title': 'Toggle Places dialog'
+        },
+        {
+            'chip_id': 'card-chip-collocations',
+            'label': 'Places',
+            'subtitle': 'Coll',
+            'color_class': 'chip-collocations',
+            'title': 'Toggle Collocations'
+        },
+    ],
+    # Detail group
+    [
+        {
+            'chip_id': 'card-chip-summary',
+            'label': 'Places',
+            'subtitle': 'Books',
+            'color_class': 'chip-summary',
+            'title': 'Show Place Books'
+        },
+        {
+            'chip_id': 'card-chip-similarity',
+            'label': 'Places',
+            'subtitle': 'Sim',
+            'color_class': 'chip-similarity',
+            'title': 'Toggle Place Similarity'
+        }
+    ]
 ]
 
 
 def create_card_launcher():
-    chips = []
-    for card in CARD_LAUNCHER_CONFIG:
-        chips.append(
-            html.Button(
-                [
-                    html.Span(card['label'], className="card-chip-label"),
-                    html.Span(card['subtitle'], className="card-chip-subtext")
-                ],
-                id=card['chip_id'],
-                className=f"card-chip {card['color_class']}",
-                title=card['title'],
-                n_clicks=0
+    groups = []
+    for group in CARD_LAUNCHER_CONFIG:
+        row = []
+        for card in group:
+            row.append(
+                html.Button(
+                    [
+                        html.Span(card['label'], className="card-chip-label"),
+                        html.Span(card['subtitle'], className="card-chip-subtext")
+                    ],
+                    id=card['chip_id'],
+                    className=f"card-chip {card['color_class']}",
+                    title=card['title'],
+                    n_clicks=0
+                )
             )
+        groups.append(html.Div(row, className="card-chip-group"))
+    # Visualization chip in its own group for symmetry
+    groups.append(html.Div([
+        html.Button(
+            [
+                html.Span("Viz", className="card-chip-label"),
+                html.Span("Ctrl", className="card-chip-subtext")
+            ],
+            id='card-chip-visualization',
+            className="card-chip chip-visualization",
+            title="Toggle Visualization Controls",
+            n_clicks=0
         )
-    return html.Div(chips, id='card-launcher')
+    ], className="card-chip-group"))
+    return html.Div(groups, id='card-launcher')
 
 # Database Connection & Queries
 def pdquery(conn, query, params=()):
