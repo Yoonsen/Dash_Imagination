@@ -166,7 +166,7 @@ def fetch_dhlabids_for_titles(title_labels):
 
 
 def create_corpus_builder_card(categories_list=None, authors_list=None, titles_list=None, default_filters=None):
-    """Creates a Bootstrap card component for corpus building."""
+    """Creates a Bootstrap card component for corpus modification."""
     if categories_list is None:
         categories_list = []
     if authors_list is None:
@@ -180,8 +180,8 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
         dbc.CardHeader(
             card_title_bar(
                 'corpus-builder',
-                'fa fa-book',
-                'Build Corpus',
+                'fa fa-tools',
+                'Corpus Modify',
                 close_button_id="close-corpus-builder",
                 close_button_title="Hide builder"
             ),

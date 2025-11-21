@@ -7,7 +7,7 @@ from dash import ALL
 from ..common.size_controls import DEFAULT_CARD_SIZES, card_title_bar
 
 def create_corpus_controls(categories_list=None, titles_list=None, default_filters=None):
-    """Create the corpus controls as a popup dialogue, with modern upload/download and info layout."""
+    """Create the corpus view as a popup dialogue, with modern upload/download and info layout."""
     if categories_list is None:
         categories_list = []
     if titles_list is None:
@@ -20,7 +20,7 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
             card_title_bar(
                 'corpus-controls',
                 'fa fa-book',
-                "Corpus Controls",
+                "Corpus View",
                 close_button_id='close-corpus',
                 close_button_title="Hide corpus controls"
             ),
