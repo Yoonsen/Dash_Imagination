@@ -821,15 +821,12 @@ app.layout = html.Div([
 
         # Right section with map/heatmap toggle
         html.Div([
-            html.Div([
-                html.Span("Kartvisning", className="map-mode-label"),
-                dbc.ButtonGroup([
-                    dbc.Button("Map", id='map-mode-map', n_clicks=0, color="primary", size="sm",
-                               active=True, className="map-mode-btn"),
-                    dbc.Button("Heatmap", id='map-mode-heat', n_clicks=0, color="light", size="sm",
-                               active=False, outline=True, className="map-mode-btn")
-                ], size="sm", className="map-mode-button-group")
-            ], className="map-mode-toggle d-flex align-items-center gap-2")
+            dbc.ButtonGroup([
+                dbc.Button("Map", id='map-mode-map', n_clicks=0, color="secondary", size="sm",
+                           active=True, className="map-mode-btn"),
+                dbc.Button("Heatmap", id='map-mode-heat', n_clicks=0, color="secondary", size="sm",
+                           active=False, outline=True, className="map-mode-btn")
+            ], size="sm", className="map-mode-button-group")
         ], style={
             'position': 'absolute',
             'right': '20px',

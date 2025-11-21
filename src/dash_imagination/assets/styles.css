@@ -185,17 +185,17 @@ body, html {
     border-radius: 999px;
     font-size: 0.8rem;
     font-weight: 600;
-    padding: 0.25rem 0.9rem;
-    transition: background-color 0.15s ease, color 0.15s ease;
-    border: 1px solid #cbd5f5;
+    padding: 0.2rem 0.75rem;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    border: 1px solid #d4d7de;
     color: #475569;
-    background-color: #fff;
+    background-color: #f8fafc;
 }
 
 .map-mode-button-group .btn.active {
-    background-color: #475569;
+    background-color: #334155;
     color: #fff;
-    border-color: #475569;
+    border-color: #334155;
 }
 
 .places-icon-btn {
