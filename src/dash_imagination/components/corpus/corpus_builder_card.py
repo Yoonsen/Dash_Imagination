@@ -5,7 +5,7 @@ from functools import lru_cache
 from ...utils.corpus_build import corpus_builder, get_corpus_stats, count_words
 from ...utils.db import get_db_connection
 import dhlab as dh
-from ..common.size_controls import size_control_buttons, CARD_DEFAULT_PRESET, DEFAULT_CARD_SIZES
+from ..common.size_controls import DEFAULT_CARD_SIZES, card_title_bar
 
 DEFAULT_YEAR_RANGE = [1814, 1905]
 
@@ -178,21 +178,15 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
 
     return dbc.Card([
         dbc.CardHeader(
-            html.Div([
-                html.Div([
-                    html.I(className="fa fa-book me-2"),
-                    html.H5("Build Corpus", className="mb-0 d-inline", style={"fontSize": "14px", "fontWeight": 500}),
-                    dbc.Button(
-                        "×",
-                        id="close-corpus-builder",
-                        className="float-end btn-close dialog-close-btn",
-                        size="sm",
-                        title="Close"
-                    ),
-                ], className="d-flex justify-content-between align-items-center flex-grow-1 me-2", id="corpus-builder-header", style={"cursor": "grab", "userSelect": "none"}),
-                size_control_buttons('corpus-builder')
-            ], className="d-flex justify-content-between align-items-center gap-2"),
-            className="bg-success-subtle text-dark"
+            card_title_bar(
+                'corpus-builder',
+                'fa fa-book',
+                'Build Corpus',
+                close_button_id="close-corpus-builder",
+                close_button_title="Hide builder"
+            ),
+            className="bg-success-subtle text-dark",
+            id="corpus-builder-header"
         ),
         dbc.CardBody([
             html.Div(
@@ -310,19 +304,20 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
         "zIndex": 800,
         "display": "none",
         "top": "60px",
-        "left": "100px"
+        "left": "620px"
     })
 
 @callback(
     [Output("corpus-builder-card", "style"),
      Output("corpus-controls-container", "style", allow_duplicate=True)],
     [Input("open-corpus-builder", "n_clicks"),
-     Input("close-corpus-builder", "n_clicks")],
+     Input("close-corpus-builder", "n_clicks"),
+     Input("card-chip-builder", "n_clicks")],
     [State("corpus-builder-card", "style"),
      State("corpus-controls-container", "style")],
     prevent_initial_call=True
 )
-def toggle_card_visibility(n1, n2, builder_style, controls_style):
+def toggle_card_visibility(n1, n2, chip_clicks, builder_style, controls_style):
     """Toggle the visibility of the corpus builder card while keeping controls visible."""
     import dash
     from dash import no_update
@@ -342,8 +337,12 @@ def toggle_card_visibility(n1, n2, builder_style, controls_style):
     builder_style = builder_style or {}
     controls_style = controls_style or {}
     
-    if button_id == "open-corpus-builder":
+    if button_id in ("open-corpus-builder", "card-chip-builder"):
         # Show builder card and ensure controls stay visible without overriding size presets
+        current_display = builder_style.get("display", "none")
+        if button_id == "card-chip-builder" and current_display != "none":
+            builder_style["display"] = "none"
+            return builder_style, controls_style
         builder_style["display"] = "flex"
         builder_style.pop("transform", None)
         controls_style["display"] = "flex"

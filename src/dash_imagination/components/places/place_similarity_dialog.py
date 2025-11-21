@@ -4,23 +4,53 @@ from dash.dependencies import Input, Output, State
 from .word_similarity import WordSimilarityAPI
 import pandas as pd
 from dash_imagination.utils.db import get_db_connection
+from dash_imagination.components.common.places_table import render_place_preview
+from dash_imagination.components.common.size_controls import card_title_bar, DEFAULT_CARD_SIZES
 import dash
+
+
+DEFAULT_SIMILARITY_POSITION = {
+    'top': 100,
+    'left': 360,
+}
+
+
+def _ensure_similarity_position(style: dict | None) -> dict:
+    style = (style or {}).copy()
+
+    def _normalize_axis(axis: str, minimum: int):
+        value = style.get(axis)
+        try:
+            if isinstance(value, str) and value.endswith('px'):
+                numeric = float(value[:-2])
+            elif value is not None:
+                numeric = float(value)
+            else:
+                numeric = DEFAULT_SIMILARITY_POSITION[axis]
+        except (ValueError, TypeError):
+            numeric = DEFAULT_SIMILARITY_POSITION[axis]
+        if numeric < minimum:
+            numeric = DEFAULT_SIMILARITY_POSITION[axis]
+        style[axis] = f"{numeric}px"
+
+    _normalize_axis('top', 40)
+    _normalize_axis('left', 140)
+    return style
 
 def create_place_similarity_dialog():
     """Create the place similarity dialog."""
     return dbc.Card([
-        dbc.CardHeader([
-            html.Div([
-                html.I(className="fa fa-search me-2"),
-                html.H5("Place Similarity", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
-                html.Button(
-                    "×",
-                    id='close-similarity',
-                    className="btn-close dialog-close-btn",
-                    title="Close"
-                )
-            ], className="d-flex justify-content-between align-items-center")
-        ], className="bg-info-subtle text-dark", id='similarity-header'),
+        dbc.CardHeader(
+            card_title_bar(
+                'similarity-card',
+                'fa fa-search',
+                "Place Similarity",
+                close_button_id='close-similarity',
+                close_button_title="Hide similarity card"
+            ),
+            className="bg-info-subtle text-dark",
+            id='similarity-header'
+        ),
         dbc.CardBody([
             # Input section
             html.Div([
@@ -59,21 +89,42 @@ def create_place_similarity_dialog():
                         className="form-control"
                     )
                 ], className="mb-3")
-            ], className="mb-4"),
+            ], className="similarity-inputs", style={'flex': '0 0 auto'}),
             
             # Results section
             html.Div([
-                html.H5("Results", className="mb-3"),
-                html.Div(id='similar-places-results', children=[
-                    html.P("Enter a place name and click 'Find Similar Places' to see results", className="text-muted")
-                ]),
+                html.Div("Results", className="text-uppercase fw-semibold small text-muted"),
+                html.Div(
+                    id='similar-places-results',
+                    className="flex-grow-1 d-flex flex-column",
+                    style={'flex': '1 1 auto', 'minHeight': 0, 'overflow': 'hidden'},
+                    children=[
+                        html.P("Enter a place name and click 'Find Similar Places' to see results", className="text-muted")
+                    ]
+                ),
                 html.Div([
-                    dbc.Button(
-                        "Select All Places and Build Corpus",
-                        color="primary",
-                        className="w-100",
-                        id="select-all-build-corpus-button"
-                    ),
+                    html.Div([
+                        html.Span("Kombiner med korpus", className="text-muted small me-2"),
+                        dbc.ButtonGroup([
+                            dbc.Button("+", id='corpus-op-union-similarity', n_clicks=0,
+                                       color="secondary", size="sm", outline=True,
+                                       title="Legg til treffene i korpuset"),
+                            dbc.Button("&", id='corpus-op-intersection-similarity', n_clicks=0,
+                                       color="secondary", size="sm", outline=True,
+                                       title="Behold kun overlapp"),
+                            dbc.Button("-", id='corpus-op-diff-similarity', n_clicks=0,
+                                       color="secondary", size="sm", outline=True,
+                                       title="Fjern treffene fra korpuset")
+                        ], size="sm", className="similarity-operation-buttons"),
+                        dbc.Button(
+                            html.Span("Oppdater", className="px-2"),
+                            id='apply-similarity-corpus',
+                            color="primary",
+                            size="sm",
+                            className="ms-2 similarity-apply-btn",
+                            disabled=True
+                        )
+                    ], className="d-flex align-items-center flex-wrap gap-2"),
                     dbc.Spinner(
                         html.Div(id="select-all-loading"),
                         color="primary",
@@ -81,27 +132,36 @@ def create_place_similarity_dialog():
                         fullscreen=False,
                         spinner_style={"width": "1rem", "height": "1rem"}
                     )
-                ], id="select-all-container", style={'display': 'none', 'marginBottom': '15px'})
-            ])
-        ], style={'overflowY': 'auto', 'maxHeight': 'calc(500px - 56px)'})  # 56px is header height
-    ], id='place-similarity-dialog', className="position-absolute", style={
-        'width': '350px',
-        'height': '500px',
+                ], id="select-all-container", style={'display': 'none', 'marginBottom': '8px'})
+            ], className="flex-grow-1 d-flex flex-column gap-2", style={'minHeight': 0, 'overflow': 'hidden'})
+        ], style={
+            'flex': '1 1 auto',
+            'minHeight': 0,
+            'display': 'flex',
+            'flexDirection': 'column',
+            'gap': '1rem',
+            'overflow': 'hidden'
+        })
+    ], id='place-similarity-dialog', className="position-absolute dialog-card", style={
+        'width': f"{DEFAULT_CARD_SIZES['similarity-card']['width']}px",
+        'height': f"{DEFAULT_CARD_SIZES['similarity-card']['height']}px",
         'zIndex': 800,
         'display': 'none',
         'top': '100px',  # Position below the top button container
-        'left': '20px',   # Align with other containers
-        'cursor': 'move'  # Add cursor style
+        'left': '360px',   # Align just to the right of launcher column
+        'cursor': 'grab',
+        'flexDirection': 'column'
     })
 
 @callback(
     Output('place-similarity-dialog', 'style', allow_duplicate=True),
     [Input('close-similarity', 'n_clicks'),
-     Input('find-similar-places', 'n_clicks')],
+     Input('find-similar', 'n_clicks'),
+     Input('card-chip-similarity', 'n_clicks')],
     [State('place-similarity-dialog', 'style')],
     prevent_initial_call=True
 )
-def toggle_similarity_dialog(n_clicks_close, n_clicks_show, current_style):
+def toggle_similarity_dialog(n_clicks_close, n_clicks_show, chip_clicks, current_style):
     ctx = callback_context
     if not ctx.triggered:
         return current_style
@@ -109,9 +169,16 @@ def toggle_similarity_dialog(n_clicks_close, n_clicks_show, current_style):
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
     if trigger_id == 'close-similarity':
         return {'display': 'none'}
-    elif trigger_id == 'find-similar-places':
-        new_style = dict(current_style) if current_style else {}
-        new_style['display'] = 'block'
+    elif trigger_id == 'find-similar':
+        new_style = _ensure_similarity_position(current_style)
+        new_style['display'] = 'flex'
+        new_style.pop('transform', None)
+        return new_style
+    elif trigger_id == 'card-chip-similarity':
+        new_style = _ensure_similarity_position(current_style)
+        current_display = new_style.get('display', 'none')
+        new_style['display'] = 'flex' if current_display == 'none' else 'none'
+        new_style.pop('transform', None)
         return new_style
     return current_style
 
@@ -126,20 +193,21 @@ def handle_form_submit(submit):
     return no_update
 
 @callback(
-    [Output('similar-places-results', 'children'),
-     Output('similar-places-results', 'style')],
-    [Input('find-similar', 'n_clicks')],
-    [State('similar-place-input', 'value'),
-     State('similarity-threshold', 'value'),
-     State('max-places', 'value')],
+    Output('similar-places-results', 'children'),
+    Output('similar-places-results', 'style'),
+    Output('similarity-places-data', 'data'),
+    Input('find-similar', 'n_clicks'),
+    State('similar-place-input', 'value'),
+    State('similarity-threshold', 'value'),
+    State('max-places', 'value'),
     prevent_initial_call=True
 )
 def handle_similar_places(n_clicks, search_word, threshold, max_places):
     if not n_clicks:
-        return no_update, no_update
+        return no_update, no_update, no_update
         
     if not search_word:
-        return html.Div("Please enter a search term"), {'display': 'block'}
+        return html.Div("Please enter a search term"), {'display': 'block'}, None
     
     conn = None
     try:
@@ -148,13 +216,13 @@ def handle_similar_places(n_clicks, search_word, threshold, max_places):
         similar_words = api.find_similar_words(search_word, collection_name="vss_1850_cos", limit=max_places)
         
         if not similar_words:
-            return html.Div("No similar places found"), {'display': 'block'}
+            return html.Div("No similar places found"), {'display': 'block'}, None
         
         # Filter similar words based on threshold
         filtered_words = [word for word, score in similar_words if score >= threshold]
         
         if not filtered_words:
-            return html.Div("No places meet the similarity threshold"), {'display': 'block'}
+            return html.Div("No places meet the similarity threshold"), {'display': 'block'}, None
         
         # Connect to database and get place information
         conn = get_db_connection()
@@ -188,129 +256,57 @@ def handle_similar_places(n_clicks, search_word, threshold, max_places):
         places_df = pd.read_sql_query(query, conn, params=tuple(filtered_words + [max_places]))
         
         if places_df.empty:
-            return html.Div("No matching places found in the database"), {'display': 'block'}
+            return html.Div("No matching places found in the database"), {'display': 'block'}, None
         
-        # Create hover text more efficiently
-        places_df['hover_text'] = places_df.apply(
-            lambda row: f"{row['token']} ({row['name']})<br>Mentions: {int(row['frequency'])}<br>Books: {int(row['book_count'])}",
-            axis=1
+        summary, table = render_place_preview(
+            places_df,
+            selected_place=None,
+            empty_message="Ingen steder tilgjengelig ennå.",
+            body_max_height=None
         )
-        
-        # Create the list container with improved performance
-        return html.Div([
-            html.Div([
-                html.Div(f"Showing {len(places_df)} places", 
-                         style={'marginBottom': '8px', 'fontSize': '0.9rem', 'color': '#666'}),
-                html.Div([
-                    # Table header
-                    html.Div([
-                        html.Div("Place", style={'flex': '2', 'fontWeight': 'bold', 'padding': '8px'}),
-                        html.Div("📚", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'}),
-                        html.Div("📝", style={'flex': '1', 'fontWeight': 'bold', 'padding': '8px', 'textAlign': 'center'})
-                    ], style={
-                        'display': 'flex',
-                        'borderBottom': '2px solid #eee',
-                        'marginBottom': '4px',
-                        'fontSize': '0.9rem'
-                    }),
-                    # Table rows
-                    html.Div([
-                        html.Div([
-                            html.Div([
-                                html.Div(f"{row['token']}", style={'fontWeight': '500', 'fontSize': '0.9rem'}),
-                                html.Div(f"{row['name']}", style={'color': '#666', 'fontSize': '0.8rem'})
-                            ], style={'flex': '2', 'padding': '8px'}),
-                            html.Div(f"{int(row['book_count'])}", 
-                                    style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}),
-                            html.Div(f"{int(row['frequency'])}", 
-                                    style={'flex': '1', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'})
-                        ], style={
-                            'display': 'flex',
-                            'borderBottom': '1px solid #eee',
-                            'transition': 'background-color 0.2s',
-                            'cursor': 'pointer'
-                        }, 
-                        className='place-item', 
-                        id={'type': 'place-item', 'index': row['token']},
-                        **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
-                        for _, row in places_df.iterrows()
-                    ], style={
-                        'maxHeight': '400px', 
-                        'overflowY': 'auto'
-                    })
-                ], style={'border': '1px solid #eee', 'borderRadius': '4px'})
-            ], style={'padding': '12px'})
-        ], style={'backgroundColor': 'white', 'borderRadius': '8px', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'}), {'display': 'block'}
+        panel = html.Div(
+            [
+                html.Div(
+                    [summary],
+                    className="places-tab-toolbar d-flex align-items-center justify-content-between"
+                ),
+                table
+            ],
+            className="places-tab-panel similarity-results-panel",
+            style={
+                'display': 'flex',
+                'flexDirection': 'column',
+                'flex': '1 1 auto',
+                'minHeight': 0,
+                'gap': '0.5rem'
+            }
+        )
+        return (
+            panel,
+            {'display': 'flex', 'flexDirection': 'column', 'flex': '1 1 auto', 'minHeight': 0},
+            places_df.to_json(date_format='iso', orient='split')
+        )
         
     except Exception as e:
         print(f"Error in handle_similar_places: {e}")
-        return html.Div(f"Error: {str(e)}"), {'display': 'block'}
+        return html.Div(f"Error: {str(e)}"), {'display': 'block'}, None
     finally:
         if conn:
             conn.close() 
 
 @callback(
     Output('select-all-container', 'style'),
-    Input('similar-places-results', 'children'),
-    prevent_initial_call=True
+    Input('similarity-places-data', 'data')
 )
-def show_select_all_button(results):
-    if results and not isinstance(results, str):
-        return {'display': 'block', 'marginBottom': '15px'}
+def toggle_similarity_action_bar(data):
+    if data:
+        return {'display': 'block', 'marginBottom': '8px'}
     return {'display': 'none'}
 
+
 @callback(
-    Output('current-filters', 'data', allow_duplicate=True),
-    Input('select-all-build-corpus-button', 'n_clicks'),
-    [State('similar-places-results', 'children')],
-    prevent_initial_call=True
+    Output('apply-similarity-corpus', 'disabled'),
+    Input('similarity-places-data', 'data')
 )
-def build_corpus_from_places(n_clicks, results):
-    if not n_clicks:
-        return no_update
-        
-    # Extract place tokens from the results
-    place_tokens = []
-    if isinstance(results, dict) and 'props' in results:
-        # Navigate through the nested structure to find place items
-        def extract_tokens(element):
-            if isinstance(element, dict):
-                if 'props' in element:
-                    props = element['props']
-                    if 'id' in props and isinstance(props['id'], dict):
-                        if 'type' in props['id'] and props['id']['type'] == 'place-item':
-                            place_tokens.append(props['id']['index'])
-                    if 'children' in props:
-                        for child in props['children']:
-                            extract_tokens(child)
-            elif isinstance(element, list):
-                for item in element:
-                    extract_tokens(item)
-        
-        extract_tokens(results)
-    
-    if not place_tokens:
-        return no_update
-        
-    # Get books for these places
-    conn = get_db_connection()
-    try:
-        query = """
-        SELECT DISTINCT dhlabid
-        FROM books
-        WHERE token IN ({})
-        """.format(','.join(['?'] * len(place_tokens)))
-        
-        books_df = pd.read_sql_query(query, conn, params=tuple(place_tokens))
-        book_ids = books_df['dhlabid'].tolist()
-        
-        # Create new filters
-        new_filters = {
-            'selected_tokens': place_tokens,
-            'books': book_ids,
-            'corpus_source': 'Similar Places'
-        }
-        
-        return new_filters
-    finally:
-        conn.close() 
+def toggle_similarity_apply_button(data):
+    return not bool(data)

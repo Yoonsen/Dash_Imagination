@@ -202,6 +202,28 @@ $(document).ready(function() {
                 monitorVisibilityElement($builder);
             }
 
+            // Initialize collocation-card if it exists
+            if ($('#collocation-card').length > 0) {
+                console.log("Found collocation-card, making it draggable");
+                const $collocation = $('#collocation-card');
+                $collocation.draggable({
+                    handle: '#collocation-card-header',
+                    containment: 'window',
+                    start: function(event, ui) {
+                        bringToFront($(this));
+                        $(this).addClass("dragging");
+                        console.log("Started dragging collocation card");
+                    },
+                    stop: function(event, ui) {
+                        $(this).removeClass("dragging");
+                        console.log("Stopped dragging collocation card at:", ui.position);
+                    }
+                }).on('mousedown', function() {
+                    bringToFront($(this));
+                });
+                monitorVisibilityElement($collocation);
+            }
+
             console.log("Draggable initialization attempt completed");
         } catch (error) {
             console.error("Error initializing draggable:", error);
@@ -247,6 +269,13 @@ $(document).ready(function() {
             console.log("Visualization controls container is visible but not draggable yet, initializing");
             initializeDraggable();
         }
+
+        // Check collocation card
+        if ($('#collocation-card').is(':visible') && 
+            !$('#collocation-card').hasClass('ui-draggable')) {
+            console.log("Collocation card is visible but not draggable yet, initializing");
+            initializeDraggable();
+        }
     });
 
     // Also check periodically
@@ -285,14 +314,21 @@ $(document).ready(function() {
             console.log("Visualization controls container is visible in interval check but not draggable, initializing");
             initializeDraggable();
         }
+
+        // Check collocation card
+        if ($('#collocation-card').is(':visible') && 
+            !$('#collocation-card').hasClass('ui-draggable')) {
+            console.log("Collocation card is visible in interval check but not draggable, initializing");
+            initializeDraggable();
+        }
     }, 2000);
 
     // Set cursor styles
-    $("#summary-header, #place-names-header, #corpus-header, #visualization-header, #corpus-builder-header").css("cursor", "grab");
+    $("#summary-header, #place-names-header, #corpus-header, #visualization-header, #corpus-builder-header, #collocation-card-header, #similarity-header").css("cursor", "grab");
 
     // Add touch support for draggable elements
     function addTouchSupport() {
-        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container').on('touchstart', function(event) {
+        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container, #collocation-card, #place-similarity-dialog').on('touchstart', function(event) {
             var touch = event.originalEvent.touches[0];
             var simulatedEvent = new MouseEvent('mousedown', {
                 bubbles: true,
@@ -305,7 +341,7 @@ $(document).ready(function() {
             event.preventDefault();
         });
 
-        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container').on('touchmove', function(event) {
+        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container, #collocation-card, #place-similarity-dialog').on('touchmove', function(event) {
             var touch = event.originalEvent.touches[0];
             var simulatedEvent = new MouseEvent('mousemove', {
                 bubbles: true,
@@ -318,7 +354,7 @@ $(document).ready(function() {
             event.preventDefault();
         });
 
-        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container').on('touchend', function(event) {
+        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container, #collocation-card, #place-similarity-dialog').on('touchend', function(event) {
             var simulatedEvent = new MouseEvent('mouseup', {
                 bubbles: true,
                 cancelable: true,

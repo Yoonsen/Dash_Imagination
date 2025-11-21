@@ -12,7 +12,9 @@ CARD_DEFAULT_PRESET = {
     'places': 'wide',
     'corpus-controls': 'standard',
     'visualization-controls': 'standard',
-    'corpus-builder': 'standard'
+    'corpus-builder': 'standard',
+    'collocation-card': 'standard',
+    'similarity-card': 'standard'
 }
 
 DEFAULT_CARD_SIZES = {key: SIZE_PRESETS[value].copy() for key, value in CARD_DEFAULT_PRESET.items()}
@@ -21,6 +23,7 @@ DEFAULT_CARD_SIZES = {key: SIZE_PRESETS[value].copy() for key, value in CARD_DEF
 DEFAULT_CARD_SIZES['corpus-controls']['width'] += 80  # One W+ click
 DEFAULT_CARD_SIZES['corpus-builder']['height'] += 160  # Two H+ clicks
 DEFAULT_CARD_SIZES['places']['height'] += 160  # Two H+ clicks
+DEFAULT_CARD_SIZES['similarity-card']['height'] += 160  # Two H+ clicks
 
 
 def size_control_buttons(component_id: str):
@@ -44,4 +47,43 @@ def size_control_buttons(component_id: str):
             ], size="sm")
         ], className="d-flex align-items-center gap-1 mt-1")
     ], className="size-control-wrapper")
+
+
+def card_title_bar(
+    component_id,
+    icon_class,
+    title,
+    *,
+    close_button_id=None,
+    close_button_title=None,
+    close_icon_class="fa fa-times"
+):
+    """
+    Shared header layout for floating dialog cards.
+    """
+    close_btn = None
+    if close_button_id:
+        close_btn = html.Button(
+            html.I(className=close_icon_class),
+            id=close_button_id,
+            title=close_button_title or "Hide card",
+            className="card-hide-btn",
+            type="button"
+        )
+
+    action_children = []
+    if close_btn:
+        action_children.append(close_btn)
+    action_children.append(size_control_buttons(component_id))
+
+    return html.Div(
+        [
+            html.Div([
+                html.I(className=f"{icon_class} card-title-icon"),
+                html.H5(title, className="card-title-text mb-0")
+            ], className="card-title-main"),
+            html.Div(action_children, className="card-title-actions")
+        ],
+        className="card-title-bar"
+    )
 

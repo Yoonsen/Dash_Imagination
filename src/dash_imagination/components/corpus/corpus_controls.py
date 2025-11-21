@@ -4,7 +4,7 @@ from dash.dependencies import Input, Output, State
 from dash import callback, no_update
 import dash
 from dash import ALL
-from ..common.size_controls import size_control_buttons, CARD_DEFAULT_PRESET, DEFAULT_CARD_SIZES
+from ..common.size_controls import DEFAULT_CARD_SIZES, card_title_bar
 
 def create_corpus_controls(categories_list=None, titles_list=None, default_filters=None):
     """Create the corpus controls as a popup dialogue, with modern upload/download and info layout."""
@@ -17,19 +17,13 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
 
     return dbc.Card([
         dbc.CardHeader(
-            html.Div([
-                html.Div([
-                    html.I(className="fa fa-book me-2"),
-                    html.H5("Corpus Controls", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
-                    html.Button(
-                        "×",
-                        id='close-corpus',
-                        className="btn-close dialog-close-btn",
-                        title="Close"
-                    )
-                ], className="d-flex justify-content-between align-items-center flex-grow-1 me-2"),
-                size_control_buttons('corpus-controls')
-            ], className="d-flex justify-content-between align-items-center gap-2"),
+            card_title_bar(
+                'corpus-controls',
+                'fa fa-book',
+                "Corpus Controls",
+                close_button_id='close-corpus',
+                close_button_title="Hide corpus controls"
+            ),
             className="bg-primary-subtle text-dark",
             id='corpus-header'
         ),
@@ -162,7 +156,7 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
         'zIndex': 800,
         'display': 'none',
         'top': '60px',
-        'left': '10px'
+        'left': '140px'
     })
 
 def create_visualization_controls(categories_list=None, titles_list=None, default_filters=None):
@@ -176,19 +170,13 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
 
     return dbc.Card([
         dbc.CardHeader(
-            html.Div([
-                html.Div([
-                    html.I(className="fa fa-chart-bar me-2"),
-                    html.H5("Visualization Controls", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
-                    html.Button(
-                        "×",
-                        id='close-visualization',
-                        className="btn-close dialog-close-btn",
-                        title="Close"
-                    )
-                ], className="d-flex justify-content-between align-items-center flex-grow-1 me-2"),
-                size_control_buttons('visualization-controls')
-            ], className="d-flex justify-content-between align-items-center gap-2"),
+            card_title_bar(
+                'visualization-controls',
+                'fa fa-chart-bar',
+                "Visualization Controls",
+                close_button_id='close-visualization',
+                close_button_title="Hide visualization controls"
+            ),
             className="bg-info-subtle text-dark",
             id='visualization-header'
         ),
@@ -353,7 +341,7 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
         'zIndex': 800,
         'display': 'none',
         'top': '100px',
-        'left': '20px',
+        'left': '360px',
         'cursor': 'move'
     }) 
 

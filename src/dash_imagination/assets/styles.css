@@ -55,6 +55,66 @@ body, html {
     font-size: 0.7rem;
 }
 
+.card-title-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.card-title-main {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.card-title-icon {
+    font-size: 1rem;
+    color: #475569;
+}
+
+.card-title-text {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0;
+}
+
+.card-title-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.card-hide-btn {
+    border: none;
+    background: rgba(15, 23, 42, 0.08);
+    color: #0f172a;
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    padding: 0;
+}
+
+.card-hide-btn:hover,
+.card-hide-btn:focus {
+    background: rgba(15, 23, 42, 0.16);
+    color: #0f172a;
+}
+
+.card-hide-btn .fa,
+.card-hide-btn .fas,
+.card-hide-btn .far {
+    font-size: 0.75rem;
+}
+
 .places-tab-panel {
     flex: 1 1 auto;
     min-height: 0;
@@ -63,8 +123,13 @@ body, html {
 .places-tab-toolbar {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 0.35rem;
+    justify-content: space-between;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.places-tab-toolbar .text-muted {
+    margin: 0;
 }
 
 .places-tab-pill {
@@ -76,6 +141,31 @@ body, html {
     padding: 2px 10px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+}
+
+.places-mode-toggle {
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.3rem;
+}
+
+.places-mode-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.places-mode-button-group .btn {
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.25rem 0.9rem;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.places-mode-panels {
+    flex: 1 1 auto;
 }
 
 .places-icon-btn {
@@ -172,9 +262,12 @@ body, html {
 
 /* Make sure the draggable panel header looks like a handle */
 #summary-header,
-#places-header,
+#place-names-header,
 #corpus-header,
-#visualization-header {
+#visualization-header,
+#corpus-builder-header,
+#collocation-card-header,
+#similarity-header {
     cursor: grab;
     user-select: none;
     -webkit-user-select: none;
@@ -183,9 +276,12 @@ body, html {
 }
 
 #summary-header:active,
-#places-header:active,
+#place-names-header:active,
 #corpus-header:active,
-#visualization-header:active {
+#visualization-header:active,
+#corpus-builder-header:active,
+#collocation-card-header:active,
+#similarity-header:active {
     cursor: grabbing;
 }
 
@@ -289,6 +385,97 @@ body {
 
 #place-summary-container[style*="display: block"] {
     animation: float-in 0.3s ease-out forwards;
+}
+
+#card-launcher {
+    position: absolute;
+    left: 16px;
+    top: 120px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 950;
+}
+
+.card-chip {
+    border: none;
+    border-radius: 12px;
+    width: 68px;
+    min-height: 60px;
+    color: #0f172a;
+    font-weight: 600;
+    font-size: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 6px 8px;
+    cursor: pointer;
+    opacity: 0.55;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.15);
+    transition: opacity 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.card-chip:hover {
+    opacity: 0.85;
+    box-shadow: 0 4px 8px rgba(15, 23, 42, 0.2);
+    transform: translateY(-1px);
+}
+
+.card-chip.chip-open {
+    opacity: 1;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.25);
+}
+
+.card-chip-label {
+    font-size: 0.8rem;
+    line-height: 1.2;
+}
+
+.card-chip-subtext {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.8;
+}
+
+.card-chip.chip-corpus {
+    background: #dbeafe;
+}
+
+.card-chip.chip-places {
+    background: #fef3c7;
+}
+
+.card-chip.chip-summary {
+    background: #ffe4e6;
+}
+
+.card-chip.chip-visualization {
+    background: #e0f2fe;
+}
+
+.card-chip.chip-builder {
+    background: #dcfce7;
+}
+
+.card-chip.chip-collocations {
+    background: #f3e8ff;
+}
+
+.card-chip.chip-similarity {
+    background: #ede9fe;
+}
+
+@media (max-width: 960px) {
+    #card-launcher {
+        top: auto;
+        bottom: 20px;
+        flex-direction: row;
+        flex-wrap: wrap;
+        width: calc(100% - 40px);
+        justify-content: flex-start;
+    }
 }
 
 /* Place similarity dialog styles */

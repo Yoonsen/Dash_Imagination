@@ -77,8 +77,9 @@ from dash_imagination.components.common.size_controls import (
     SIZE_PRESETS,
     CARD_DEFAULT_PRESET,
     DEFAULT_CARD_SIZES,
-    size_control_buttons,
+    card_title_bar,
 )
+from dash_imagination.components.common.places_table import render_place_preview
 
 
 def load_places_frame(json_payload):
@@ -98,71 +99,6 @@ def filter_places_search(df, search_term):
         df['name'].astype(str).str.lower().str.contains(term, na=False)
     )
     return df[mask]
-
-
-def render_place_preview(df, selected_place, empty_message="Ingen steder tilgjengelig."):
-    if df is None or df.empty:
-        return html.Div(empty_message, className="text-muted"), html.Div()
-
-    df = df.copy()
-    df['hover_text'] = df.apply(
-        lambda row: f"{row.get('token', '')} ({row.get('name', '')})<br>Modern name: {row.get('name', '')}<br>Mentions: {int(row.get('frequency', 0))}<br>Books: {int(row.get('book_count', 0))}",
-        axis=1
-    )
-
-    summary = html.Div(
-        f"Viser {len(df)} steder.",
-        style={'fontSize': '0.85rem'}
-    )
-
-    rows = []
-    for _, row in df.iterrows():
-        rows.append(
-            html.Div([
-                html.Div(
-                    f"{row.get('token', '')}",
-                    style={'flex': '1.2', 'padding': '8px', 'fontWeight': '500', 'fontSize': '0.9rem'}
-                ),
-                html.Div(
-                    f"{row.get('name', '') or '—'}",
-                    style={'flex': '1.2', 'padding': '8px', 'color': '#475569', 'fontSize': '0.85rem', 'overflow': 'hidden', 'textOverflow': 'ellipsis', 'whiteSpace': 'nowrap'}
-                ),
-                html.Div(
-                    f"{int(row.get('book_count', 0))}",
-                    style={'flex': '0.7', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}
-                ),
-                html.Div(
-                    f"{int(row.get('frequency', 0))}",
-                    style={'flex': '0.7', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}
-                )
-            ], style={
-                'display': 'flex',
-                'borderBottom': '1px solid #eee',
-                'transition': 'background-color 0.2s',
-                'cursor': 'pointer',
-                'backgroundColor': '#fff7ed' if selected_place == row['token'] else 'transparent'
-            },
-                className='place-item',
-                id={'type': 'place-item', 'index': row['token']},
-                **{'data-lat': row['latitude'], 'data-lon': row['longitude'], 'data-hover': row['hover_text']})
-        )
-
-    table = html.Div([
-        html.Div([
-            html.Div("Historisk", style={'flex': '1.2', 'fontWeight': '600', 'padding': '8px'}),
-            html.Div("Moderne", style={'flex': '1.2', 'fontWeight': '600', 'padding': '8px'}),
-            html.Div("📚", style={'flex': '0.7', 'fontWeight': '600', 'padding': '8px', 'textAlign': 'center'}),
-            html.Div("📝", style={'flex': '0.7', 'fontWeight': '600', 'padding': '8px', 'textAlign': 'center'})
-        ], style={
-            'display': 'flex',
-            'borderBottom': '2px solid #eee',
-            'marginBottom': '4px',
-            'fontSize': '0.9rem'
-        }),
-        html.Div(rows, style={'maxHeight': '360px', 'overflowY': 'auto'})
-    ], style={'border': '1px solid #eee', 'borderRadius': '4px', 'padding': '4px'})
-
-    return summary, table
 
 
 def truncate_text(value: str, length: int = 40) -> tuple[str, str]:
@@ -369,6 +305,127 @@ def create_collocation_controls():
         'boxShadow': '0 1px 2px rgba(15,23,42,0.05)'
     })
 
+
+def create_collocation_card():
+    return dbc.Card([
+        dbc.CardHeader(
+            card_title_bar(
+                'collocation-card',
+                'fa fa-highlighter',
+                "Collocations",
+                close_button_id='close-collocations',
+                close_button_title="Hide collocation card"
+            ),
+            className="bg-warning-subtle text-dark",
+            id='collocation-card-header'
+        ),
+        dbc.CardBody([
+            create_collocation_controls(),
+            html.Div(
+                build_places_tab(
+                    'places-collocation-summary',
+                    'places-collocation-table',
+                    'download-places-collocation-btn',
+                    'download-places-collocations',
+                    'apply-places-collocations',
+                    activate_btn_id='activate-places-collocations',
+                    source_key='collocations',
+                    activate_title="Vis kollokasjonslisten på kartet",
+                    highlight_toggle_id='toggle-collocation-highlight'
+                ),
+                className="flex-grow-1 d-flex flex-column",
+                style={'minHeight': 0}
+            )
+        ], style={
+            'flex': '1 1 auto',
+            'minHeight': 0,
+            'display': 'flex',
+            'flexDirection': 'column',
+            'gap': '0.75rem',
+            'overflow': 'hidden'
+        })
+    ], id='collocation-card', className="position-absolute dialog-card", style={
+        'width': f"{DEFAULT_CARD_SIZES['collocation-card']['width']}px",
+        'height': f"{DEFAULT_CARD_SIZES['collocation-card']['height']}px",
+        'zIndex': 800,
+        'display': 'none',
+        'top': '130px',
+        'left': '620px',
+        'cursor': 'grab',
+        'flexDirection': 'column'
+    })
+
+
+CARD_LAUNCHER_CONFIG = [
+    {
+        'chip_id': 'card-chip-corpus',
+        'label': 'Corpus',
+        'subtitle': 'Ctrl',
+        'color_class': 'chip-corpus',
+        'title': 'Toggle Corpus Controls'
+    },
+    {
+        'chip_id': 'card-chip-places',
+        'label': 'Places',
+        'subtitle': 'Liste',
+        'color_class': 'chip-places',
+        'title': 'Toggle Places dialog'
+    },
+    {
+        'chip_id': 'card-chip-summary',
+        'label': 'Places',
+        'subtitle': 'Info',
+        'color_class': 'chip-summary',
+        'title': 'Show Place Details'
+    },
+    {
+        'chip_id': 'card-chip-visualization',
+        'label': 'Viz',
+        'subtitle': 'Ctrl',
+        'color_class': 'chip-visualization',
+        'title': 'Toggle Visualization Controls'
+    },
+    {
+        'chip_id': 'card-chip-builder',
+        'label': 'Corpus',
+        'subtitle': 'Builder',
+        'color_class': 'chip-builder',
+        'title': 'Toggle Corpus Builder'
+    },
+    {
+        'chip_id': 'card-chip-collocations',
+        'label': 'Places',
+        'subtitle': 'Coll',
+        'color_class': 'chip-collocations',
+        'title': 'Toggle Collocations'
+    },
+    {
+        'chip_id': 'card-chip-similarity',
+        'label': 'Places',
+        'subtitle': 'Sim',
+        'color_class': 'chip-similarity',
+        'title': 'Toggle Place Similarity'
+    }
+]
+
+
+def create_card_launcher():
+    chips = []
+    for card in CARD_LAUNCHER_CONFIG:
+        chips.append(
+            html.Button(
+                [
+                    html.Span(card['label'], className="card-chip-label"),
+                    html.Span(card['subtitle'], className="card-chip-subtext")
+                ],
+                id=card['chip_id'],
+                className=f"card-chip {card['color_class']}",
+                title=card['title'],
+                n_clicks=0
+            )
+        )
+    return html.Div(chips, id='card-launcher')
+
 # Database Connection & Queries
 def pdquery(conn, query, params=()):
     return pd.read_sql_query(query, conn, params=params)
@@ -442,6 +499,24 @@ def fetch_place_tokens(book_ids):
     if df.empty:
         return []
     return df['token'].dropna().astype(str).unique().tolist()
+
+
+def fetch_books_for_tokens(tokens):
+    if not tokens:
+        return []
+    conn = get_db_connection()
+    try:
+        placeholders = ','.join(['?'] * len(tokens))
+        df = pd.read_sql_query(
+            f"SELECT DISTINCT dhlabid FROM books WHERE token IN ({placeholders})",
+            conn,
+            params=tuple(tokens)
+        )
+    finally:
+        conn.close()
+    if df.empty:
+        return []
+    return df['dhlabid'].dropna().astype(int).tolist()
 
 def get_places_for_map(filters=None, books=None, return_total=False, selected_tokens=None):
     """Get places data for the map visualization."""
@@ -830,6 +905,7 @@ app.layout = html.Div([
     # Map controls in a modal
     create_corpus_controls(categories_list, titles_list, default_filters),
     create_visualization_controls(categories_list, titles_list, default_filters),
+    create_card_launcher(),
 
     # ImagiNation info button and modal
     html.Div([
@@ -893,18 +969,13 @@ app.layout = html.Div([
     # Place summary container
     dbc.Card([
         dbc.CardHeader(
-            html.Div([
-                html.Div([
-                    html.I(className="fa fa-grip-horizontal me-2"),
-                    html.H5("Place Details", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
-                    html.Button(
-                        html.I(className="fa fa-times"),
-                        id='close-summary',
-                        className="btn-close"
-                    )
-                ], className="d-flex justify-content-between align-items-center flex-grow-1 me-2"),
-                size_control_buttons('place-summary')
-            ], className="d-flex justify-content-between align-items-center gap-2"),
+            card_title_bar(
+                'place-summary',
+                'fa fa-grip-horizontal',
+                "Place Details",
+                close_button_id='close-summary',
+                close_button_title="Hide place details"
+            ),
             className="bg-danger-subtle text-dark",
             id='summary-header'
         ),
@@ -928,7 +999,7 @@ app.layout = html.Div([
         'zIndex': 800,
         'display': 'none',
         'top': '100px',  # Position below the top button container
-        'left': '20px',  # Align with other containers
+        'left': '140px',  # Align with launcher offset
         'cursor': 'grab',
         'flexDirection': 'column'
     }),
@@ -936,19 +1007,15 @@ app.layout = html.Div([
     # Place Names Container
     dbc.Card([
         dbc.CardHeader(
-            html.Div([
-                html.Div([
-                    html.I(className="fa fa-map-marker me-2"),
-                    html.H5("Place Names", className="mb-0", style={"fontSize": "14px", "fontWeight": 500}),
-                    html.Button(
-                        html.I(className="fa fa-times"),
-                        id='close-place-names',
-                        className="btn-close"
-                    )
-                ], className="d-flex justify-content-between align-items-center flex-grow-1 me-2"),
-                size_control_buttons('places')
-            ], className="d-flex justify-content-between align-items-center gap-2", id='place-names-header'),
-            className="bg-warning-subtle text-dark"
+            card_title_bar(
+                'places',
+                'fa fa-map-marker',
+                "Place Names",
+                close_button_id='close-place-names',
+                close_button_title="Hide place names"
+            ),
+            className="bg-warning-subtle text-dark",
+            id='place-names-header'
         ),
         dbc.CardBody([
             html.Div([
@@ -984,57 +1051,63 @@ app.layout = html.Div([
                         persistence=True
                     )
                 ], className="mb-2", style={'fontSize': '0.85rem', 'flex': '0 0 auto'}),
-                html.Div(
-                    dbc.Tabs(
-                        [
-                            dbc.Tab([
-                                build_places_tab(
-                                    'places-frequency-summary',
-                                    'places-frequency-table',
-                                    'download-places-frequency-btn',
-                                    'download-places-frequency',
-                                    'apply-places-frequency',
-                                    action_prefix=html.Span("Frekvenskutt", className="places-tab-pill"),
-                                    activate_btn_id='activate-places-frequency',
-                                    source_key='frequency',
-                                    activate_title="Vis frekvenslisten på kartet"
-                                )
-                            ], label="Frekvens", tab_id="frequency"),
-                            dbc.Tab([
-                                build_places_tab(
-                                    'places-sampling-summary',
-                                    'places-sampling-table',
-                                    'download-places-sampling-btn',
-                                    'download-places-sampling',
-                                    'apply-places-sampling',
-                                    include_resample=True,
-                                    activate_btn_id='activate-places-sampling',
-                                    source_key='sampling',
-                                    activate_title="Vis eksempellisten på kartet"
-                                )
-                            ], label="Sampling", tab_id="sampling"),
-                            dbc.Tab([
-                                build_places_tab(
-                                    'places-collocation-summary',
-                                    'places-collocation-table',
-                                    'download-places-collocation-btn',
-                                    'download-places-collocations',
-                                    'apply-places-collocations',
-                                    activate_btn_id='activate-places-collocations',
-                                    source_key='collocations',
-                                    activate_title="Vis kollokasjonslisten på kartet",
-                                    highlight_toggle_id='toggle-collocation-highlight',
-                                    extra_controls=create_collocation_controls()
-                                )
-                            ], label="Kollokasjoner", tab_id="collocations"),
-                        ],
-                        id='places-tabs',
-                        active_tab='frequency',
-                        className="flex-grow-1"
-                    ),
-                    className="flex-grow-1 d-flex flex-column",
-                    style={'minHeight': 0, 'gap': '0.75rem'}
-                )
+                html.Div([
+                    html.Div([
+                        html.Span("Visning", className="places-mode-label"),
+                        dbc.ButtonGroup([
+                            dbc.Button(
+                                "Frekvens",
+                                id='places-mode-frequency',
+                                n_clicks=0,
+                                color="primary",
+                                outline=False,
+                                size="sm",
+                                className="places-mode-btn"
+                            ),
+                            dbc.Button(
+                                "Sampling",
+                                id='places-mode-sampling',
+                                n_clicks=0,
+                                color="light",
+                                outline=True,
+                                size="sm",
+                                className="places-mode-btn"
+                            )
+                        ], size="sm", className="places-mode-button-group")
+                    ], className="places-mode-toggle d-flex align-items-center justify-content-between flex-wrap gap-2"),
+                    html.Div([
+                        html.Div(
+                            build_places_tab(
+                                'places-frequency-summary',
+                                'places-frequency-table',
+                                'download-places-frequency-btn',
+                                'download-places-frequency',
+                                'apply-places-frequency',
+                                action_prefix=html.Span("Frekvenskutt", className="places-tab-pill"),
+                                activate_btn_id='activate-places-frequency',
+                                source_key='frequency',
+                                activate_title="Vis frekvenslisten på kartet"
+                            ),
+                            id='places-frequency-panel',
+                            style={'flex': '1 1 auto', 'minHeight': 0, 'display': 'flex'}
+                        ),
+                        html.Div(
+                            build_places_tab(
+                                'places-sampling-summary',
+                                'places-sampling-table',
+                                'download-places-sampling-btn',
+                                'download-places-sampling',
+                                'apply-places-sampling',
+                                include_resample=True,
+                                activate_btn_id='activate-places-sampling',
+                                source_key='sampling',
+                                activate_title="Vis eksempellisten på kartet"
+                            ),
+                            id='places-sampling-panel',
+                            style={'flex': '1 1 auto', 'minHeight': 0, 'display': 'none'}
+                        )
+                    ], className="places-mode-panels flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'})
+                ], className="flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'})
             ], id='place-names-list', style={
                 'flex': '1 1 auto',
                 'minHeight': 0,
@@ -1057,12 +1130,13 @@ app.layout = html.Div([
         'zIndex': 800,
         'display': 'none',
         'top': '60px',
-        'right': '10px',  # Initial right position
+        'left': '620px',
         'cursor': 'grab',
         'flexDirection': 'column'
     }),
 
-    # Add place similarity dialog
+    # Add collocation and similarity dialogs
+    create_collocation_card(),
     create_place_similarity_dialog(),
 
     # Hidden divs and stores
@@ -1085,6 +1159,7 @@ app.layout = html.Div([
     dcc.Store(id='places-active-mode', data='frequency'),
     dcc.Store(id='heatmap-subset-mode', data='all'),
     dcc.Store(id='dialog-size-store', data=copy.deepcopy(DEFAULT_CARD_SIZES)),
+    dcc.Store(id='similarity-places-data'),
 
     # Add the new corpus builder card
     create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list, titles_list=titles_list),
@@ -1409,6 +1484,9 @@ def update_state_and_filters(contents, filename, current_filters, operation, cur
     Input('corpus-op-union-content', 'n_clicks'),
     Input('corpus-op-intersection-content', 'n_clicks'),
     Input('corpus-op-diff-content', 'n_clicks'),
+    Input('corpus-op-union-similarity', 'n_clicks'),
+    Input('corpus-op-intersection-similarity', 'n_clicks'),
+    Input('corpus-op-diff-similarity', 'n_clicks'),
     State('corpus-operation', 'data'),
     prevent_initial_call=True
 )
@@ -1422,6 +1500,9 @@ def set_corpus_operation(
     union_content,
     intersection_content,
     diff_content,
+    union_similarity,
+    intersection_similarity,
+    diff_similarity,
     current_operation,
 ):
     ctx = dash.callback_context
@@ -1438,6 +1519,9 @@ def set_corpus_operation(
         'corpus-op-union-content': 'union',
         'corpus-op-intersection-content': 'intersection',
         'corpus-op-diff-content': 'difference',
+        'corpus-op-union-similarity': 'union',
+        'corpus-op-intersection-similarity': 'intersection',
+        'corpus-op-diff-similarity': 'difference',
     }
     return mapping.get(triggered, (current_operation or 'intersection'))
 
@@ -1490,6 +1574,22 @@ def style_corpus_operation_builder(operation):
     Input('corpus-operation', 'data')
 )
 def style_corpus_operation_content(operation):
+    c_union, o_union = _operation_button_styles(operation, 'union')
+    c_intersection, o_intersection = _operation_button_styles(operation, 'intersection')
+    c_diff, o_diff = _operation_button_styles(operation, 'difference')
+    return c_union, c_intersection, c_diff, o_union, o_intersection, o_diff
+
+
+@app.callback(
+    Output('corpus-op-union-similarity', 'color'),
+    Output('corpus-op-intersection-similarity', 'color'),
+    Output('corpus-op-diff-similarity', 'color'),
+    Output('corpus-op-union-similarity', 'outline'),
+    Output('corpus-op-intersection-similarity', 'outline'),
+    Output('corpus-op-diff-similarity', 'outline'),
+    Input('corpus-operation', 'data')
+)
+def style_corpus_operation_similarity(operation):
     c_union, o_union = _operation_button_styles(operation, 'union')
     c_intersection, o_intersection = _operation_button_styles(operation, 'intersection')
     c_diff, o_diff = _operation_button_styles(operation, 'difference')
@@ -1651,15 +1751,13 @@ def style_collocation_highlight_button(highlight_tokens):
     Output('places-frequency-data', 'data'),
     Output('places-sample-data', 'data'),
     Output('places-collocation-data', 'data'),
-    Output('places-active-mode', 'data'),
     Input('all-places-store', 'data'),
     Input('corpus-max-places-slider', 'value'),
     Input('resample-places', 'n_clicks'),
     Input('collocation-place-tokens', 'data'),
-    Input('places-tabs', 'active_tab'),
     State('places-sample-data', 'data')
 )
-def update_places_datasets(all_places_json, max_places, resample_n, collocation_tokens, active_tab, current_sample_json):
+def update_places_datasets(all_places_json, max_places, resample_n, collocation_tokens, current_sample_json):
     import pandas as pd
     ctx = dash.callback_context
     triggered = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
@@ -1667,11 +1765,11 @@ def update_places_datasets(all_places_json, max_places, resample_n, collocation_
     base_columns = ['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']
     empty_json = pd.DataFrame(columns=base_columns).to_json(date_format='iso', orient='split')
     if not all_places_json:
-        return empty_json, empty_json, empty_json, active_tab or 'frequency'
+        return empty_json, empty_json, empty_json
 
     df = load_places_frame(all_places_json)
     if df.empty:
-        return empty_json, empty_json, empty_json, active_tab or 'frequency'
+        return empty_json, empty_json, empty_json
 
     freq_df = (
         df.sort_values(by='frequency', ascending=False)
@@ -1702,9 +1800,59 @@ def update_places_datasets(all_places_json, max_places, resample_n, collocation_
     return (
         freq_df.to_json(date_format='iso', orient='split'),
         sample_df.to_json(date_format='iso', orient='split'),
-        colloc_df.to_json(date_format='iso', orient='split'),
-        active_tab or 'frequency'
+        colloc_df.to_json(date_format='iso', orient='split')
     )
+
+
+@app.callback(
+    Output('places-active-mode', 'data'),
+    Input('places-mode-frequency', 'n_clicks'),
+    Input('places-mode-sampling', 'n_clicks'),
+    State('places-active-mode', 'data'),
+    prevent_initial_call=True
+)
+def set_places_active_mode(freq_clicks, sampling_clicks, current_mode):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger = ctx.triggered[0]['prop_id'].split('.')[0]
+    if trigger == 'places-mode-frequency':
+        return 'frequency'
+    if trigger == 'places-mode-sampling':
+        return 'sampling'
+    return current_mode or 'frequency'
+
+
+@app.callback(
+    Output('places-frequency-panel', 'style'),
+    Output('places-sampling-panel', 'style'),
+    Input('places-active-mode', 'data')
+)
+def toggle_places_mode_panels(active_mode):
+    freq_style = {'flex': '1 1 auto', 'minHeight': 0, 'display': 'flex'}
+    sample_style = {'flex': '1 1 auto', 'minHeight': 0, 'display': 'flex'}
+    if active_mode == 'sampling':
+        freq_style['display'] = 'none'
+    else:
+        sample_style['display'] = 'none'
+    return freq_style, sample_style
+
+
+@app.callback(
+    Output('places-mode-frequency', 'color'),
+    Output('places-mode-frequency', 'outline'),
+    Output('places-mode-sampling', 'color'),
+    Output('places-mode-sampling', 'outline'),
+    Input('places-active-mode', 'data')
+)
+def style_places_mode_buttons(active_mode):
+    freq_active = (active_mode != 'sampling')
+    sample_active = not freq_active
+    freq_color = 'primary' if freq_active else 'light'
+    sample_color = 'primary' if sample_active else 'light'
+    freq_outline = not freq_active
+    sample_outline = not sample_active
+    return freq_color, freq_outline, sample_color, sample_outline
 
 
 @app.callback(
@@ -1827,7 +1975,6 @@ def handle_size_buttons(n_clicks, store):
     State('places-frequency-data', 'data'),
     State('places-sample-data', 'data'),
     State('places-collocation-data', 'data'),
-    State('places-active-mode', 'data'),
     State('heatmap-subset-checkbox', 'value'),
     State('place-search', 'value'),
     State('corpus-max-places-slider', 'value'),
@@ -1836,7 +1983,7 @@ def handle_size_buttons(n_clicks, store):
 )
 def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks,
                         freq_json, sample_json, colloc_json,
-                        active_tab, heatmap_subset_value,
+                        heatmap_subset_value,
                         search_term, max_places, current_filters):
     ctx = dash.callback_context
     if not ctx.triggered:
@@ -1941,6 +2088,26 @@ def resize_visualization_controls(store, current_style):
 def resize_corpus_builder(store, current_style):
     return _apply_size_to_style(store, 'corpus-builder', current_style)
 
+
+@app.callback(
+    Output('collocation-card', 'style', allow_duplicate=True),
+    Input('dialog-size-store', 'data'),
+    State('collocation-card', 'style'),
+    prevent_initial_call=True
+)
+def resize_collocation_card(store, current_style):
+    return _apply_size_to_style(store, 'collocation-card', current_style)
+
+
+@app.callback(
+    Output('place-similarity-dialog', 'style', allow_duplicate=True),
+    Input('dialog-size-store', 'data'),
+    State('place-similarity-dialog', 'style'),
+    prevent_initial_call=True
+)
+def resize_similarity_card(store, current_style):
+    return _apply_size_to_style(store, 'similarity-card', current_style)
+
 # Add this callback to toggle the info modal
 
 @app.callback(
@@ -1957,16 +2124,22 @@ def toggle_info_modal(n1, n2, is_open):
 
 @app.callback(
     Output('place-names-container', 'style'),
-    [Input('place-names-toggle', 'n_clicks')],
+    [Input('place-names-toggle', 'n_clicks'),
+     Input('card-chip-places', 'n_clicks')],
     [State('place-names-container', 'style')],
     prevent_initial_call=True
 )
-def toggle_place_names_container(n_clicks, current_style):
-    if n_clicks is None:
+def toggle_place_names_container(main_btn, chip_btn, current_style):
+    ctx = dash.callback_context
+    if not ctx.triggered:
         raise PreventUpdate
-    
-    new_style = dict(current_style)
-    new_style['display'] = 'flex' if current_style.get('display') == 'none' else 'none'
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    if trigger_id not in ('place-names-toggle', 'card-chip-places'):
+        raise PreventUpdate
+
+    new_style = dict(current_style or {})
+    current_display = new_style.get('display', 'none')
+    new_style['display'] = 'flex' if current_display == 'none' else 'none'
     return new_style
 
 # Close button callback
@@ -1985,6 +2158,83 @@ app.clientside_callback(
     [State('place-names-container', 'style')],
     prevent_initial_call=True
 )
+
+
+@app.callback(
+    Output('place-summary-container', 'style', allow_duplicate=True),
+    Input('card-chip-summary', 'n_clicks'),
+    State('place-summary-container', 'style'),
+    prevent_initial_call=True
+)
+def show_place_summary_from_chip(n_clicks, current_style):
+    if not n_clicks:
+        raise PreventUpdate
+    new_style = dict(current_style or {})
+    new_style['display'] = 'flex'
+    new_style.pop('transform', None)
+    return new_style
+
+
+@app.callback(
+    Output('collocation-card', 'style'),
+    Input('card-chip-collocations', 'n_clicks'),
+    Input('close-collocations', 'n_clicks'),
+    State('collocation-card', 'style'),
+    prevent_initial_call=True
+)
+def toggle_collocation_card(chip_clicks, close_clicks, current_style):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    new_style = dict(current_style or {})
+    if trigger_id == 'close-collocations':
+        new_style['display'] = 'none'
+    elif trigger_id == 'card-chip-collocations':
+        current_display = new_style.get('display', 'none')
+        new_style['display'] = 'flex' if current_display == 'none' else 'none'
+        new_style.pop('transform', None)
+    else:
+        raise PreventUpdate
+    return new_style
+
+
+@app.callback(
+    Output('current-dhlabids-store', 'data', allow_duplicate=True),
+    Output('current-filters', 'data', allow_duplicate=True),
+    Output('select-all-loading', 'children'),
+    Input('apply-similarity-corpus', 'n_clicks'),
+    State('similarity-places-data', 'data'),
+    State('corpus-operation', 'data'),
+    State('current-dhlabids-store', 'data'),
+    State('current-filters', 'data'),
+    prevent_initial_call=True
+)
+def apply_similarity_to_corpus(n_clicks, places_json, operation, current_books, current_filters):
+    if not n_clicks or not places_json:
+        raise PreventUpdate
+    try:
+        places_df = pd.read_json(io.StringIO(places_json), orient='split')
+    except ValueError:
+        raise PreventUpdate
+    tokens = places_df.get('token')
+    if tokens is None or tokens.empty:
+        raise PreventUpdate
+    token_list = tokens.dropna().astype(str).tolist()
+    if not token_list:
+        raise PreventUpdate
+    book_ids = fetch_books_for_tokens(token_list)
+    if not book_ids:
+        status = html.Span("Ingen bøker funnet for disse stedene", className="text-danger small")
+        return dash.no_update, dash.no_update, status
+    updated_books = apply_book_operation(current_books, book_ids, operation)
+    new_filters = (current_filters or {}).copy()
+    new_filters['books'] = updated_books
+    new_filters['selected_tokens'] = token_list
+    new_filters['corpus_source'] = 'Place Similarity'
+    new_filters['last_operation'] = (operation or 'intersection')
+    status = html.Span(f"Oppdatert korpus ({len(updated_books):,} bøker)", className="text-success small")
+    return updated_books, new_filters, status
 
 
 @app.callback(
@@ -2701,31 +2951,49 @@ app.clientside_callback(
 @app.callback(
     Output('corpus-controls-container', 'style'),
     [Input('corpus-button', 'n_clicks'),
-     Input('close-corpus', 'n_clicks')],
+     Input('close-corpus', 'n_clicks'),
+     Input('card-chip-corpus', 'n_clicks')],
     [State('corpus-controls-container', 'style')],
     prevent_initial_call=True
 )
-def toggle_corpus_controls(n1, n2, current_style):
-    if n1 or n2:
-        new_style = dict(current_style)
-        new_style['display'] = 'flex' if current_style.get('display') == 'none' else 'none'
-        return new_style
-    return current_style
+def toggle_corpus_controls(open_btn, close_btn, chip_btn, current_style):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    if trigger_id not in ('corpus-button', 'close-corpus', 'card-chip-corpus'):
+        raise PreventUpdate
+    new_style = dict(current_style or {})
+    if trigger_id == 'close-corpus':
+        new_style['display'] = 'none'
+    else:
+        current_display = new_style.get('display', 'none')
+        new_style['display'] = 'flex' if current_display == 'none' else 'none'
+    return new_style
 
 # Update visualization controls callback
 @app.callback(
     Output('visualization-controls-container', 'style'),
     [Input('visualization-button', 'n_clicks'),
-     Input('close-visualization', 'n_clicks')],
+     Input('close-visualization', 'n_clicks'),
+     Input('card-chip-visualization', 'n_clicks')],
     [State('visualization-controls-container', 'style')],
     prevent_initial_call=True
 )
-def toggle_visualization_controls(n1, n2, current_style):
-    if n1 or n2:
-        new_style = dict(current_style)
-        new_style['display'] = 'flex' if current_style.get('display') == 'none' else 'none'
-        return new_style
-    return current_style
+def toggle_visualization_controls(open_btn, close_btn, chip_btn, current_style):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    if trigger_id not in ('visualization-button', 'close-visualization', 'card-chip-visualization'):
+        raise PreventUpdate
+    new_style = dict(current_style or {})
+    if trigger_id == 'close-visualization':
+        new_style['display'] = 'none'
+    else:
+        current_display = new_style.get('display', 'none')
+        new_style['display'] = 'flex' if current_display == 'none' else 'none'
+    return new_style
 
 # Update button styles callback
 @app.callback(
@@ -2798,6 +3066,44 @@ def update_button_styles(corpus_style, places_style, viz_style, corpus_btn_style
     }
     
     return corpus_btn_style, places_btn_style, viz_btn_style
+
+
+def _chip_class(base_class, style_dict):
+    display_value = (style_dict or {}).get('display', 'none')
+    is_open = display_value not in ('none', 'hidden')
+    classes = [base_class]
+    if is_open:
+        classes.append('chip-open')
+    return ' '.join(classes)
+
+
+@app.callback(
+    Output('card-chip-places', 'className'),
+    Output('card-chip-summary', 'className'),
+    Output('card-chip-corpus', 'className'),
+    Output('card-chip-visualization', 'className'),
+    Output('card-chip-builder', 'className'),
+    Output('card-chip-collocations', 'className'),
+    Output('card-chip-similarity', 'className'),
+    Input('place-names-container', 'style'),
+    Input('place-summary-container', 'style'),
+    Input('corpus-controls-container', 'style'),
+    Input('visualization-controls-container', 'style'),
+    Input('corpus-builder-card', 'style'),
+    Input('collocation-card', 'style'),
+    Input('place-similarity-dialog', 'style')
+)
+def refresh_card_chips(places_style, summary_style, corpus_style, viz_style, builder_style, collocation_style, similarity_style):
+    return (
+        _chip_class('card-chip chip-places', places_style),
+        _chip_class('card-chip chip-summary', summary_style),
+        _chip_class('card-chip chip-corpus', corpus_style),
+        _chip_class('card-chip chip-visualization', viz_style),
+        _chip_class('card-chip chip-builder', builder_style),
+        _chip_class('card-chip chip-collocations', collocation_style),
+        _chip_class('card-chip chip-similarity', similarity_style)
+    )
+
 
 def add_edge_points(points_array):
     """Add edge points to ensure the convex hull covers the entire cluster area."""
