@@ -42,8 +42,11 @@ The guiding abstraction is: **books as columns, places as rows** (DTM), with vie
     - **Map container** (central element).
     - **Floating UI elements**:
       - Sidebar toggle (top left).
-      - Category and “Places” controls (top left).
-      - Map/Heatmap and clustering controls (top right).
+      - Chip launcher on the left edge grouping cards by task:
+        - Corpus View / Modify
+        - Places List / Collocations
+        - Place Books / Place Similarity
+      - Map/Heatmap toggle and visualization button (top right).
       - Info button (bottom left).
     - **Modals / panels** for:
       - Corpus builder.

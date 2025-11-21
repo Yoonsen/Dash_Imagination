@@ -54,6 +54,18 @@ This logbook tracks the development progress, decisions, and challenges of the I
 **Notes**:
 - Once a few sessions settle we can revisit the default presets per card; the store already supports swapping them without code changes.
 - Keep an eye out for other callbacks that might run on first render without `prevent_initial_call` and flip visibility unexpectedly.
+- Established the pattern for similarity-driven corpus building, so follow-up sessions can layer on highlighting and overlap views without rewriting state handling.
+
+### November 21, 2025
+**Progress**:
+- Polished the top toolbar: Map vs. Heatmap is now a calm two-button group (no extra label), and the visualization chip lives inside the launcher stack for symmetry.
+- Grouped the launcher chips in vertical pairs (Corpus View/Modify, Places List/Coll, Place Books/Similarity) so orientation and navigation are instantly clear.
+- Brought the closers in every card over to the left and renamed the “Add books” actions to “Update”, matching the new similarity workflow where users repeatedly refresh corpora.
+- Made similarity results write back to the corpus plus `selected_tokens`, enabling instant inspection of only the suggested places, with a plan to add overlap/highlight toggles next.
+
+**Notes**:
+- The launcher groups act like lightweight “card holders”; they’re a precursor to collapsible stacks if we decide to mimic the Google Maps marker groups later.
+- Consider tinting the left-hand groups (soft backing div) if we need more visual separation once additional cards land.
 
 ### November 13, 2025
 **Progress**:
