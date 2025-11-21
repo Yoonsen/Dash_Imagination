@@ -115,6 +115,13 @@ body, html {
     font-size: 0.75rem;
 }
 
+.card-hide-icon {
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1;
+    margin-top: -1px;
+}
+
 .places-tab-panel {
     flex: 1 1 auto;
     min-height: 0;

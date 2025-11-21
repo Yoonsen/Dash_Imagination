@@ -249,8 +249,8 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                             type="default",
                             children=[
                                 html.Button([
-                                    html.I(className="fas fa-plus me-2"),
-                                    "Add Books"
+                                    html.I(className="fas fa-sync-alt me-2"),
+                                    "Update"
                                 ], id='build-corpus-btn', className="btn btn-primary w-100"),
                                 html.Div(id="build-corpus-status", className="mt-2")
                             ]
@@ -287,8 +287,8 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                             type="default",
                             children=[
                                 html.Button([
-                                    html.I(className="fas fa-plus me-2"),
-                                    "Add Books"
+                                    html.I(className="fas fa-sync-alt me-2"),
+                                    "Update"
                                 ], id='build-content-corpus-btn', className="btn btn-primary w-100 mb-4"),
                                 html.Div(id="build-content-corpus-status", className="mt-2")
                             ]

@@ -64,24 +64,26 @@ def card_title_bar(
     close_btn = None
     if close_button_id:
         close_btn = html.Button(
-            html.I(className=close_icon_class),
+            html.Span("×", className="card-hide-icon"),
             id=close_button_id,
             title=close_button_title or "Hide card",
             className="card-hide-btn",
             type="button"
         )
 
-    action_children = []
+    title_children = []
     if close_btn:
-        action_children.append(close_btn)
-    action_children.append(size_control_buttons(component_id))
+        title_children.append(close_btn)
+    title_children.extend([
+        html.I(className=f"{icon_class} card-title-icon"),
+        html.H5(title, className="card-title-text mb-0")
+    ])
+
+    action_children = [size_control_buttons(component_id)]
 
     return html.Div(
         [
-            html.Div([
-                html.I(className=f"{icon_class} card-title-icon"),
-                html.H5(title, className="card-title-text mb-0")
-            ], className="card-title-main"),
+            html.Div(title_children, className="card-title-main"),
             html.Div(action_children, className="card-title-actions")
         ],
         className="card-title-bar"
