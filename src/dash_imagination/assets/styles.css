@@ -487,6 +487,17 @@ body {
     z-index: 10;
 }
 
+.search-pill {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #0f172a;
+    background-color: #e2e8f0;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
 .chip-launcher-group.open .chip-options-menu,
 .chip-launcher-group:hover .chip-options-menu {
     display: flex;

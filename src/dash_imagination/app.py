@@ -241,13 +241,13 @@ SEARCH_RESULTS_BASE_STYLE = {
     'position': 'absolute',
     'top': '44px',
     'left': 0,
-    'width': '320px',
+    'minWidth': '340px',
     'backgroundColor': '#ffffff',
-    'borderRadius': '12px',
-    'boxShadow': '0 12px 30px rgba(15, 23, 42, 0.2)',
-    'padding': '12px',
-    'maxHeight': '360px',
-    'overflowY': 'auto',
+    'borderRadius': '16px',
+    'boxShadow': '0 24px 60px rgba(15, 23, 42, 0.25)',
+    'padding': '16px',
+    'maxHeight': '420px',
+    'overflow': 'hidden',
     'zIndex': 1200,
     'pointerEvents': 'auto',
     'display': 'none'
@@ -258,6 +258,23 @@ def _search_results_style(visible: bool) -> dict:
     style = SEARCH_RESULTS_BASE_STYLE.copy()
     style['display'] = 'block' if visible else 'none'
     return style
+
+
+def _normalize_search_tokens(text: str) -> list[str]:
+    return [token for token in re.split(r'\s+', text.strip()) if token]
+
+
+def _build_like_clause(tokens: list[str], columns: list[str]) -> tuple[str | None, list[str]]:
+    if not tokens:
+        return None, []
+    clauses = []
+    params: list[str] = []
+    for token in tokens:
+        pattern = f"%{token.lower()}%"
+        column_clause = ' OR '.join([f"LOWER({col}) LIKE ?" for col in columns])
+        clauses.append(f"({column_clause})")
+        params.extend([pattern for _ in columns])
+    return ' AND '.join(clauses), params
 
 
 def _fetch_place_overview(token: str) -> dict | None:
@@ -1533,6 +1550,7 @@ app.layout = html.Div([
     dcc.Store(id='corpus-builder-window-state', data={'minimized': False}),
     dcc.Store(id='collocation-card-window-state', data={'minimized': False}),
     dcc.Store(id='similarity-card-window-state', data={'minimized': False}),
+    dcc.Store(id='global-search-filter-store', data=['places', 'books', 'authors']),
     dcc.Store(id='similarity-places-data'),
 
     # Add the new corpus builder card
@@ -3715,59 +3733,82 @@ def load_filtered_data(books, filters):
     Output('global-search-results', 'children'),
     Output('global-search-results', 'style'),
     Input('global-place-search', 'value'),
+    Input('global-search-filter-store', 'data'),
     prevent_initial_call=True
 )
-def update_global_search_results(search_term):
+def update_global_search_results(search_term, filter_selection):
     term = (search_term or '').strip()
     if len(term) < 2:
         return [], _search_results_style(False)
+    selection_set = set(filter_selection or ['places', 'books', 'authors'])
+    selection_list = [cat for cat in ['places', 'books', 'authors'] if cat in selection_set]
+
+    tokens = _normalize_search_tokens(term)
 
     try:
         conn = get_db_connection()
         search_pattern = f"%{term}%"
-        places_df = pd.read_sql_query(
-            """
-            SELECT token, modern AS name
-            FROM places
-            WHERE token LIKE ? OR modern LIKE ?
+
+        # ----------------------
+        place_clause, place_params = _build_like_clause(tokens, ['p.token', 'p.modern'])
+        if not place_clause:
+            place_clause = "(LOWER(p.token) LIKE LOWER(?) OR LOWER(p.modern) LIKE LOWER(?))"
+            place_params = [search_pattern, search_pattern]
+        places_query = f"""
+            SELECT p.token, p.modern AS name
+            FROM places p
+            WHERE {place_clause}
             ORDER BY CASE 
-                WHEN LOWER(token) = LOWER(?) THEN 0
-                WHEN LOWER(modern) = LOWER(?) THEN 1
+                WHEN LOWER(p.token) = LOWER(?) THEN 0
+                WHEN LOWER(p.modern) = LOWER(?) THEN 1
                 ELSE 2
             END,
-            modern
+            p.modern
             LIMIT 5
-            """,
+        """
+        places_df = pd.read_sql_query(
+            places_query,
             conn,
-            params=(search_pattern, search_pattern, term, term)
+            params=tuple(place_params + [term, term])
         )
+
+        book_clause, book_params = _build_like_clause(tokens, ['title'])
+        if not book_clause:
+            book_clause = "LOWER(title) LIKE LOWER(?)"
+            book_params = [search_pattern]
+        books_query = f"""
+            SELECT c.dhlabid, c.title, c.author, c.year, c.urn
+            FROM corpus c
+            WHERE c.title IS NOT NULL
+              AND {book_clause}
+            ORDER BY CASE WHEN LOWER(c.title) = LOWER(?) THEN 0 ELSE 1 END,
+                     c.year DESC
+            LIMIT 5
+        """
         books_df = pd.read_sql_query(
-            """
-            SELECT dhlabid, title, author, year, urn
-            FROM corpus
-            WHERE title IS NOT NULL
-            AND LOWER(title) LIKE LOWER(?)
-            ORDER BY CASE WHEN LOWER(title) = LOWER(?) THEN 0 ELSE 1 END,
-                     year DESC
-            LIMIT 5
-            """,
+            books_query,
             conn,
-            params=(search_pattern, term)
+            params=tuple(book_params + [term])
         )
-        authors_df = pd.read_sql_query(
-            """
-            SELECT author, COUNT(DISTINCT dhlabid) AS book_count
-            FROM corpus
-            WHERE author IS NOT NULL
-            AND TRIM(author) != ''
-            AND LOWER(author) LIKE LOWER(?)
-            GROUP BY author
-            ORDER BY CASE WHEN LOWER(author) = LOWER(?) THEN 0 ELSE 1 END,
-                     author
+        author_clause, author_params = _build_like_clause(tokens, ['author'])
+        if not author_clause:
+            author_clause = "LOWER(author) LIKE LOWER(?)"
+            author_params = [search_pattern]
+        authors_query = f"""
+            SELECT c.author, COUNT(DISTINCT c.dhlabid) AS book_count
+            FROM corpus c
+            WHERE c.author IS NOT NULL
+              AND TRIM(c.author) != ''
+              AND {author_clause}
+            GROUP BY c.author
+            ORDER BY CASE WHEN LOWER(c.author) = LOWER(?) THEN 0 ELSE 1 END,
+                     c.author
             LIMIT 5
-            """,
+        """
+        authors_df = pd.read_sql_query(
+            authors_query,
             conn,
-            params=(search_pattern, term)
+            params=tuple(author_params + [term])
         )
     except Exception as e:
         print(f"Error loading global search results: {e}")
@@ -3777,7 +3818,7 @@ def update_global_search_results(search_term):
 
     sections = []
 
-    def section(title, entries):
+    def section(title, key, entries):
         return html.Div([
             html.Div(title, style={
                 'fontSize': '11px',
@@ -3787,9 +3828,14 @@ def update_global_search_results(search_term):
                 'marginBottom': '4px'
             }),
             html.Div(entries, style={'display': 'flex', 'flexDirection': 'column', 'gap': '6px'})
-        ], style={'marginBottom': '12px'})
+        ], style={
+            'padding': '0.5rem',
+            'borderRadius': '12px',
+            'backgroundColor': '#f8fafc',
+            'border': '1px solid rgba(148, 163, 184, 0.35)'
+        }, id={'type': 'search-section', 'category': key})
 
-    if not places_df.empty:
+    if 'places' in selection_set and not places_df.empty:
         items = []
         for _, place in places_df.iterrows():
             label = place.get('name') or place.get('token')
@@ -3823,9 +3869,9 @@ def update_global_search_results(search_term):
                     'borderRadius': '8px'
                 })
             )
-        sections.append(section("Steder", items))
+        sections.append(section("Steder", 'places', items))
 
-    if not books_df.empty:
+    if 'books' in selection_set and not books_df.empty:
         items = []
         for _, book in books_df.iterrows():
             title = book.get('title')
@@ -3871,9 +3917,9 @@ def update_global_search_results(search_term):
                     'borderRadius': '8px'
                 })
             )
-        sections.append(section("Bøker", items))
+        sections.append(section("Bøker", 'books', items))
 
-    if not authors_df.empty:
+    if 'authors' in selection_set and not authors_df.empty:
         items = []
         for _, author in authors_df.iterrows():
             name = author.get('author')
@@ -3907,12 +3953,52 @@ def update_global_search_results(search_term):
                     'borderRadius': '8px'
                 })
             )
-        sections.append(section("Forfattere", items))
+        sections.append(section("Forfattere", 'authors', items))
 
     if not sections:
         sections = [html.Div(f"Ingen treff for «{term}»", style={'fontSize': '13px', 'color': '#64748b'})]
 
-    return sections, _search_results_style(True)
+    columns_wrapper = html.Div(
+        sections,
+        style={
+            'display': 'grid',
+            'gridTemplateColumns': 'repeat(auto-fit, minmax(220px, 1fr))',
+            'gap': '12px',
+            'marginTop': '12px',
+            'maxHeight': '360px',
+            'overflowY': 'auto',
+            'paddingRight': '4px'
+        }
+    )
+
+    section_header = html.Div([
+        html.Span("Søketreff", style={'fontSize': '12px', 'color': '#64748b'}),
+        dcc.Checklist(
+            id='global-search-filter',
+            options=[
+                {'label': 'Steder', 'value': 'places'},
+                {'label': 'Bøker', 'value': 'books'},
+                {'label': 'Forfattere', 'value': 'authors'}
+            ],
+            value=selection_list,
+            labelStyle={
+                'display': 'inline-flex',
+                'alignItems': 'center',
+                'padding': '4px 10px',
+                'borderRadius': '999px',
+                'backgroundColor': '#e2e8f0',
+                'fontSize': '11px',
+                'textTransform': 'uppercase',
+                'letterSpacing': '0.08em',
+                'fontWeight': 600,
+                'marginRight': '8px',
+                'cursor': 'pointer'
+            },
+            inputStyle={'marginRight': '6px'}
+        )
+    ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'space-between'})
+
+    return [section_header, columns_wrapper], _search_results_style(True)
 
 
 @app.callback(
@@ -4001,6 +4087,16 @@ def add_author_books_from_search(_, current_books):
     books = set(current_books or [])
     books.update(dhlabids)
     return sorted(books), _search_results_style(False)
+
+
+@app.callback(
+    Output('global-search-filter-store', 'data'),
+    Input('global-search-filter', 'value'),
+    prevent_initial_call=True
+)
+def persist_global_search_filter(selected):
+    return selected or []
+
 
 # Add a clientside callback for instant download status feedback
 app.clientside_callback(

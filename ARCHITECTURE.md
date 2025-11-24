@@ -211,41 +211,39 @@ All services are connected via stable identifiers (e.g., URNs or DHLab internal 
 
 ---
 
-## 5. Global Search Surface (Planned)
+## 5. Global Search Surface
 
-The manifest reserves a global search field that behaves like a **Google Maps omnibox**:
+Omniboxen som står i topplinjen i dag leverer den “Google Maps”-opplevelsen vi planla:
 
 ### 5.1 Entities and Behavior
 
-Search spans three entity types:
+Søk skjer i tre parallelle “univers” – vi splitter inputten i ord og matcher ordene uansett rekkefølge/tegnsett:
 
-- **Places**  
-  Results: place entities + books where they occur.  
-  Actions: “Show on map”, “Filter corpus by this place”.
+- **Steder**  
+  Resultatkort: token + moderne navn + antall bøker/forekomster.  
+  Handling: “Vis på kartet” zoomer og åpner Place Info med samme logikk som marker-klikk.
 
-- **People (authors)**  
-  Results: authors + their books.  
-  Actions: “Add selected books to corpus”, “View author-related imagery”.
+- **Bøker**  
+  Resultatkort: tittel, år, forfatter, med NB.no-lenke.  
+  Handling: “Åpne NB” + “Legg til korpus” (egnede dhlabids går rett i `current-dhlabids-store`, kartet tegnes på nytt).
 
-- **Books**  
-  Results: book metadata + key places + visuals.  
-  Actions: “Set as corpus”, “Add to corpus”, “Show places on map”.
+- **Forfattere**  
+  Resultatkort: navn + antall bøker.  
+  Handling: “Legg bøker til korpus” (bulk-add). Perfekt for å starte et nytt korpus før man hopper til Corpus Modify.
 
-### 5.2 Staged Implementation
+### 5.2 UI og state
 
-1. **MVP**
-   - Single endpoint `search_entities(query)`.
-   - Returns entity cards with:
-     - basic metadata,
-     - “Add to corpus” / “Show on map” buttons.
+- Pillefilter over resultatene lar brukeren togg­le kategorier uten å skrive søket om igjen (vi lagrer valget i `global-search-filter-store`).  
+- Kortene vises i et responsivt grid (scrollbart) med samme card/pill-estetikk som resten av appen.  
+- Alle søkehandlinger respekterer eksisterende stores (`current-dhlabids-store`, `place-summary`, `selected-place`), så søk → korpus → kart er en én-klikk-flyt.
 
-2. **Enrichment**
-   - Add NB.no imagery and optional timeline context.
-   - Show key places, collocates, and representative images.
+### 5.3 Videre arbeid
 
-3. **Image-driven discovery**
-   - Add entry point from a single image (via Qdrant).
-   - Let users traverse image similarity and pull corresponding books into the active corpus.
+1. **Enrichment**  
+   - Legg til NB.no-bilder/tidslinjer i kortene, vis representative steder direkte i kortet.
+
+2. **Image-driven discovery**  
+   - Når Qdrant-integrasjonen lander, lar vi brukeren starte søket fra ett bilde (visuelt lignende bøker → Legg til korpus).
 
 ---
 

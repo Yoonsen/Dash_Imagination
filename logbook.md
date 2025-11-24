@@ -70,6 +70,17 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - The launcher groups act like lightweight “card holders”; they’re a precursor to collapsible stacks if we decide to mimic the Google Maps marker groups later.
 - Consider tinting the left-hand groups (soft backing div) if we need more visual separation once additional cards land.
 
+### November 24, 2025
+**Progress**:
+- Levered første versjon av omniboxen: parallelle treff for steder/bøker/forfattere, actions som “Vis på kartet”, “Åpne NB”, “Legg (alle) i korpus”.
+- Multi-token søk (ordrekkefølge og komma spiller ingen rolle) med aggregering direkte fra SQLite, og handlingene skriver tilbake til de samme `dcc.Store`-ene som kortene bruker, så kartet oppdateres automatisk.
+- La inn pillefilter + kolonne-layout i resultatskuffen, og gjorde feltet scrollbart slik at mange treff fortsatt er lesbare.
+- Sørget for at korpuset (og Places/kart) rehydreres når man legger til bøker via søk, slik at man kan bygge et helt nytt korpus fra “intelligent søk” før man eventuelt bruker Corpus Modify til finpuss.
+
+**Notes**:
+- Neste steg kan være å supplere kortene med NB.no-bilder/tidslinje og å la pillefilteret huske brukervalg per økt (lagres allerede i store, kan eksponeres i UI).  
+- Vurder multi-lingual eller fuzzy søk senere; dagens implementasjon gir allerede stor gevinst og oppleves som “Google Maps”-lignende flyt.
+
 ### November 13, 2025
 **Progress**:
 - Replaced the remaining reference to the global `CorpusState` with session-local data from `current-dhlabids-store`, preventing corpus changes from bleeding across users on Cloud Run.
