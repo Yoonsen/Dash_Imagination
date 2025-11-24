@@ -62,6 +62,9 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Grouped the launcher chips in vertical pairs (Corpus View/Modify, Places List/Coll, Place Books/Similarity) so orientation and navigation are instantly clear.
 - Brought the closers in every card over to the left and renamed the “Add books” actions to “Update”, matching the new similarity workflow where users repeatedly refresh corpora.
 - Made similarity results write back to the corpus plus `selected_tokens`, enabling instant inspection of only the suggested places, with a plan to add overlap/highlight toggles next.
+- Rebuilt the chip launcher into pill parents with hover/tap flyouts, and added mac-style window controls (close/minimize) to every floating dialog with per-card window state.
+- Prevented size callbacks from reviving closed cards, and ensured minimizing doesn’t break drag handles by hiding body content without removing the header.
+- Added utility CSS so window controls remain legible on colored headers (e.g., Place Info’s red title bar).
 
 **Notes**:
 - The launcher groups act like lightweight “card holders”; they’re a precursor to collapsible stacks if we decide to mimic the Google Maps marker groups later.

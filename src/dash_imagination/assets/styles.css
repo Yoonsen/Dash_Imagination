@@ -99,7 +99,7 @@ body, html {
     width: 15px;
     height: 15px;
     border-radius: 50%;
-    border: none;
+    border: 1px solid rgba(15, 23, 42, 0.08);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -117,14 +117,14 @@ body, html {
 .card-window-btn .card-window-icon {
     font-size: 0.55rem;
     line-height: 1;
-    color: rgba(15, 23, 42, 0.8);
-    opacity: 0;
+    color: rgba(15, 23, 42, 0.9);
+    opacity: 0.85;
     transition: opacity 0.15s ease;
     pointer-events: none;
 }
 
 .card-window-btn:hover .card-window-icon {
-    opacity: 0.9;
+    opacity: 1;
 }
 
 .card-window-btn:hover {
@@ -133,6 +133,13 @@ body, html {
 
 .card-window-btn.window-close {
     background: #ff5f57;
+}
+
+.bg-danger-subtle .card-window-btn.window-close {
+    background: #ff5f57 !important;
+    border-color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.65);
+    mix-blend-mode: normal;
 }
 
 .card-window-btn.window-minimize {

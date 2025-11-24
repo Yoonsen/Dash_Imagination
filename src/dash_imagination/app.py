@@ -2364,11 +2364,15 @@ def toggle_info_modal(n1, n2, is_open):
 
 @app.callback(
     Output('place-names-container', 'style'),
+    Output('place-names-window-state', 'data', allow_duplicate=True),
+    Output('place-names-body', 'style', allow_duplicate=True),
     Input('card-chip-places', 'n_clicks'),
     State('place-names-container', 'style'),
+    State('place-names-window-state', 'data'),
+    State('place-names-body', 'style'),
     prevent_initial_call=True
 )
-def toggle_place_names_container(chip_btn, current_style):
+def toggle_place_names_container(chip_btn, current_style, window_state, body_style):
     ctx = dash.callback_context
     if not ctx.triggered:
         raise PreventUpdate
@@ -2377,9 +2381,38 @@ def toggle_place_names_container(chip_btn, current_style):
         raise PreventUpdate
 
     new_style = dict(current_style or {})
+    window_state = (window_state or {'minimized': False}).copy()
+    body_style = dict(body_style or {})
+
     current_display = new_style.get('display', 'none')
-    new_style['display'] = 'flex' if current_display == 'none' else 'none'
-    return new_style
+    should_show = current_display == 'none'
+    new_style['display'] = 'flex' if should_show else 'none'
+
+    if should_show and window_state.get('minimized'):
+        restored_state, restored_container, restored_body = _toggle_window_minimize(
+            'places',
+            window_state,
+            new_style,
+            body_style
+        )
+        window_state = restored_state
+        if restored_container:
+            new_style.update(restored_container)
+        new_style['display'] = 'flex'
+        body_style = restored_body
+    elif should_show:
+        window_state['minimized'] = False
+        # ensure body props reset if they were collapsed previously
+        for prop in MINIMIZE_BODY_PROPS:
+            body_style.pop(prop, None)
+        body_style.update({
+            'flex': '1 1 auto',
+            'minHeight': 0,
+            'display': 'flex',
+            'flexDirection': 'column'
+        })
+
+    return new_style, window_state, body_style
 
 # Close button callback
 app.clientside_callback(

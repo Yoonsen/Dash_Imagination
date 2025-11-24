@@ -42,17 +42,19 @@ The guiding abstraction is: **books as columns, places as rows** (DTM), with vie
     - **Map container** (central element).
     - **Floating UI elements**:
       - Sidebar toggle (top left).
-      - Chip launcher on the left edge grouping cards by task:
-        - Corpus View / Modify
-        - Places List / Collocations
-        - Place Books / Place Similarity
+      - Chip launcher on the left edge with **pill parents** (“Corpus”, “Places”, “Viz”) that fan out into task-specific chips:
+        - Corpus: View / Modify
+        - Places: Liste / Coll / Sim
+        - Visualization: Viz Ctrl (own pill)
+        - Pills are **hover- or click-expandable** on desktop, tap-to-toggle on mobile.
       - Map/Heatmap toggle and visualization button (top right).
       - Info button (bottom left).
-    - **Modals / panels** for:
-      - Corpus builder.
-      - Places list / details.
-      - Collocation / vicinity results.
-      - Info/help.
+    - **Floating dialogs** (all draggable/resizable) with mac-style window controls:
+      - Corpus view & builder.
+      - Places list (tabs for frequency / sampling / collocations) + Place info dialog.
+      - Collocation card.
+      - Place similarity dialog.
+      - Visualization controls.
 
 - `components/`
   - Reusable Dash components for:
@@ -83,7 +85,14 @@ Session-specific state is kept in `dcc.Store` components to avoid leaking contex
 
 These stores are read and written by Dash callbacks, ensuring consistent state across panels, dialogs, and map overlays.
 
-### 2.3 Core Callbacks
+### 2.3 Floating Dialog Shell
+- Shared header via `card_title_bar` renders macOS-like buttons:
+  - **Red ×** closes the card (tied to existing toggle callbacks).
+  - **Yellow –** minimizes to title-only, preserving position/size in `dialog-size-store`.
+- Each dialog stores state in `*-window-state` so minimize/restore survives size changes.
+- Dragging is handled client-side (`assets/drag.js`) with a single interaction pattern across cards.
+
+### 2.4 Core Callbacks
 
 Key callback groups:
 
