@@ -224,6 +224,50 @@ $(document).ready(function() {
                 monitorVisibilityElement($collocation);
             }
 
+            // Initialize author-list-container if it exists
+            if ($('#author-list-container').length > 0) {
+                console.log("Found author-list-container, making it draggable");
+                const $authorList = $('#author-list-container');
+                $authorList.draggable({
+                    handle: '.card-title-bar', // Use standard class
+                    containment: 'window',
+                    start: function(event, ui) {
+                        bringToFront($(this));
+                        $(this).addClass("dragging");
+                        console.log("Started dragging author list");
+                    },
+                    stop: function(event, ui) {
+                        $(this).removeClass("dragging");
+                        console.log("Stopped dragging author list at:", ui.position);
+                    }
+                }).on('mousedown', function() {
+                    bringToFront($(this));
+                });
+                monitorVisibilityElement($authorList);
+            }
+
+            // Initialize author-info-container if it exists
+            if ($('#author-info-container').length > 0) {
+                console.log("Found author-info-container, making it draggable");
+                const $authorInfo = $('#author-info-container');
+                $authorInfo.draggable({
+                    handle: '.card-title-bar', // Use standard class
+                    containment: 'window',
+                    start: function(event, ui) {
+                        bringToFront($(this));
+                        $(this).addClass("dragging");
+                        console.log("Started dragging author info");
+                    },
+                    stop: function(event, ui) {
+                        $(this).removeClass("dragging");
+                        console.log("Stopped dragging author info at:", ui.position);
+                    }
+                }).on('mousedown', function() {
+                    bringToFront($(this));
+                });
+                monitorVisibilityElement($authorInfo);
+            }
+
             console.log("Draggable initialization attempt completed");
         } catch (error) {
             console.error("Error initializing draggable:", error);
@@ -276,6 +320,20 @@ $(document).ready(function() {
             console.log("Collocation card is visible but not draggable yet, initializing");
             initializeDraggable();
         }
+
+        // Check author list container
+        if ($('#author-list-container').is(':visible') && 
+            !$('#author-list-container').hasClass('ui-draggable')) {
+            console.log("Author list container is visible but not draggable yet, initializing");
+            initializeDraggable();
+        }
+
+        // Check author info container
+        if ($('#author-info-container').is(':visible') && 
+            !$('#author-info-container').hasClass('ui-draggable')) {
+            console.log("Author info container is visible but not draggable yet, initializing");
+            initializeDraggable();
+        }
     });
 
     // Also check periodically
@@ -321,14 +379,28 @@ $(document).ready(function() {
             console.log("Collocation card is visible in interval check but not draggable, initializing");
             initializeDraggable();
         }
+
+        // Check author list container
+        if ($('#author-list-container').is(':visible') && 
+            !$('#author-list-container').hasClass('ui-draggable')) {
+            console.log("Author list container is visible in interval check but not draggable, initializing");
+            initializeDraggable();
+        }
+
+        // Check author info container
+        if ($('#author-info-container').is(':visible') && 
+            !$('#author-info-container').hasClass('ui-draggable')) {
+            console.log("Author info container is visible in interval check but not draggable, initializing");
+            initializeDraggable();
+        }
     }, 2000);
 
     // Set cursor styles
-    $("#summary-header, #place-names-header, #corpus-header, #visualization-header, #corpus-builder-header, #collocation-card-header, #similarity-header").css("cursor", "grab");
+    $("#summary-header, #place-names-header, #corpus-header, #visualization-header, #corpus-builder-header, #collocation-card-header, #similarity-header, #author-list-header, #author-info-header, .card-title-bar").css("cursor", "grab");
 
     // Add touch support for draggable elements
     function addTouchSupport() {
-        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container, #collocation-card, #place-similarity-dialog').on('touchstart', function(event) {
+        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container, #collocation-card, #place-similarity-dialog, #author-list-container, #author-info-container').on('touchstart', function(event) {
             var touch = event.originalEvent.touches[0];
             var simulatedEvent = new MouseEvent('mousedown', {
                 bubbles: true,
@@ -341,7 +413,7 @@ $(document).ready(function() {
             event.preventDefault();
         });
 
-        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container, #collocation-card, #place-similarity-dialog').on('touchmove', function(event) {
+        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container, #collocation-card, #place-similarity-dialog, #author-list-container, #author-info-container').on('touchmove', function(event) {
             var touch = event.originalEvent.touches[0];
             var simulatedEvent = new MouseEvent('mousemove', {
                 bubbles: true,
@@ -354,7 +426,7 @@ $(document).ready(function() {
             event.preventDefault();
         });
 
-        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container, #collocation-card, #place-similarity-dialog').on('touchend', function(event) {
+        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container, #collocation-card, #place-similarity-dialog, #author-list-container, #author-info-container').on('touchend', function(event) {
             var simulatedEvent = new MouseEvent('mouseup', {
                 bubbles: true,
                 cancelable: true,

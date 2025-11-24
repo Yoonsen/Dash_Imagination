@@ -67,8 +67,8 @@ def card_title_bar(
         window_controls.append(
             html.Button(
                 html.Span("×", className="card-window-icon"),
-                id=close_button_id,
-                title=close_button_title or "Hide card",
+            id=close_button_id,
+            title=close_button_title or "Hide card",
                 className="card-window-btn window-close",
                 type="button"
             )
@@ -80,7 +80,7 @@ def card_title_bar(
                 id=minimize_button_id,
                 title=minimize_button_title or "Minimize card",
                 className="card-window-btn window-minimize",
-                type="button"
+            type="button"
             )
         )
 

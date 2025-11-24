@@ -43,6 +43,44 @@ This logbook tracks the development progress, decisions, and challenges of the I
 
 ## Development Log
 
+### November 24, 2025 (Session 2: Authors & Images)
+**Progress**:
+- Introdusert en **Authors**-modul:
+  - Ny pille "Authors" i venstre meny med "List"-valg.
+  - Flytende kort med liste over alle forfattere i gjeldende korpus, filtrerbart søkefelt.
+  - Detaljkort for valgt forfatter med bildegalleri (fra NB.no) og liste over bøker i korpuset.
+- Implementert **Historiske Bilder** (IIIF):
+  - Integrasjon mot NB.no sitt API for å hente bilder basert på søketermer (stedsnavn, forfatternavn).
+  - Filterer på `mediaType=bilder` og sorterer etter dato (eldste først) for å finne relevante historiske foto.
+  - Viser resultatene i en horisontal galleri-stripe i både "Place Info" og "Author Info".
+  - Bilder er klikkbare og leder direkte til NB.no sin visning.
+- UX-forbedringer:
+  - Fikset omnibox-oppførsel: søkeskuffen lukkes ved klikk utenfor, men holdes åpen ved interaksjon (klient-side `preventDefault` på `mousedown`).
+  - Fikset minimering av "Place Details" (hindret blankt innhold/resize-glitch).
+  - Refaktorert nye Author-kort til å bruke `dbc.Card` for konsistent styling (farger, padding, skygger).
+  - Oppdatert `drag.js` for å støtte de nye kortene.
+
+**Notes**:
+- Bildeoppslag er basert på tekstsøk, så presisjonen avhenger av metadata hos NB. For kjente steder og forfattere fungerer det utmerket.
+- Appen har nå tre klare innganger til materialet: Bøker (Corpus), Steder (Places) og Mennesker (Authors).
+
+### November 24, 2025 (Session 1: Omnibox)
+**Progress**:
+- Levered første versjon av omniboxen: parallelle treff for steder/bøker/forfattere, actions som “Vis på kartet”, “Åpne NB”, “Legg (alle) i korpus”.
+- Multi-token søk (ordrekkefølge og komma spiller ingen rolle) med aggregering direkte fra SQLite, og handlingene skriver tilbake til de samme `dcc.Store`-ene som kortene bruker, så kartet oppdateres automatisk.
+- La inn pillefilter + kolonne-layout i resultatskuffen, og gjorde feltet scrollbart slik at mange treff fortsatt er lesbare.
+- Sørget for at korpuset (og Places/kart) rehydreres når man legger til bøker via søk, slik at man kan bygge et helt nytt korpus fra “intelligent søk” før man eventuelt bruker Corpus Modify til finpuss.
+
+### November 21, 2025
+**Progress**:
+- Polished the top toolbar: Map vs. Heatmap is now a calm two-button group (no extra label), and the visualization chip lives inside the launcher stack for symmetry.
+- Grouped the launcher chips in vertical pairs (Corpus View/Modify, Places List/Coll, Place Books/Similarity) so orientation and navigation are instantly clear.
+- Brought the closers in every card over to the left and renamed the “Add books” actions to “Update”, matching the new similarity workflow where users repeatedly refresh corpora.
+- Made similarity results write back to the corpus plus `selected_tokens`, enabling instant inspection of only the suggested places, with a plan to add overlap/highlight toggles next.
+- Rebuilt the chip launcher into pill parents with hover/tap flyouts, and added mac-style window controls (close/minimize) to every floating dialog with per-card window state.
+- Prevented size callbacks from reviving closed cards, and ensured minimizing doesn’t break drag handles by hiding body content without removing the header.
+- Added utility CSS so window controls remain legible on colored headers (e.g., Place Info’s red title bar).
+
 ### November 19, 2025
 **Progress**:
 - Finished debugging the new W±/H± sizing workflow so every dialog honors its private entry in `dialog-size-store`.
@@ -56,31 +94,6 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Keep an eye out for other callbacks that might run on first render without `prevent_initial_call` and flip visibility unexpectedly.
 - Established the pattern for similarity-driven corpus building, so follow-up sessions can layer on highlighting and overlap views without rewriting state handling.
 
-### November 21, 2025
-**Progress**:
-- Polished the top toolbar: Map vs. Heatmap is now a calm two-button group (no extra label), and the visualization chip lives inside the launcher stack for symmetry.
-- Grouped the launcher chips in vertical pairs (Corpus View/Modify, Places List/Coll, Place Books/Similarity) so orientation and navigation are instantly clear.
-- Brought the closers in every card over to the left and renamed the “Add books” actions to “Update”, matching the new similarity workflow where users repeatedly refresh corpora.
-- Made similarity results write back to the corpus plus `selected_tokens`, enabling instant inspection of only the suggested places, with a plan to add overlap/highlight toggles next.
-- Rebuilt the chip launcher into pill parents with hover/tap flyouts, and added mac-style window controls (close/minimize) to every floating dialog with per-card window state.
-- Prevented size callbacks from reviving closed cards, and ensured minimizing doesn’t break drag handles by hiding body content without removing the header.
-- Added utility CSS so window controls remain legible on colored headers (e.g., Place Info’s red title bar).
-
-**Notes**:
-- The launcher groups act like lightweight “card holders”; they’re a precursor to collapsible stacks if we decide to mimic the Google Maps marker groups later.
-- Consider tinting the left-hand groups (soft backing div) if we need more visual separation once additional cards land.
-
-### November 24, 2025
-**Progress**:
-- Levered første versjon av omniboxen: parallelle treff for steder/bøker/forfattere, actions som “Vis på kartet”, “Åpne NB”, “Legg (alle) i korpus”.
-- Multi-token søk (ordrekkefølge og komma spiller ingen rolle) med aggregering direkte fra SQLite, og handlingene skriver tilbake til de samme `dcc.Store`-ene som kortene bruker, så kartet oppdateres automatisk.
-- La inn pillefilter + kolonne-layout i resultatskuffen, og gjorde feltet scrollbart slik at mange treff fortsatt er lesbare.
-- Sørget for at korpuset (og Places/kart) rehydreres når man legger til bøker via søk, slik at man kan bygge et helt nytt korpus fra “intelligent søk” før man eventuelt bruker Corpus Modify til finpuss.
-
-**Notes**:
-- Neste steg kan være å supplere kortene med NB.no-bilder/tidslinje og å la pillefilteret huske brukervalg per økt (lagres allerede i store, kan eksponeres i UI).  
-- Vurder multi-lingual eller fuzzy søk senere; dagens implementasjon gir allerede stor gevinst og oppleves som “Google Maps”-lignende flyt.
-
 ### November 13, 2025
 **Progress**:
 - Replaced the remaining reference to the global `CorpusState` with session-local data from `current-dhlabids-store`, preventing corpus changes from bleeding across users on Cloud Run.
@@ -91,11 +104,6 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Collokasjonshighlight er erstattet av en kollokasjonsfane i Places og et register over valgte tokens (`selected_tokens`), så heatmap/kart forholder seg til samme domino som andre faner.
 - Nedlastingsknapper ble lagt til for alle tre Places-lister (token, moderne navn, frekvens, bokfrekvens, lat/lon).
 - Erstattet preset-dropdownene i alle flytende kort med egne bredde/høyde-knapper (W±, H±). Størrelsene lagres per kort i `dialog-size-store`, og layoutene er gjort om til `flex` med én scrollbar per kort slik at knappene aldri havner utenfor flaten.
-
-**Notes**:
-- Follow-up: monitor other callbacks for accidental imports of `dash_imagination.utils.global_state`; none remain after updating `app.py`.
-- Follow-up: vurder en checkbox i Places-panelet for “Bruk denne listen i heatmap” slik at brukeren kan tvinge heatmapet til å følge fanens subsett i stedet for hele korpuset.
-- Pending: Places-panelet har fremdeles litt gjennomsiktig bakgrunn når man scroller helt ned; før produksjon bør overflowen få en solid hvit bakplate.
 
 ### November 12, 2025
 **Progress**:

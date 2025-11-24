@@ -73,6 +73,8 @@ server = app.server
 
 from dash_imagination.components.corpus import create_corpus_controls, create_visualization_controls, create_corpus_builder_card
 from dash_imagination.components.places.place_similarity_dialog import create_place_similarity_dialog
+from dash_imagination.components.authors.author_list_card import create_author_list_card
+from dash_imagination.components.authors.author_info_card import create_author_info_card
 from dash_imagination.components.common.size_controls import (
     SIZE_PRESETS,
     CARD_DEFAULT_PRESET,
@@ -138,7 +140,11 @@ SIZE_LIMITS = {
 def _nudge_size(store, card_key, axis, delta):
     base = copy.deepcopy(DEFAULT_CARD_SIZES)
     store = copy.deepcopy(store) if store else base
-    dims = store.get(card_key, base[card_key]).copy()
+    
+    # Safe retrieval of dims with fallback to DEFAULT_CARD_SIZES
+    default_dims = base.get(card_key, {'width': 400, 'height': 500})
+    dims = store.get(card_key, default_dims).copy()
+    
     limits = SIZE_LIMITS[axis]
     dims[axis] = max(limits['min'], min(limits['max'], dims[axis] + delta))
     store[card_key] = dims
@@ -147,7 +153,10 @@ def _nudge_size(store, card_key, axis, delta):
 
 def _apply_size_to_style(store, card_key, current_style):
     base = DEFAULT_CARD_SIZES
-    dims = (store or base).get(card_key, base[card_key])
+    # Safe retrieval of dims with fallback
+    default_dims = base.get(card_key, {'width': 400, 'height': 500})
+    dims = (store or base).get(card_key, default_dims)
+    
     style = (current_style or {}).copy()
     style['width'] = f"{dims['width']}px"
     style['height'] = f"{dims['height']}px"
@@ -204,6 +213,7 @@ def _toggle_window_minimize(card_key, window_state, container_style, body_style)
         else:
             container['minHeight'] = restored_min_height
 
+        # Restore body styles
         for prop in MINIMIZE_BODY_PROPS:
             if prop in stored_body_styles:
                 value = stored_body_styles[prop]
@@ -213,6 +223,11 @@ def _toggle_window_minimize(card_key, window_state, container_style, body_style)
                     body[prop] = value
             else:
                 body.pop(prop, None)
+        
+        # Ensure display is not none if we are restoring
+        if body.get('display') == 'none':
+            body['display'] = 'flex'
+
         return {'minimized': False}, container, body
 
     new_state = {
@@ -223,9 +238,11 @@ def _toggle_window_minimize(card_key, window_state, container_style, body_style)
     }
     container['height'] = 'auto'
     container['minHeight'] = '0'
-    body['display'] = body.get('display', 'flex')
+    
+    # Apply minimized styles
     for prop, value in MINIMIZED_BODY_VALUES.items():
         body[prop] = value
+        
     return new_state, container, body
 
 
@@ -655,6 +672,20 @@ CARD_CHIP_GROUPS = [
         ]
     },
     {
+        'group_id': 'authors',
+        'label': 'Authors',
+        'pill_class': 'chip-pill-authors',
+        'children': [
+            {
+                'chip_id': 'card-chip-author-list',
+                'label': 'Authors',
+                'subtitle': 'List',
+                'color_class': 'chip-author-list',
+                'title': 'View Author List'
+            }
+        ]
+    },
+    {
         'group_id': 'places',
         'label': 'Places',
         'pill_class': 'chip-pill-places',
@@ -748,6 +779,22 @@ WINDOW_CONTROL_CONFIG = [
         'body_id': 'place-similarity-body',
         'minimize_id': 'minimize-similarity-card',
         'close_id': 'close-similarity'
+    },
+    {
+        'card_key': 'author-list',
+        'store_id': 'author-list-window-state',
+        'container_id': 'author-list-container',
+        'body_id': 'author-list-body',
+        'minimize_id': 'minimize-author-list',
+        'close_id': 'close-author-list'
+    },
+    {
+        'card_key': 'author-info',
+        'store_id': 'author-info-window-state',
+        'container_id': 'author-info-container',
+        'body_id': 'author-info-body',
+        'minimize_id': 'minimize-author-info',
+        'close_id': 'close-author-info'
     }
 ]
 
@@ -1130,6 +1177,228 @@ def get_place_details(token, books, page=1, per_page=20):
         
     finally:
         conn.close()
+
+def get_corpus_authors(book_ids: list[int], filter_text: str = None) -> pd.DataFrame:
+    if not book_ids:
+        return pd.DataFrame()
+    conn = get_db_connection()
+    try:
+        query = f"""
+        SELECT 
+            author,
+            COUNT(DISTINCT dhlabid) as book_count,
+            MIN(year) as min_year,
+            MAX(year) as max_year
+        FROM corpus
+        WHERE dhlabid IN ({','.join(['?'] * len(book_ids))})
+        AND author IS NOT NULL 
+        AND TRIM(author) != ''
+        """
+        params = list(book_ids)
+        
+        if filter_text:
+            query += " AND LOWER(author) LIKE ?"
+            params.append(f"%{filter_text.lower()}%")
+            
+        query += """
+        GROUP BY author
+        ORDER BY book_count DESC, author ASC
+        """
+        return pd.read_sql_query(query, conn, params=tuple(params))
+    finally:
+        conn.close()
+
+@app.callback(
+    Output('author-list-container', 'style', allow_duplicate=True),
+    Input('card-chip-author-list', 'n_clicks'),
+    Input('close-author-list', 'n_clicks'),
+    State('author-list-container', 'style'),
+    State('chip-group-open', 'data'),
+    prevent_initial_call=True
+)
+def toggle_author_list(n_open, n_close, current_style, group_open):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    style = dict(current_style or {})
+    
+    if trigger_id == 'close-author-list':
+        style['display'] = 'none'
+        return style
+        
+    if trigger_id == 'card-chip-author-list':
+        # Reset minimize if hidden
+        if style.get('display') == 'none':
+             # Reset minimize logic if needed, but standard toggle behavior:
+             style['display'] = 'flex'
+             # Position it nicely if first open
+             if 'top' not in style: style['top'] = '80px'
+             if 'left' not in style: style['left'] = '400px'
+        else:
+            style['display'] = 'none'
+        return style
+        
+    return style
+
+@app.callback(
+    Output('author-list-content', 'children'),
+    Output('author-count-badge', 'children'),
+    Input('current-dhlabids-store', 'data'),
+    Input('author-list-filter', 'value'),
+    prevent_initial_call=True
+)
+def update_author_list(book_ids, filter_text):
+    if not book_ids:
+        return html.Div("No corpus selected.", style={'padding': '10px', 'color': '#666'}), "0 authors"
+        
+    df = get_corpus_authors(book_ids, filter_text)
+    
+    if df.empty:
+         return html.Div("No authors found.", style={'padding': '10px', 'color': '#666'}), "0 authors"
+
+    items = []
+    for _, row in df.iterrows():
+        author = row['author']
+        count = row['book_count']
+        years = f"({int(row['min_year'])}–{int(row['max_year'])})" if pd.notnull(row['min_year']) else ""
+        
+        items.append(
+            html.Div([
+                html.Div([
+                    html.Span(author, style={'fontWeight': '500', 'color': '#334155'}),
+                    html.Span(years, style={'fontSize': '12px', 'color': '#94a3b8', 'marginLeft': '6px'})
+                ]),
+                html.Div([
+                    html.Span(f"{count} books", style={'fontSize': '12px', 'color': '#64748b', 'marginRight': '10px'}),
+                    html.Button(
+                        html.I(className="fas fa-chevron-right"),
+                        id={'type': 'author-select-btn', 'author': author},
+                        className="btn btn-sm btn-light",
+                        style={'padding': '2px 6px', 'fontSize': '12px'}
+                    )
+                ], style={'display': 'flex', 'alignItems': 'center'})
+            ], style={
+                'display': 'flex', 
+                'justifyContent': 'space-between', 
+                'alignItems': 'center',
+                'padding': '8px 12px',
+                'borderBottom': '1px solid #f1f5f9',
+                'cursor': 'pointer',
+                'transition': 'background-color 0.2s'
+            }, className="author-list-item")
+        )
+        
+    return html.Div(items), f"{len(df):,} authors"
+
+@app.callback(
+    Output('author-info-container', 'style', allow_duplicate=True),
+    Output('author-info-content', 'children'),
+    Input({'type': 'author-select-btn', 'author': ALL}, 'n_clicks'),
+    State('author-info-container', 'style'),
+    State('current-dhlabids-store', 'data'),
+    prevent_initial_call=True
+)
+def show_author_details(n_clicks, current_style, current_books):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+        
+    # Find which button was clicked
+    trigger = ctx.triggered[0]
+    if not trigger['value']:
+        raise PreventUpdate
+        
+    try:
+        prop_id = json.loads(trigger['prop_id'].split('.')[0])
+        author_name = prop_id['author']
+    except:
+        raise PreventUpdate
+
+    # Fetch details
+    # 1. Images (fetch multiple, like for places)
+    images = fetch_historical_images(author_name, limit=5)
+    image_section = html.Div()
+    if images:
+        image_section = html.Div([
+            html.Div("Historiske bilder (NB.no)", style={
+                'fontSize': '12px', 'fontWeight': '600', 'color': '#64748b', 
+                'marginBottom': '8px', 'textTransform': 'uppercase', 'letterSpacing': '0.05em'
+            }),
+            html.Div([
+                html.A([
+                    html.Img(src=img['thumbnail'], style={
+                        'height': '120px', 'width': 'auto', 'borderRadius': '4px', 
+                        'border': '1px solid #e2e8f0', 'objectFit': 'cover'
+                    }),
+                    html.Div(f"{img['date'][:4] if img['date'] else ''}", style={
+                        'fontSize': '10px', 'color': '#666', 'marginTop': '2px', 'textAlign': 'center'
+                    })
+                ], href=img['view_url'], target="_blank", title=f"{img['title']} ({img['date']})", style={'textDecoration': 'none'})
+                for img in images
+            ], style={
+                'display': 'flex', 'gap': '10px', 'overflowX': 'auto', 
+                'paddingBottom': '8px', 'scrollbarWidth': 'thin'
+            })
+        ], style={'marginBottom': '16px'})
+    else:
+        # Placeholder or empty
+        image_section = html.Div([
+            html.I(className="fas fa-user", style={'fontSize': '48px', 'color': '#cbd5e1'}),
+            html.Div("No image found", style={'marginTop': '8px', 'fontSize': '12px', 'color': '#94a3b8'})
+        ], style={'width': '100%', 'height': '120px', 'display': 'flex', 'flexDirection': 'column', 'alignItems': 'center', 'justifyContent': 'center', 'backgroundColor': '#f8fafc', 'borderRadius': '8px', 'marginBottom': '12px'})
+
+    # 2. Books in corpus
+    conn = get_db_connection()
+    try:
+        books_query = f"""
+        SELECT title, year, urn
+        FROM corpus
+        WHERE dhlabid IN ({','.join(['?'] * len(current_books))})
+        AND author = ?
+        ORDER BY year ASC
+        """
+        books_df = pd.read_sql_query(books_query, conn, params=tuple(list(current_books) + [author_name]))
+    finally:
+        conn.close()
+        
+    book_list = html.Div([
+        html.Div([
+            html.A(
+                f"{row['title']} ({int(row['year']) if pd.notnull(row['year']) else '?'})",
+                href=f"https://www.nb.no/items/{row['urn']}" if row['urn'] else "#",
+                target="_blank",
+                style={'color': '#3b82f6', 'textDecoration': 'none', 'fontWeight': '500', 'fontSize': '13px'}
+            )
+        ], style={'padding': '6px 0', 'borderBottom': '1px solid #f1f5f9'})
+        for _, row in books_df.iterrows()
+    ], style={'maxHeight': '200px', 'overflowY': 'auto'})
+
+    content = html.Div([
+        html.H4(author_name, style={'marginBottom': '16px', 'color': '#1e293b'}),
+        image_section,
+        html.H6(f"Books in Corpus ({len(books_df)})", style={'marginTop': '16px', 'marginBottom': '8px', 'color': '#64748b', 'fontSize': '12px', 'textTransform': 'uppercase'}),
+        book_list
+    ])
+
+    style = dict(current_style or {})
+    style['display'] = 'flex'
+    
+    return style, content
+
+@app.callback(
+    Output('author-info-container', 'style', allow_duplicate=True),
+    Input('close-author-info', 'n_clicks'),
+    State('author-info-container', 'style'),
+    prevent_initial_call=True
+)
+def close_author_info(n_clicks, current_style):
+    if not n_clicks:
+        raise PreventUpdate
+    style = dict(current_style or {})
+    style['display'] = 'none'
+    return style
 
 # Initialize lists with defaults
 authors_list = ["Ibsen", "Bjørnson", "Collett", "Lie", "Kielland"]
@@ -1558,6 +1827,8 @@ app.layout = html.Div([
     # Add collocation and similarity dialogs
     create_collocation_card(),
     create_place_similarity_dialog(),
+    create_author_list_card(),
+    create_author_info_card(),
 
     # Hidden divs and stores
     html.Div(id='reset-status', style={'display': 'none'}),
@@ -2459,6 +2730,28 @@ def update_places_lamps(current_filters):
     colloc_icon, colloc_color = lamp_props('collocations')
     return freq_icon, freq_color, sample_icon, sample_color, colloc_icon, colloc_color
 
+
+@app.callback(
+    Output('author-list-container', 'style', allow_duplicate=True),
+    Input('dialog-size-store', 'data'),
+    State('author-list-window-state', 'data'),
+    State('author-list-container', 'style'),
+    prevent_initial_call=True
+)
+def resize_author_list(store, window_state, current_style):
+    style = _apply_size_to_style(store, 'author-list', current_style)
+    return _enforce_minimized_dimensions(style, window_state)
+
+@app.callback(
+    Output('author-info-container', 'style', allow_duplicate=True),
+    Input('dialog-size-store', 'data'),
+    State('author-info-window-state', 'data'),
+    State('author-info-container', 'style'),
+    prevent_initial_call=True
+)
+def resize_author_info(store, window_state, current_style):
+    style = _apply_size_to_style(store, 'author-info', current_style)
+    return _enforce_minimized_dimensions(style, window_state)
 
 @app.callback(
     Output('place-summary-container', 'style', allow_duplicate=True),
