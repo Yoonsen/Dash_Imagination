@@ -4056,9 +4056,15 @@ def add_book_from_search(_, current_books):
     if not ctx.triggered:
         raise PreventUpdate
     trigger = ctx.triggered[0]
-    if not trigger['value']:
+    if not trigger or not trigger.get('value'):
         raise PreventUpdate
-    trigger_id = json.loads(trigger['prop_id'].split('.')[0])
+    prop = trigger['prop_id'].split('.')[0]
+    if not prop:
+        raise PreventUpdate
+    try:
+        trigger_id = json.loads(prop)
+    except (json.JSONDecodeError, TypeError):
+        raise PreventUpdate
     dhlabid = int(trigger_id.get('dhlabid'))
     books = set(current_books or [])
     books.add(dhlabid)
@@ -4077,9 +4083,15 @@ def add_author_books_from_search(_, current_books):
     if not ctx.triggered:
         raise PreventUpdate
     trigger = ctx.triggered[0]
-    if not trigger['value']:
+    if not trigger or not trigger.get('value'):
         raise PreventUpdate
-    trigger_id = json.loads(trigger['prop_id'].split('.')[0])
+    prop = trigger['prop_id'].split('.')[0]
+    if not prop:
+        raise PreventUpdate
+    try:
+        trigger_id = json.loads(prop)
+    except (json.JSONDecodeError, TypeError):
+        raise PreventUpdate
     author = trigger_id.get('author')
     dhlabids = _fetch_author_book_ids(author)
     if not dhlabids:
