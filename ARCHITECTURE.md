@@ -21,6 +21,7 @@ Roughly, the system consists of:
 - **External Integrations**
   - NB.no for book viewing (via URNs).
   - DHLab services for text analysis (concordances, collocations, vicinity).
+  - **IIIF & Image Services** (New) for retrieving historical images of places and authors.
   - Qdrant for image similarity and visual discovery (planned integration in the app UI).
 
 The guiding abstraction is: **books as columns, places as rows** (DTM), with views driven by a session-specific corpus.
@@ -42,8 +43,9 @@ The guiding abstraction is: **books as columns, places as rows** (DTM), with vie
     - **Map container** (central element).
     - **Floating UI elements**:
       - Sidebar toggle (top left).
-      - Chip launcher on the left edge with **pill parents** (“Corpus”, “Places”, “Viz”) that fan out into task-specific chips:
+      - Chip launcher on the left edge with **pill parents** that fan out into task-specific chips:
         - Corpus: View / Modify
+        - Authors: List / Network (Planned)
         - Places: Liste / Coll / Sim
         - Visualization: Viz Ctrl (own pill)
         - Pills are **hover- or click-expandable** on desktop, tap-to-toggle on mobile.
@@ -198,7 +200,36 @@ DHLab provides the heavy lifting for text analysis:
 
 All services are connected via stable identifiers (e.g., URNs or DHLab internal IDs) so results can be re-joined with local DB tables.
 
-### 4.3 Qdrant (Image Similarity, Planned UI Integration)
+### 4.3 NB.no API (IIIF & Images)
+
+Integration for retrieving historical images related to places and authors.
+
+**Base URL:** `https://api.nb.no/catalog/v1/search`
+
+**Query Parameters:**
+- `q`: Search term (e.g., place name).
+- `mediaTypeOrder=bilder`: Prioritize images.
+- `mediaTypeSize=1`: Ensure media type filter is applied.
+- `filter=mediatype:bilder`: Explicit filter for images.
+- `searchType=FULL_TEXT_SEARCH`: Search mode.
+- `sort=date`: Sort by date (useful for finding oldest/historical images).
+- `sortOrder=asc`: Ascending order (oldest first).
+- `size=N`: Number of results to retrieve.
+
+**Response Structure (JSON):**
+- `_embedded.mediaTypeResults[0].result._embedded.items`: List of image objects.
+- Each item contains:
+  - `metadata.title`: Image title.
+  - `metadata.dateCreated`: Year/Date.
+  - `_links.thumbnail_medium.href`: URL for thumbnail image.
+  - `_links.presentation.href`: URL to IIIF manifest.
+  - `accessInfo.isPublicDomain`: Boolean flag for usage rights.
+
+**Usage in App:**
+- **Place Info Card**: When viewing a place, fetch relevant historical images (e.g., pre-1920) using the place name.
+- Display images in a gallery or carousel within the place details.
+
+### 4.4 Qdrant (Image Similarity, Planned UI Integration)
 
 - A Qdrant collection stores vector embeddings for illustrations/photos.
 - Each vector is linked to:
@@ -277,4 +308,3 @@ Søk skjer i tre parallelle “univers” – vi splitter inputten i ord og matc
   - integrate analysis (DHLab) and discovery (Qdrant/NB.no) through stable identifiers (URNs).
 
 The manifest captures where the app is going; this architecture describes the current implementation and the path for incremental enhancements.
-

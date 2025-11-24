@@ -333,8 +333,18 @@ def _fetch_place_overview(token: str) -> dict | None:
         conn.close()
 
 
+from dash_imagination.utils.images import fetch_historical_images
+
 def _render_place_summary_from_search(place: dict) -> html.Div:
     books = place.get('books', [])
+    
+    # Fetch historical images
+    images = []
+    search_name = place.get('name') or place.get('token')
+    if search_name:
+        # Clean search name (remove 'i ', 'på ', etc if needed, but start simple)
+        images = fetch_historical_images(search_name, limit=5)
+
     header = html.Div([
         html.H5(place.get('token'), style={'marginBottom': '4px'}),
         html.P(
@@ -346,6 +356,32 @@ def _render_place_summary_from_search(place: dict) -> html.Div:
             style={'marginTop': '8px'}
         )
     ])
+    
+    # Image gallery section
+    gallery = html.Div()
+    if images:
+        gallery = html.Div([
+            html.Div("Historiske bilder (NB.no)", style={
+                'fontSize': '12px', 'fontWeight': '600', 'color': '#64748b', 
+                'marginBottom': '8px', 'textTransform': 'uppercase', 'letterSpacing': '0.05em'
+            }),
+            html.Div([
+                html.A([
+                    html.Img(src=img['thumbnail'], style={
+                        'height': '100px', 'width': 'auto', 'borderRadius': '4px', 
+                        'border': '1px solid #e2e8f0', 'objectFit': 'cover'
+                    }),
+                    html.Div(f"{img['date'][:4] if img['date'] else ''}", style={
+                        'fontSize': '10px', 'color': '#666', 'marginTop': '2px', 'textAlign': 'center'
+                    })
+                ], href=img['view_url'], target="_blank", title=f"{img['title']} ({img['date']})", style={'textDecoration': 'none'})
+                for img in images
+            ], style={
+                'display': 'flex', 'gap': '10px', 'overflowX': 'auto', 
+                'paddingBottom': '8px', 'scrollbarWidth': 'thin'
+            })
+        ], style={'margin': '16px 0'})
+
     book_list = html.Div([
         html.Div([
             html.A(
@@ -365,7 +401,7 @@ def _render_place_summary_from_search(place: dict) -> html.Div:
         for row in books if row.get('title')
     ]) if books else html.Div("No book details available", style={'color': '#475569'})
 
-    return html.Div([header, html.Hr(style={'margin': '10px 0'}), book_list])
+    return html.Div([header, gallery, html.Hr(style={'margin': '10px 0'}), book_list])
 
 
 def _fetch_author_book_ids(author_name: str) -> list[int]:
@@ -3747,6 +3783,9 @@ def manage_search_results_visibility(n_blur, search_value, current_style):
     if trigger_id == 'global-place-search' and 'n_blur' in ctx.triggered[0]['prop_id']:
         if not n_blur:
             raise PreventUpdate
+        # Small delay to allow click events to propagate
+        import time
+        time.sleep(0.1)
         style = dict(current_style or _search_results_style(False))
         style['display'] = 'none'
         return style
@@ -3772,10 +3811,9 @@ app.clientside_callback(
         var el = document.getElementById(id);
         if (el) {
             el.addEventListener('mousedown', function(e) {
-                // Prevent default mousedown behavior to avoid losing focus from input
-                if (e.target.tagName !== 'INPUT') {
-                    e.preventDefault();
-                }
+                // Prevent input blur when clicking inside results
+                // We use mousedown because it fires before blur
+                e.preventDefault();
             });
         }
         return window.dash_clientside.no_update;
