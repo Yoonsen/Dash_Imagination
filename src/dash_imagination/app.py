@@ -154,6 +154,89 @@ def _apply_size_to_style(store, card_key, current_style):
     return style
 
 
+MINIMIZE_BODY_PROPS = [
+    'display',
+    'height',
+    'maxHeight',
+    'opacity',
+    'pointerEvents',
+    'overflow',
+    'flex',
+    'marginTop',
+    'marginBottom',
+    'paddingTop',
+    'paddingBottom'
+]
+
+MINIMIZED_BODY_VALUES = {
+    'height': '0px',
+    'maxHeight': '0px',
+    'opacity': '0',
+    'pointerEvents': 'none',
+    'overflow': 'hidden',
+    'flex': '0 0 auto',
+    'marginTop': '0',
+    'marginBottom': '0',
+    'paddingTop': '0',
+    'paddingBottom': '0'
+}
+
+
+def _toggle_window_minimize(card_key, window_state, container_style, body_style):
+    """
+    Toggle minimized state for floating dialog cards.
+    """
+    state = (window_state or {}).copy()
+    container = (container_style or {}).copy()
+    body = (body_style or {}).copy()
+
+    is_minimized = state.get('minimized', False)
+    default_height = f"{DEFAULT_CARD_SIZES.get(card_key, {}).get('height', 320)}px"
+
+    if is_minimized:
+        restored_height = state.get('stored_height') or default_height
+        restored_min_height = state.get('stored_min_height')
+        stored_body_styles = state.get('stored_body_styles', {})
+
+        container['height'] = restored_height
+        if restored_min_height is None:
+            container.pop('minHeight', None)
+        else:
+            container['minHeight'] = restored_min_height
+
+        for prop in MINIMIZE_BODY_PROPS:
+            if prop in stored_body_styles:
+                value = stored_body_styles[prop]
+                if value is None:
+                    body.pop(prop, None)
+                else:
+                    body[prop] = value
+            else:
+                body.pop(prop, None)
+        return {'minimized': False}, container, body
+
+    new_state = {
+        'minimized': True,
+        'stored_height': container.get('height', default_height),
+        'stored_min_height': container.get('minHeight'),
+        'stored_body_styles': {prop: body.get(prop) for prop in MINIMIZE_BODY_PROPS}
+    }
+    container['height'] = 'auto'
+    container['minHeight'] = '0'
+    body['display'] = body.get('display', 'flex')
+    for prop, value in MINIMIZED_BODY_VALUES.items():
+        body[prop] = value
+    return new_state, container, body
+
+
+def _enforce_minimized_dimensions(style, window_state):
+    minimized = (window_state or {}).get('minimized')
+    if minimized:
+        style['height'] = 'auto'
+        style['minHeight'] = '0'
+    return style
+
+
 def build_places_tab(summary_id, table_id, download_btn_id, download_id, apply_btn_id,
                      action_prefix=None, include_resample=False,
                      activate_btn_id=None, source_key=None, activate_title=None,
@@ -314,7 +397,9 @@ def create_collocation_card():
                 'fa fa-highlighter',
                 "Collocations",
                 close_button_id='close-collocations',
-                close_button_title="Hide collocation card"
+                close_button_title="Hide collocation card",
+                minimize_button_id='minimize-collocation-card',
+                minimize_button_title="Minimize collocation card"
             ),
             className="bg-warning-subtle text-dark",
             id='collocation-card-header'
@@ -336,7 +421,7 @@ def create_collocation_card():
                 className="flex-grow-1 d-flex flex-column",
                 style={'minHeight': 0}
             )
-        ], style={
+        ], id='collocation-card-body', style={
             'flex': '1 1 auto',
             'minHeight': 0,
             'display': 'flex',
@@ -356,93 +441,261 @@ def create_collocation_card():
     })
 
 
-CARD_LAUNCHER_CONFIG = [
-    # Corpus group
-    [
-        {
-            'chip_id': 'card-chip-corpus',
-            'label': 'Corpus',
-            'subtitle': 'View',
-            'color_class': 'chip-corpus',
-            'title': 'Toggle Corpus View'
-        },
-        {
-            'chip_id': 'card-chip-builder',
-            'label': 'Corpus',
-            'subtitle': 'Modify',
-            'color_class': 'chip-builder',
-            'title': 'Toggle Corpus Modify'
-        },
-    ],
-    # Places group
-    [
-        {
-            'chip_id': 'card-chip-places',
-            'label': 'Places',
-            'subtitle': 'Liste',
-            'color_class': 'chip-places',
-            'title': 'Toggle Places dialog'
-        },
-        {
-            'chip_id': 'card-chip-collocations',
-            'label': 'Places',
-            'subtitle': 'Coll',
-            'color_class': 'chip-collocations',
-            'title': 'Toggle Collocations'
-        },
-    ],
-    # Detail group
-    [
-        {
-            'chip_id': 'card-chip-summary',
-            'label': 'Places',
-            'subtitle': 'Books',
-            'color_class': 'chip-summary',
-            'title': 'Show Place Books'
-        },
-        {
-            'chip_id': 'card-chip-similarity',
-            'label': 'Places',
-            'subtitle': 'Sim',
-            'color_class': 'chip-similarity',
-            'title': 'Toggle Place Similarity'
-        }
-    ]
+CARD_CHIP_GROUPS = [
+    {
+        'group_id': 'corpus',
+        'label': 'Corpus',
+        'pill_class': 'chip-pill-corpus',
+        'children': [
+            {
+                'chip_id': 'card-chip-corpus',
+                'label': 'Corpus',
+                'subtitle': 'View',
+                'color_class': 'chip-corpus',
+                'title': 'Toggle Corpus View'
+            },
+            {
+                'chip_id': 'card-chip-builder',
+                'label': 'Corpus',
+                'subtitle': 'Modify',
+                'color_class': 'chip-builder',
+                'title': 'Toggle Corpus Modify'
+            }
+        ]
+    },
+    {
+        'group_id': 'places',
+        'label': 'Places',
+        'pill_class': 'chip-pill-places',
+        'children': [
+            {
+                'chip_id': 'card-chip-places',
+                'label': 'Places',
+                'subtitle': 'Liste',
+                'color_class': 'chip-places',
+                'title': 'Toggle Places dialog'
+            },
+            {
+                'chip_id': 'card-chip-collocations',
+                'label': 'Places',
+                'subtitle': 'Coll',
+                'color_class': 'chip-collocations',
+                'title': 'Toggle Collocations'
+            },
+            {
+                'chip_id': 'card-chip-similarity',
+                'label': 'Places',
+                'subtitle': 'Sim',
+                'color_class': 'chip-similarity',
+                'title': 'Toggle Place Similarity'
+            }
+        ]
+    }
+]
+
+CHIP_GROUP_TRIGGER_IDS = [f"chip-trigger-{group['group_id']}" for group in CARD_CHIP_GROUPS]
+CHIP_CHILD_IDS = [
+    child['chip_id']
+    for group in CARD_CHIP_GROUPS
+    for child in group['children']
+]
+CHIP_LAUNCHER_IDS = [f"chip-launcher-{group['group_id']}" for group in CARD_CHIP_GROUPS]
+
+WINDOW_CONTROL_CONFIG = [
+    {
+        'card_key': 'place-summary',
+        'store_id': 'place-summary-window-state',
+        'container_id': 'place-summary-container',
+        'body_id': 'place-summary-body',
+        'minimize_id': 'minimize-place-summary',
+        'close_id': 'close-summary'
+    },
+    {
+        'card_key': 'places',
+        'store_id': 'place-names-window-state',
+        'container_id': 'place-names-container',
+        'body_id': 'place-names-body',
+        'minimize_id': 'minimize-place-names',
+        'close_id': 'close-place-names'
+    },
+    {
+        'card_key': 'corpus-controls',
+        'store_id': 'corpus-controls-window-state',
+        'container_id': 'corpus-controls-container',
+        'body_id': 'corpus-controls-body',
+        'minimize_id': 'minimize-corpus-controls',
+        'close_id': 'close-corpus'
+    },
+    {
+        'card_key': 'visualization-controls',
+        'store_id': 'visualization-controls-window-state',
+        'container_id': 'visualization-controls-container',
+        'body_id': 'visualization-controls-body',
+        'minimize_id': 'minimize-visualization-controls',
+        'close_id': 'close-visualization'
+    },
+    {
+        'card_key': 'corpus-builder',
+        'store_id': 'corpus-builder-window-state',
+        'container_id': 'corpus-builder-card',
+        'body_id': 'corpus-builder-body',
+        'minimize_id': 'minimize-corpus-builder',
+        'close_id': 'close-corpus-builder'
+    },
+    {
+        'card_key': 'collocation-card',
+        'store_id': 'collocation-card-window-state',
+        'container_id': 'collocation-card',
+        'body_id': 'collocation-card-body',
+        'minimize_id': 'minimize-collocation-card',
+        'close_id': 'close-collocations'
+    },
+    {
+        'card_key': 'similarity-card',
+        'store_id': 'similarity-card-window-state',
+        'container_id': 'place-similarity-dialog',
+        'body_id': 'place-similarity-body',
+        'minimize_id': 'minimize-similarity-card',
+        'close_id': 'close-similarity'
+    }
 ]
 
 
 def create_card_launcher():
-    groups = []
-    for group in CARD_LAUNCHER_CONFIG:
-        row = []
-        for card in group:
-            row.append(
-                html.Button(
-                    [
-                        html.Span(card['label'], className="card-chip-label"),
-                        html.Span(card['subtitle'], className="card-chip-subtext")
-                    ],
-                    id=card['chip_id'],
-                    className=f"card-chip {card['color_class']}",
-                    title=card['title'],
-                    n_clicks=0
-                )
+    group_elements = [dcc.Store(id='chip-group-open', data=None)]
+    for group in CARD_CHIP_GROUPS:
+        trigger_id = f"chip-trigger-{group['group_id']}"
+        group_elements.append(
+            html.Div(
+                [
+                    html.Button(
+                        html.Span(group['label'], className="chip-pill-label"),
+                        id=trigger_id,
+                        className=f"chip-pill {group['pill_class']}",
+                        title=f"Show {group['label']} actions",
+                        n_clicks=0
+                    ),
+                    html.Div(
+                        [
+                            html.Button(
+                                [
+                                    html.Span(card['label'], className="card-chip-label"),
+                                    html.Span(card['subtitle'], className="card-chip-subtext")
+                                ],
+                                id=card['chip_id'],
+                                className=f"card-chip chip-option {card['color_class']}",
+                                title=card['title'],
+                                n_clicks=0
+                            )
+                            for card in group['children']
+                        ],
+                        id=f"chip-options-{group['group_id']}",
+                        className="chip-options-menu"
+                    )
+                ],
+                id=f"chip-launcher-{group['group_id']}",
+                className="chip-launcher-group"
             )
-        groups.append(html.Div(row, className="card-chip-group"))
-    # Visualization chip in its own group for symmetry
-    groups.append(html.Div([
+        )
+    group_elements.append(
         html.Button(
             [
                 html.Span("Viz", className="card-chip-label"),
                 html.Span("Ctrl", className="card-chip-subtext")
             ],
             id='card-chip-visualization',
-            className="card-chip chip-visualization",
+            className="chip-pill chip-pill-visualization",
             title="Toggle Visualization Controls",
             n_clicks=0
         )
-    ], className="card-chip-group"))
-    return html.Div(groups, id='card-launcher')
+    )
+    return html.Div(group_elements, id='card-launcher')
+
+
+@app.callback(
+    Output('chip-group-open', 'data'),
+    [Input(trigger_id, 'n_clicks') for trigger_id in (*CHIP_GROUP_TRIGGER_IDS, *CHIP_CHILD_IDS)],
+    State('chip-group-open', 'data'),
+    prevent_initial_call=True
+)
+def toggle_chip_group(*callback_args):
+    open_group = callback_args[-1] if callback_args else None
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    if trigger_id in CHIP_GROUP_TRIGGER_IDS:
+        group_id = trigger_id.replace('chip-trigger-', '')
+        if open_group == group_id:
+            return None
+        return group_id
+    if trigger_id in CHIP_CHILD_IDS:
+        return None
+    raise PreventUpdate
+
+
+@app.callback(
+    [Output(launcher_id, 'className') for launcher_id in CHIP_LAUNCHER_IDS],
+    Input('chip-group-open', 'data')
+)
+def reflect_chip_group_state(open_group):
+    base_class = 'chip-launcher-group'
+    return [
+        f"{base_class} open" if open_group == group['group_id'] else base_class
+        for group in CARD_CHIP_GROUPS
+    ]
+
+
+def _register_window_callbacks():
+    for cfg in WINDOW_CONTROL_CONFIG:
+        minimize_id = cfg['minimize_id']
+        close_id = cfg['close_id']
+        store_id = cfg['store_id']
+        container_id = cfg['container_id']
+        body_id = cfg['body_id']
+        card_key = cfg['card_key']
+
+        @app.callback(
+            Output(store_id, 'data'),
+            Output(container_id, 'style', allow_duplicate=True),
+            Output(body_id, 'style', allow_duplicate=True),
+            Input(minimize_id, 'n_clicks'),
+            Input(close_id, 'n_clicks'),
+            State(store_id, 'data'),
+            State(container_id, 'style'),
+            State(body_id, 'style'),
+            prevent_initial_call=True
+        )
+        def _handle_window_controls(min_clicks, close_clicks, state, container_style, body_style, cfg=cfg, card_key=card_key):
+            ctx = dash.callback_context
+            if not ctx.triggered:
+                raise PreventUpdate
+            trigger = ctx.triggered[0]['prop_id'].split('.')[0]
+            if trigger == cfg['close_id']:
+                # Ensure state resets and body is visible before the actual close callback hides the card.
+                # Avoid touching the container style so the close-specific callback remains in charge of display.
+                if state and state.get('minimized'):
+                    restored_state, _, restored_body = _toggle_window_minimize(
+                        card_key,
+                        state,
+                        container_style,
+                        body_style
+                    )
+                    restored_state['minimized'] = False
+                    return restored_state, dash.no_update, restored_body
+                return {'minimized': False}, dash.no_update, dash.no_update
+            if trigger == cfg['minimize_id']:
+                new_state, new_container_style, new_body_style = _toggle_window_minimize(
+                    card_key,
+                    state,
+                    container_style,
+                    body_style
+                )
+                return new_state, new_container_style, new_body_style
+            raise PreventUpdate
+
+
+_register_window_callbacks()
 
 # Database Connection & Queries
 def pdquery(conn, query, params=()):
@@ -943,7 +1196,9 @@ app.layout = html.Div([
                 'fa fa-grip-horizontal',
                 "Place Details",
                 close_button_id='close-summary',
-                close_button_title="Hide place details"
+                close_button_title="Hide place details",
+                minimize_button_id='minimize-place-summary',
+                minimize_button_title="Minimize place details"
             ),
             className="bg-danger-subtle text-dark",
             id='summary-header'
@@ -954,7 +1209,7 @@ app.layout = html.Div([
                 'minHeight': 0,
                 'overflowY': 'auto'
             })
-        ], style={
+        ], id='place-summary-body', style={
             'flex': '1 1 auto',
             'minHeight': 0,
             'display': 'flex',
@@ -981,7 +1236,9 @@ app.layout = html.Div([
                 'fa fa-map-marker',
                 "Place Names",
                 close_button_id='close-place-names',
-                close_button_title="Hide place names"
+                close_button_title="Hide place names",
+                minimize_button_id='minimize-place-names',
+                minimize_button_title="Minimize place names"
             ),
             className="bg-warning-subtle text-dark",
             id='place-names-header'
@@ -1085,7 +1342,7 @@ app.layout = html.Div([
                 'gap': '0.5rem',
                 'overflow': 'hidden'
             })
-        ], style={
+        ], id='place-names-body', style={
             'flex': '1 1 auto',
             'minHeight': 0,
             'display': 'flex',
@@ -1128,6 +1385,13 @@ app.layout = html.Div([
     dcc.Store(id='places-active-mode', data='frequency'),
     dcc.Store(id='heatmap-subset-mode', data='all'),
     dcc.Store(id='dialog-size-store', data=copy.deepcopy(DEFAULT_CARD_SIZES)),
+    dcc.Store(id='place-summary-window-state', data={'minimized': False}),
+    dcc.Store(id='place-names-window-state', data={'minimized': False}),
+    dcc.Store(id='corpus-controls-window-state', data={'minimized': False}),
+    dcc.Store(id='visualization-controls-window-state', data={'minimized': False}),
+    dcc.Store(id='corpus-builder-window-state', data={'minimized': False}),
+    dcc.Store(id='collocation-card-window-state', data={'minimized': False}),
+    dcc.Store(id='similarity-card-window-state', data={'minimized': False}),
     dcc.Store(id='similarity-places-data'),
 
     # Add the new corpus builder card
@@ -2004,71 +2268,85 @@ def update_places_lamps(current_filters):
 @app.callback(
     Output('place-summary-container', 'style', allow_duplicate=True),
     Input('dialog-size-store', 'data'),
+    State('place-summary-window-state', 'data'),
     State('place-summary-container', 'style'),
     prevent_initial_call=True
 )
-def resize_place_summary(store, current_style):
-    return _apply_size_to_style(store, 'place-summary', current_style)
+def resize_place_summary(store, window_state, current_style):
+    style = _apply_size_to_style(store, 'place-summary', current_style)
+    return _enforce_minimized_dimensions(style, window_state)
 
 
 @app.callback(
     Output('place-names-container', 'style', allow_duplicate=True),
     Input('dialog-size-store', 'data'),
+    State('place-names-window-state', 'data'),
     State('place-names-container', 'style'),
     prevent_initial_call=True
 )
-def resize_places(store, current_style):
-    return _apply_size_to_style(store, 'places', current_style)
+def resize_places(store, window_state, current_style):
+    style = _apply_size_to_style(store, 'places', current_style)
+    return _enforce_minimized_dimensions(style, window_state)
 
 
 @app.callback(
     Output('corpus-controls-container', 'style', allow_duplicate=True),
     Input('dialog-size-store', 'data'),
+    State('corpus-controls-window-state', 'data'),
     State('corpus-controls-container', 'style'),
     prevent_initial_call=True
 )
-def resize_corpus_controls(store, current_style):
-    return _apply_size_to_style(store, 'corpus-controls', current_style)
+def resize_corpus_controls(store, window_state, current_style):
+    style = _apply_size_to_style(store, 'corpus-controls', current_style)
+    return _enforce_minimized_dimensions(style, window_state)
 
 
 @app.callback(
     Output('visualization-controls-container', 'style', allow_duplicate=True),
     Input('dialog-size-store', 'data'),
+    State('visualization-controls-window-state', 'data'),
     State('visualization-controls-container', 'style'),
     prevent_initial_call=True
 )
-def resize_visualization_controls(store, current_style):
-    return _apply_size_to_style(store, 'visualization-controls', current_style)
+def resize_visualization_controls(store, window_state, current_style):
+    style = _apply_size_to_style(store, 'visualization-controls', current_style)
+    return _enforce_minimized_dimensions(style, window_state)
 
 
 @app.callback(
     Output('corpus-builder-card', 'style', allow_duplicate=True),
     Input('dialog-size-store', 'data'),
+    State('corpus-builder-window-state', 'data'),
     State('corpus-builder-card', 'style'),
     prevent_initial_call=True
 )
-def resize_corpus_builder(store, current_style):
-    return _apply_size_to_style(store, 'corpus-builder', current_style)
+def resize_corpus_builder(store, window_state, current_style):
+    style = _apply_size_to_style(store, 'corpus-builder', current_style)
+    return _enforce_minimized_dimensions(style, window_state)
 
 
 @app.callback(
     Output('collocation-card', 'style', allow_duplicate=True),
     Input('dialog-size-store', 'data'),
+    State('collocation-card-window-state', 'data'),
     State('collocation-card', 'style'),
     prevent_initial_call=True
 )
-def resize_collocation_card(store, current_style):
-    return _apply_size_to_style(store, 'collocation-card', current_style)
+def resize_collocation_card(store, window_state, current_style):
+    style = _apply_size_to_style(store, 'collocation-card', current_style)
+    return _enforce_minimized_dimensions(style, window_state)
 
 
 @app.callback(
     Output('place-similarity-dialog', 'style', allow_duplicate=True),
     Input('dialog-size-store', 'data'),
+    State('similarity-card-window-state', 'data'),
     State('place-similarity-dialog', 'style'),
     prevent_initial_call=True
 )
-def resize_similarity_card(store, current_style):
-    return _apply_size_to_style(store, 'similarity-card', current_style)
+def resize_similarity_card(store, window_state, current_style):
+    style = _apply_size_to_style(store, 'similarity-card', current_style)
+    return _enforce_minimized_dimensions(style, window_state)
 
 # Add this callback to toggle the info modal
 
@@ -2119,21 +2397,6 @@ app.clientside_callback(
     [State('place-names-container', 'style')],
     prevent_initial_call=True
 )
-
-
-@app.callback(
-    Output('place-summary-container', 'style', allow_duplicate=True),
-    Input('card-chip-summary', 'n_clicks'),
-    State('place-summary-container', 'style'),
-    prevent_initial_call=True
-)
-def show_place_summary_from_chip(n_clicks, current_style):
-    if not n_clicks:
-        raise PreventUpdate
-    new_style = dict(current_style or {})
-    new_style['display'] = 'flex'
-    new_style.pop('transform', None)
-    return new_style
 
 
 @app.callback(
@@ -3010,29 +3273,26 @@ def _chip_class(base_class, style_dict):
 
 @app.callback(
     Output('card-chip-places', 'className'),
-    Output('card-chip-summary', 'className'),
     Output('card-chip-corpus', 'className'),
     Output('card-chip-visualization', 'className'),
     Output('card-chip-builder', 'className'),
     Output('card-chip-collocations', 'className'),
     Output('card-chip-similarity', 'className'),
     Input('place-names-container', 'style'),
-    Input('place-summary-container', 'style'),
     Input('corpus-controls-container', 'style'),
     Input('visualization-controls-container', 'style'),
     Input('corpus-builder-card', 'style'),
     Input('collocation-card', 'style'),
     Input('place-similarity-dialog', 'style')
 )
-def refresh_card_chips(places_style, summary_style, corpus_style, viz_style, builder_style, collocation_style, similarity_style):
+def refresh_card_chips(places_style, corpus_style, viz_style, builder_style, collocation_style, similarity_style):
     return (
-        _chip_class('card-chip chip-places', places_style),
-        _chip_class('card-chip chip-summary', summary_style),
-        _chip_class('card-chip chip-corpus', corpus_style),
-        _chip_class('card-chip chip-visualization', viz_style),
-        _chip_class('card-chip chip-builder', builder_style),
-        _chip_class('card-chip chip-collocations', collocation_style),
-        _chip_class('card-chip chip-similarity', similarity_style)
+        _chip_class('card-chip chip-option chip-places', places_style),
+        _chip_class('card-chip chip-option chip-corpus', corpus_style),
+        _chip_class('chip-pill chip-pill-visualization', viz_style),
+        _chip_class('card-chip chip-option chip-builder', builder_style),
+        _chip_class('card-chip chip-option chip-collocations', collocation_style),
+        _chip_class('card-chip chip-option chip-similarity', similarity_style)
     )
 
 

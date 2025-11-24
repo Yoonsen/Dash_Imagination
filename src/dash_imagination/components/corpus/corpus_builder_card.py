@@ -183,7 +183,9 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                 'fa fa-tools',
                 'Corpus Modify',
                 close_button_id="close-corpus-builder",
-                close_button_title="Hide builder"
+                close_button_title="Hide builder",
+                minimize_button_id='minimize-corpus-builder',
+                minimize_button_title="Minimize builder"
             ),
             className="bg-success-subtle text-dark",
             id="corpus-builder-header"
@@ -297,7 +299,7 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                 ], label="Content", tab_id="content"),
                 ], id="corpus-builder-tabs", active_tab="metadata", className="flex-grow-1")
             , className="flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'})
-        ], style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
+        ], id='corpus-builder-body', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
     ], id="corpus-builder-card", className="shadow position-absolute m-3 dialog-card", style={
         "width": f"{DEFAULT_CARD_SIZES['corpus-builder']['width']}px",
         "height": f"{DEFAULT_CARD_SIZES['corpus-builder']['height']}px",
@@ -318,7 +320,7 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
     prevent_initial_call=True
 )
 def toggle_card_visibility(n1, n2, chip_clicks, builder_style, controls_style):
-    """Toggle the visibility of the corpus builder card while keeping controls visible."""
+    """Toggle the visibility of the corpus builder card only."""
     import dash
     from dash import no_update
     import dash_bootstrap_components as dbc
@@ -338,19 +340,18 @@ def toggle_card_visibility(n1, n2, chip_clicks, builder_style, controls_style):
     controls_style = controls_style or {}
     
     if button_id in ("open-corpus-builder", "card-chip-builder"):
-        # Show builder card and ensure controls stay visible without overriding size presets
+        # Show builder card; leave corpus controls untouched
         current_display = builder_style.get("display", "none")
         if button_id == "card-chip-builder" and current_display != "none":
             builder_style["display"] = "none"
-            return builder_style, controls_style
+            return builder_style, dash.no_update
         builder_style["display"] = "flex"
         builder_style.pop("transform", None)
-        controls_style["display"] = "flex"
-        return builder_style, controls_style
+        return builder_style, dash.no_update
     elif button_id == "close-corpus-builder":
-        # Hide builder card but keep controls visible
+        # Hide builder card only
         builder_style["display"] = "none"
-        return builder_style, controls_style
+        return builder_style, dash.no_update
     
     return dash.no_update, dash.no_update
 

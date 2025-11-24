@@ -46,7 +46,9 @@ def create_place_similarity_dialog():
                 'fa fa-search',
                 "Place Similarity",
                 close_button_id='close-similarity',
-                close_button_title="Hide similarity card"
+                close_button_title="Hide similarity card",
+                minimize_button_id='minimize-similarity-card',
+                minimize_button_title="Minimize similarity card"
             ),
             className="bg-info-subtle text-dark",
             id='similarity-header'
@@ -134,7 +136,7 @@ def create_place_similarity_dialog():
                     )
                 ], id="select-all-container", style={'display': 'none', 'marginBottom': '8px'})
             ], className="flex-grow-1 d-flex flex-column gap-2", style={'minHeight': 0, 'overflow': 'hidden'})
-        ], style={
+        ], id='place-similarity-body', style={
             'flex': '1 1 auto',
             'minHeight': 0,
             'display': 'flex',

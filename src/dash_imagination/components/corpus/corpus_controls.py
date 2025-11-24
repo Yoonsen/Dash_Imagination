@@ -22,7 +22,9 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                 'fa fa-book',
                 "Corpus View",
                 close_button_id='close-corpus',
-                close_button_title="Hide corpus controls"
+                close_button_title="Hide corpus controls",
+                minimize_button_id='minimize-corpus-controls',
+                minimize_button_title="Minimize corpus view"
             ),
             className="bg-primary-subtle text-dark",
             id='corpus-header'
@@ -147,7 +149,7 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
                 html.Div(id='corpus-browse-table', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto', 'fontSize': '0.8rem'}),
                 dcc.Store(id='corpus-table-filter', data={'column': None, 'value': None, 'direction': None})
             ], style={'flex': '1 1 auto', 'display': 'flex', 'flexDirection': 'column', 'minHeight': 0})
-        ], style={'flex': '1 1 auto', 'minHeight': 0, 'display': 'flex', 'flexDirection': 'column', 'gap': '0.75rem'}),
+        ], id='corpus-controls-body', style={'flex': '1 1 auto', 'minHeight': 0, 'display': 'flex', 'flexDirection': 'column', 'gap': '0.75rem'}),
         # Hidden resample-container div to suppress callback errors
         html.Div(id='resample-container', style={'display': 'none'})
     ], id='corpus-controls-container', className="position-absolute m-3 dialog-card", style={
@@ -175,7 +177,9 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
                 'fa fa-chart-bar',
                 "Visualization Controls",
                 close_button_id='close-visualization',
-                close_button_title="Hide visualization controls"
+                close_button_title="Hide visualization controls",
+                minimize_button_id='minimize-visualization-controls',
+                minimize_button_title="Minimize visualization controls"
             ),
             className="bg-info-subtle text-dark",
             id='visualization-header'
@@ -334,7 +338,7 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
             dcc.Download(id="download-map-file"),
             # Status message
             html.Div(id='download-status', className="mt-2")
-        ], style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'})
+        ], id='visualization-controls-body', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'})
     ], id='visualization-controls-container', className="position-absolute dialog-card", style={
         'width': f"{DEFAULT_CARD_SIZES['visualization-controls']['width']}px",
         'height': f"{DEFAULT_CARD_SIZES['visualization-controls']['height']}px",

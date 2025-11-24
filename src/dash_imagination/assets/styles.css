@@ -88,38 +88,55 @@ body, html {
     gap: 0.5rem;
 }
 
-.card-hide-btn {
+.card-window-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-right: 0.35rem;
+}
+
+.card-window-btn {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
     border: none;
-    background: rgba(15, 23, 42, 0.08);
-    color: #0f172a;
-    width: 28px;
-    height: 28px;
-    border-radius: 999px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: background-color 0.2s ease, color 0.2s ease;
     padding: 0;
+    position: relative;
+    transition: transform 0.15s ease;
 }
 
-.card-hide-btn:hover,
-.card-hide-btn:focus {
-    background: rgba(15, 23, 42, 0.16);
-    color: #0f172a;
+.card-window-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(15,23,42,0.15);
 }
 
-.card-hide-btn .fa,
-.card-hide-btn .fas,
-.card-hide-btn .far {
-    font-size: 0.75rem;
-}
-
-.card-hide-icon {
-    font-size: 0.85rem;
-    font-weight: 600;
+.card-window-btn .card-window-icon {
+    font-size: 0.55rem;
     line-height: 1;
-    margin-top: -1px;
+    color: rgba(15, 23, 42, 0.8);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    pointer-events: none;
+}
+
+.card-window-btn:hover .card-window-icon {
+    opacity: 0.9;
+}
+
+.card-window-btn:hover {
+    transform: translateY(-1px);
+}
+
+.card-window-btn.window-close {
+    background: #ff5f57;
+}
+
+.card-window-btn.window-minimize {
+    background: #ffbd2e;
 }
 
 .places-tab-panel {
@@ -434,21 +451,94 @@ body {
     z-index: 950;
 }
 
+.chip-launcher-group {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    position: relative;
+}
+
+.chip-launcher-group.open .chip-pill,
+.chip-launcher-group:hover .chip-pill {
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
+}
+
+.chip-options-menu {
+    display: none;
+    flex-direction: column;
+    gap: 0.25rem;
+    position: absolute;
+    top: 0;
+    left: 100%;
+    background: #fff;
+    padding: 0.35rem 0.75rem 0.35rem 0.6rem;
+    border-radius: 14px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.2);
+    min-width: 120px;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.chip-launcher-group.open .chip-options-menu,
+.chip-launcher-group:hover .chip-options-menu {
+    display: flex;
+    pointer-events: auto;
+}
+
+.chip-pill {
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 999px;
+    padding: 6px 16px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    background: #ffffff;
+    color: #0f172a;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.chip-pill:hover {
+    box-shadow: 0 4px 8px rgba(15, 23, 42, 0.2);
+    transform: translateY(-1px);
+}
+
+.chip-pill-label {
+    pointer-events: none;
+}
+
+.chip-pill-corpus {
+    border-color: #93c5fd;
+}
+
+.chip-pill-places {
+    border-color: #fcd34d;
+}
+
+.chip-pill-visualization {
+    border-color: #7dd3fc;
+}
+
+.chip-pill.chip-open {
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.35);
+}
+
 .card-chip {
     border: none;
-    border-radius: 12px;
-    width: 68px;
-    min-height: 60px;
+    border-radius: 16px;
+    width: 64px;
+    min-height: 52px;
     color: #0f172a;
     font-weight: 600;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     justify-content: center;
-    padding: 6px 8px;
+    padding: 6px 10px;
     cursor: pointer;
-    opacity: 0.55;
+    opacity: 1;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.15);
     transition: opacity 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
@@ -462,6 +552,10 @@ body {
 .card-chip.chip-open {
     opacity: 1;
     box-shadow: 0 6px 16px rgba(15, 23, 42, 0.25);
+}
+
+.chip-option {
+    width: 70px;
 }
 
 .card-chip-label {
@@ -482,10 +576,6 @@ body {
 
 .card-chip.chip-places {
     background: #fef3c7;
-}
-
-.card-chip.chip-summary {
-    background: #ffe4e6;
 }
 
 .card-chip.chip-visualization {
@@ -512,6 +602,24 @@ body {
         flex-wrap: wrap;
         width: calc(100% - 40px);
         justify-content: flex-start;
+    }
+
+    .chip-launcher-group {
+        flex: 1 1 calc(50% - 8px);
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.35rem;
+    }
+
+    .chip-options-menu {
+        position: static;
+        width: 100%;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 12px;
+        padding: 0.35rem;
+        margin-left: 0;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.15);
+        pointer-events: auto;
     }
 }
 

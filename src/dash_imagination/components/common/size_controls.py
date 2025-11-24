@@ -56,24 +56,39 @@ def card_title_bar(
     *,
     close_button_id=None,
     close_button_title=None,
-    close_icon_class="fa fa-times"
+    minimize_button_id=None,
+    minimize_button_title=None
 ):
     """
     Shared header layout for floating dialog cards.
     """
-    close_btn = None
+    window_controls = []
     if close_button_id:
-        close_btn = html.Button(
-            html.Span("×", className="card-hide-icon"),
-            id=close_button_id,
-            title=close_button_title or "Hide card",
-            className="card-hide-btn",
-            type="button"
+        window_controls.append(
+            html.Button(
+                html.Span("×", className="card-window-icon"),
+                id=close_button_id,
+                title=close_button_title or "Hide card",
+                className="card-window-btn window-close",
+                type="button"
+            )
+        )
+    if minimize_button_id:
+        window_controls.append(
+            html.Button(
+                html.Span("–", className="card-window-icon"),
+                id=minimize_button_id,
+                title=minimize_button_title or "Minimize card",
+                className="card-window-btn window-minimize",
+                type="button"
+            )
         )
 
     title_children = []
-    if close_btn:
-        title_children.append(close_btn)
+    if window_controls:
+        title_children.append(
+            html.Div(window_controls, className="card-window-controls")
+        )
     title_children.extend([
         html.I(className=f"{icon_class} card-title-icon"),
         html.H5(title, className="card-title-text mb-0")
