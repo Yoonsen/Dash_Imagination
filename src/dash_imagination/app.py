@@ -237,6 +237,144 @@ def _enforce_minimized_dimensions(style, window_state):
     return style
 
 
+SEARCH_RESULTS_BASE_STYLE = {
+    'position': 'absolute',
+    'top': '44px',
+    'left': 0,
+    'width': '320px',
+    'backgroundColor': '#ffffff',
+    'borderRadius': '12px',
+    'boxShadow': '0 12px 30px rgba(15, 23, 42, 0.2)',
+    'padding': '12px',
+    'maxHeight': '360px',
+    'overflowY': 'auto',
+    'zIndex': 1200,
+    'pointerEvents': 'auto',
+    'display': 'none'
+}
+
+
+def _search_results_style(visible: bool) -> dict:
+    style = SEARCH_RESULTS_BASE_STYLE.copy()
+    style['display'] = 'block' if visible else 'none'
+    return style
+
+
+def _fetch_place_overview(token: str) -> dict | None:
+    if not token:
+        return None
+    conn = get_db_connection()
+    try:
+        info_df = pd.read_sql_query(
+            """
+            SELECT 
+                p.token,
+                p.modern AS name,
+                p.latitude,
+                p.longitude,
+                COUNT(DISTINCT b.dhlabid) AS book_count,
+                COALESCE(SUM(b.book_count), 0) AS frequency
+            FROM places p
+            LEFT JOIN books b ON p.token = b.token
+            WHERE LOWER(p.token) = LOWER(?)
+            GROUP BY p.token, p.modern, p.latitude, p.longitude
+            """,
+            conn,
+            params=(token,)
+        )
+        if info_df.empty:
+            return None
+        info = info_df.iloc[0]
+        books_df = pd.read_sql_query(
+            """
+            SELECT 
+                c.title,
+                c.author,
+                c.year,
+                c.urn,
+                c.dhlabid,
+                b.book_count AS mentions
+            FROM books b
+            JOIN corpus c ON b.dhlabid = c.dhlabid
+            WHERE b.token = ?
+            ORDER BY b.book_count DESC, c.year DESC
+            LIMIT 20
+            """,
+            conn,
+            params=(token,)
+        )
+        return {
+            'token': info['token'],
+            'name': info.get('name'),
+            'latitude': info.get('latitude'),
+            'longitude': info.get('longitude'),
+            'book_count': int(info.get('book_count') or 0),
+            'frequency': int(info.get('frequency') or 0),
+            'books': books_df.to_dict('records')
+        }
+    finally:
+        conn.close()
+
+
+def _render_place_summary_from_search(place: dict) -> html.Div:
+    books = place.get('books', [])
+    header = html.Div([
+        html.H5(place.get('token'), style={'marginBottom': '4px'}),
+        html.P(
+            f"Modern name: {place.get('name')}" if place.get('name') else "Historisk navn",
+            style={'fontSize': '14px', 'color': '#666'} if place.get('name') else {'fontSize': '14px', 'color': '#94a3b8'}
+        ),
+        html.P(
+            f"Appears in {place.get('book_count', 0):,} books with {place.get('frequency', 0):,} total mentions",
+            style={'marginTop': '8px'}
+        )
+    ])
+    book_list = html.Div([
+        html.Div([
+            html.A(
+                f"{row.get('title')} ({row.get('year')})",
+                href=f"https://www.nb.no/items/{row.get('urn')}" if row.get('urn') else "#",
+                target="_blank",
+                style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
+            ),
+            html.Div([
+                html.Span(f"by {row.get('author')}", style={'color': '#666', 'fontSize': '13px'}),
+                html.Span(
+                    f" • {int(row.get('mentions', 0)):,} mentions",
+                    style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'}
+                )
+            ], style={'display': 'flex', 'justifyContent': 'space-between'})
+        ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
+        for row in books if row.get('title')
+    ]) if books else html.Div("No book details available", style={'color': '#475569'})
+
+    return html.Div([header, html.Hr(style={'margin': '10px 0'}), book_list])
+
+
+def _fetch_author_book_ids(author_name: str) -> list[int]:
+    if not author_name:
+        return []
+    conn = get_db_connection()
+    try:
+        pattern = f"%{author_name}%"
+        df = pd.read_sql_query(
+            """
+            SELECT DISTINCT dhlabid
+            FROM corpus
+            WHERE author IS NOT NULL
+            AND TRIM(author) != ''
+            AND LOWER(author) LIKE LOWER(?)
+            """,
+            conn,
+            params=(pattern,)
+        )
+        if df.empty:
+            return []
+        return df['dhlabid'].dropna().astype(int).tolist()
+    finally:
+        conn.close()
+
+
 def build_places_tab(summary_id, table_id, download_btn_id, download_id, apply_btn_id,
                      action_prefix=None, include_resample=False,
                      activate_btn_id=None, source_key=None, activate_title=None,
@@ -1015,7 +1153,7 @@ app.layout = html.Div([
                     dcc.Input(
                         id="global-place-search",
                         type="text",
-                        placeholder="Search places...",
+                        placeholder="Søk i ImagiNation...",
                         style={
                             "width": "100%",
                             "height": "100%",
@@ -1037,13 +1175,16 @@ app.layout = html.Div([
                     "boxShadow": "0 2px 6px rgba(0,0,0,0.15)",
                     "transition": "box-shadow 0.3s ease",
                     "pointerEvents": "auto",
-                    "width": "240px",
-                    "flexShrink": "0"  # Prevent search field from shrinking
-                })
+                    "width": "320px",
+                    "flexShrink": "0"
+                }),
+                html.Div(id='global-search-results', style=_search_results_style(False))
             ], style={
                 "display": "flex",
-                "alignItems": "center",
-                "flexShrink": "0"  # Prevent container from shrinking
+                "flexDirection": "column",
+                "alignItems": "stretch",
+                "flexShrink": "0",
+                "position": "relative"
             }),
 
             # Buttons container
@@ -3550,143 +3691,316 @@ def disable_interval_on_clear(status):
 # Add new callback for data loading
 @app.callback(
     Output('filtered-data', 'data'),
-    [Input('current-filters', 'data'),
-     Input('current-dhlabids-store', 'data')],
+    Input('current-dhlabids-store', 'data'),
+    State('current-filters', 'data'),
     prevent_initial_call=True
 )
-def load_filtered_data(filters, books):
-    if not filters or not books:
-        return pd.DataFrame().to_json(date_format='iso', orient='split')
-    
+def load_filtered_data(books, filters):
+    books = books or []
+    filters = filters or {}
+    if not books:
+        return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']).to_json(date_format='iso', orient='split')
     try:
-        # Get places for the map
-        places = filters.get('selected_tokens') if filters else None
+        places = filters.get('selected_tokens')
         places_result = get_places_for_map(filters, books=books, selected_tokens=places)
-        if isinstance(places_result, tuple):
-            places_df = places_result[0]
-        else:
-            places_df = places_result
-        
-        # Debug: Log the shape and content of places_df
-        print(f"DEBUG: places_df shape: {places_df.shape}")
-        print(f"DEBUG: places_df head: {places_df.head()}")
-        
+        places_df = places_result[0] if isinstance(places_result, tuple) else places_result
         return places_df.to_json(date_format='iso', orient='split')
     except Exception as e:
         print(f"Error in load_filtered_data: {e}")
         return dash.no_update
 
-# Add new callback for global place search
+# Global search surface -------------------------------------------------------
+
 @app.callback(
-    [Output('main-map', 'figure', allow_duplicate=True),
-     Output('place-summary-container', 'style', allow_duplicate=True),
-     Output('place-summary', 'children', allow_duplicate=True)],
-    [Input('global-place-search', 'value')],
-    [State('main-map', 'figure')],
+    Output('global-search-results', 'children'),
+    Output('global-search-results', 'style'),
+    Input('global-place-search', 'value'),
     prevent_initial_call=True
 )
-def handle_global_search(search_term, current_figure):
-    if not search_term or len(search_term) < 2:
-        raise PreventUpdate
-    
+def update_global_search_results(search_term):
+    term = (search_term or '').strip()
+    if len(term) < 2:
+        return [], _search_results_style(False)
+
     try:
         conn = get_db_connection()
-        try:
-            # Search in both historical and modern names
-            query = """
-            SELECT 
-                p.token,
-                p.modern as name,
-                p.latitude,
-                p.longitude,
-                COUNT(DISTINCT b.dhlabid) as book_count,
-                COUNT(b.dhlabid) as frequency
-            FROM places p
-            JOIN books b ON p.token = b.token
-            WHERE (LOWER(p.token) LIKE LOWER(?) OR LOWER(p.modern) LIKE LOWER(?))
-            AND p.latitude IS NOT NULL 
-            AND p.longitude IS NOT NULL
-            AND p.latitude != '0'
-            AND p.longitude != '0'
-            GROUP BY p.token, p.modern, p.latitude, p.longitude
-            ORDER BY frequency DESC
-            LIMIT 1
+        search_pattern = f"%{term}%"
+        places_df = pd.read_sql_query(
             """
-            
-            # Add wildcards for partial matching
-            search_pattern = f"%{search_term}%"
-            places_df = pd.read_sql_query(query, conn, params=(search_pattern, search_pattern))
-            
-            if places_df.empty:
-                return current_figure, dash.no_update, dash.no_update
-            
-            # Get the first matching place
-            place = places_df.iloc[0]
-            
-            # Create hover text
-            hover_text = f"{place['token']} ({place['name']})<br>Mentions: {int(place['frequency'])}<br>Books: {int(place['book_count'])}"
-            
-            # Update the map to center on the found place
-            fig = go.Figure(current_figure)
-            fig.update_layout(
-                map=dict(
-                    center=dict(lat=float(place['latitude']), lon=float(place['longitude'])),
-                    zoom=10
-                )
-            )
-            
-            # Get book details for the place
-            books_df, total_books = get_place_details(place['token'])
-            
-            # Create summary content
-            summary = html.Div([
-                html.Div([
-                    html.H5(place['token'], style={'marginBottom': '5px'}),
-                    html.P(f"Modern name: {place['name']}", style={'fontSize': '14px', 'color': '#666'}) if place['name'] else None,
-                    html.P(f"Appears in {len(books_df):,} books with {int(place['frequency']):,} total mentions", style={'marginTop': '5px'}),
-                    html.Hr(style={'margin': '10px 0'})
-                ]),
-                html.Div([
-                    html.H6(f"Books mentioning this place ({len(books_df):,} total):", style={'marginBottom': '10px'}),
-                    html.Div([
-                        html.Div([
-                            html.A(
-                                f"{row['title']} ({row['year']})",
-                                href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{place['token']}\"",
-                                target="_blank",
-                                style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
-                            ),
-                            html.Div([
-                                html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
-                                html.Span(f" • {int(row.get('mention_count', 1)):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
-                            ], style={'display': 'flex', 'justifyContent': 'space-between'})
-                        ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
-                        for i, row in books_df.iterrows() if pd.notna(row['title'])
-                    ]) if not books_df.empty else html.Div("No book details available")
-                ])
-            ])
-            
-            # Show the summary container
-            summary_style = {
-                'position': 'absolute',
-                'bottom': '80px',
-                'left': '20px',
-                'width': '350px',
-                'maxHeight': '500px',
-                'overflowY': 'auto',
-                'zIndex': 800,
-                'display': 'block',
-                'cursor': 'auto'
-            }
-            
-            return fig, summary_style, summary
-            
-        finally:
-            conn.close()
-            
+            SELECT token, modern AS name
+            FROM places
+            WHERE token LIKE ? OR modern LIKE ?
+            ORDER BY CASE 
+                WHEN LOWER(token) = LOWER(?) THEN 0
+                WHEN LOWER(modern) = LOWER(?) THEN 1
+                ELSE 2
+            END,
+            modern
+            LIMIT 5
+            """,
+            conn,
+            params=(search_pattern, search_pattern, term, term)
+        )
+        books_df = pd.read_sql_query(
+            """
+            SELECT dhlabid, title, author, year, urn
+            FROM corpus
+            WHERE title IS NOT NULL
+            AND LOWER(title) LIKE LOWER(?)
+            ORDER BY CASE WHEN LOWER(title) = LOWER(?) THEN 0 ELSE 1 END,
+                     year DESC
+            LIMIT 5
+            """,
+            conn,
+            params=(search_pattern, term)
+        )
+        authors_df = pd.read_sql_query(
+            """
+            SELECT author, COUNT(DISTINCT dhlabid) AS book_count
+            FROM corpus
+            WHERE author IS NOT NULL
+            AND TRIM(author) != ''
+            AND LOWER(author) LIKE LOWER(?)
+            GROUP BY author
+            ORDER BY CASE WHEN LOWER(author) = LOWER(?) THEN 0 ELSE 1 END,
+                     author
+            LIMIT 5
+            """,
+            conn,
+            params=(search_pattern, term)
+        )
     except Exception as e:
-        print(f"Error in handle_global_search: {e}")
-        return current_figure, dash.no_update, dash.no_update
+        print(f"Error loading global search results: {e}")
+        return dash.no_update, _search_results_style(False)
+    finally:
+        conn.close()
+
+    sections = []
+
+    def section(title, entries):
+        return html.Div([
+            html.Div(title, style={
+                'fontSize': '11px',
+                'letterSpacing': '0.08em',
+                'textTransform': 'uppercase',
+                'color': '#94a3b8',
+                'marginBottom': '4px'
+            }),
+            html.Div(entries, style={'display': 'flex', 'flexDirection': 'column', 'gap': '6px'})
+        ], style={'marginBottom': '12px'})
+
+    if not places_df.empty:
+        items = []
+        for _, place in places_df.iterrows():
+            label = place.get('name') or place.get('token')
+            token = place.get('token')
+            items.append(
+                html.Div([
+                    html.Div([
+                        html.Span(label, style={'fontWeight': 600, 'color': '#0f172a'}),
+                        html.Span(token, style={'fontSize': '12px', 'color': '#94a3b8'})
+                    ], style={'display': 'flex', 'flexDirection': 'column', 'gap': '2px'}),
+                    html.Button(
+                        "Vis på kartet",
+                        id={'type': 'search-place-action', 'token': token},
+                        n_clicks=0,
+                        style={
+                            'border': 'none',
+                            'backgroundColor': '#e2e8f0',
+                            'color': '#0f172a',
+                            'fontSize': '12px',
+                            'padding': '4px 10px',
+                            'borderRadius': '999px',
+                            'cursor': 'pointer'
+                        }
+                    )
+                ], style={
+                    'display': 'flex',
+                    'justifyContent': 'space-between',
+                    'alignItems': 'center',
+                    'padding': '8px 10px',
+                    'backgroundColor': '#f8fafc',
+                    'borderRadius': '8px'
+                })
+            )
+        sections.append(section("Steder", items))
+
+    if not books_df.empty:
+        items = []
+        for _, book in books_df.iterrows():
+            title = book.get('title')
+            year = book.get('year')
+            author = book.get('author')
+            dhlabid = int(book.get('dhlabid'))
+            urn = book.get('urn')
+            items.append(
+                html.Div([
+                    html.Div([
+                        html.Span(f"{title} ({year})" if year else title, style={'fontWeight': 600}),
+                        html.Span(author, style={'fontSize': '12px', 'color': '#94a3b8'})
+                    ], style={'display': 'flex', 'flexDirection': 'column', 'gap': '2px'}),
+                    html.Div([
+                        html.A(
+                            "Åpne NB",
+                            href=f"https://www.nb.no/items/{urn}" if urn else "#",
+                            target="_blank",
+                            style={'fontSize': '12px', 'color': '#0284c7', 'textDecoration': 'none'}
+                        ),
+                        html.Button(
+                            "Legg til korpus",
+                            id={'type': 'search-book-action', 'dhlabid': dhlabid},
+                            n_clicks=0,
+                            style={
+                                'border': 'none',
+                                'backgroundColor': '#c7d2fe',
+                                'color': '#1e1b4b',
+                                'fontSize': '12px',
+                                'padding': '4px 10px',
+                                'borderRadius': '999px',
+                                'cursor': 'pointer',
+                                'marginLeft': '8px'
+                            }
+                        )
+                    ], style={'display': 'flex', 'alignItems': 'center'})
+                ], style={
+                    'display': 'flex',
+                    'justifyContent': 'space-between',
+                    'alignItems': 'center',
+                    'padding': '8px 10px',
+                    'backgroundColor': '#f8fafc',
+                    'borderRadius': '8px'
+                })
+            )
+        sections.append(section("Bøker", items))
+
+    if not authors_df.empty:
+        items = []
+        for _, author in authors_df.iterrows():
+            name = author.get('author')
+            count = int(author.get('book_count') or 0)
+            items.append(
+                html.Div([
+                    html.Div([
+                        html.Span(name, style={'fontWeight': 600}),
+                        html.Span(f"{count} bøker", style={'fontSize': '12px', 'color': '#94a3b8'})
+                    ], style={'display': 'flex', 'flexDirection': 'column', 'gap': '2px'}),
+                    html.Button(
+                        "Legg bøker til korpus",
+                        id={'type': 'search-author-action', 'author': name},
+                        n_clicks=0,
+                        style={
+                            'border': 'none',
+                            'backgroundColor': '#fee2e2',
+                            'color': '#7f1d1d',
+                            'fontSize': '12px',
+                            'padding': '4px 10px',
+                            'borderRadius': '999px',
+                            'cursor': 'pointer'
+                        }
+                    )
+                ], style={
+                    'display': 'flex',
+                    'justifyContent': 'space-between',
+                    'alignItems': 'center',
+                    'padding': '8px 10px',
+                    'backgroundColor': '#f8fafc',
+                    'borderRadius': '8px'
+                })
+            )
+        sections.append(section("Forfattere", items))
+
+    if not sections:
+        sections = [html.Div(f"Ingen treff for «{term}»", style={'fontSize': '13px', 'color': '#64748b'})]
+
+    return sections, _search_results_style(True)
+
+
+@app.callback(
+    Output('main-map', 'figure', allow_duplicate=True),
+    Output('place-summary-container', 'style', allow_duplicate=True),
+    Output('place-summary', 'children', allow_duplicate=True),
+    Output('global-search-results', 'style', allow_duplicate=True),
+    Input({'type': 'search-place-action', 'token': ALL}, 'n_clicks'),
+    State('main-map', 'figure'),
+    State('place-summary-container', 'style'),
+    prevent_initial_call=True
+)
+def show_place_from_search(_, current_figure, summary_style):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger = ctx.triggered[0]
+    if not trigger['value']:
+        raise PreventUpdate
+    trigger_id = json.loads(trigger['prop_id'].split('.')[0])
+    token = trigger_id.get('token')
+    place = _fetch_place_overview(token)
+    if not place:
+        raise PreventUpdate
+
+    fig = go.Figure(current_figure or go.Figure())
+    try:
+        lat = float(place.get('latitude'))
+        lon = float(place.get('longitude'))
+        fig.update_layout(map=dict(center=dict(lat=lat, lon=lon), zoom=8))
+    except (TypeError, ValueError):
+        pass
+
+    new_summary_style = dict(summary_style or {})
+    new_summary_style['display'] = 'flex'
+    new_summary_style.pop('transform', None)
+
+    return (
+        fig,
+        new_summary_style,
+        _render_place_summary_from_search(place),
+        _search_results_style(False)
+    )
+
+
+@app.callback(
+    Output('current-dhlabids-store', 'data', allow_duplicate=True),
+    Output('global-search-results', 'style', allow_duplicate=True),
+    Input({'type': 'search-book-action', 'dhlabid': ALL}, 'n_clicks'),
+    State('current-dhlabids-store', 'data'),
+    prevent_initial_call=True
+)
+def add_book_from_search(_, current_books):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger = ctx.triggered[0]
+    if not trigger['value']:
+        raise PreventUpdate
+    trigger_id = json.loads(trigger['prop_id'].split('.')[0])
+    dhlabid = int(trigger_id.get('dhlabid'))
+    books = set(current_books or [])
+    books.add(dhlabid)
+    return sorted(books), _search_results_style(False)
+
+
+@app.callback(
+    Output('current-dhlabids-store', 'data', allow_duplicate=True),
+    Output('global-search-results', 'style', allow_duplicate=True),
+    Input({'type': 'search-author-action', 'author': ALL}, 'n_clicks'),
+    State('current-dhlabids-store', 'data'),
+    prevent_initial_call=True
+)
+def add_author_books_from_search(_, current_books):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger = ctx.triggered[0]
+    if not trigger['value']:
+        raise PreventUpdate
+    trigger_id = json.loads(trigger['prop_id'].split('.')[0])
+    author = trigger_id.get('author')
+    dhlabids = _fetch_author_book_ids(author)
+    if not dhlabids:
+        raise PreventUpdate
+    books = set(current_books or [])
+    books.update(dhlabids)
+    return sorted(books), _search_results_style(False)
 
 # Add a clientside callback for instant download status feedback
 app.clientside_callback(
