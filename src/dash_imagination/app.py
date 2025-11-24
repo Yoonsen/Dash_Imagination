@@ -3730,6 +3730,62 @@ def load_filtered_data(books, filters):
 # Global search surface -------------------------------------------------------
 
 @app.callback(
+    Output('global-search-results', 'style', allow_duplicate=True),
+    Input('global-place-search', 'n_blur'),
+    Input('global-place-search', 'value'),
+    State('global-search-results', 'style'),
+    prevent_initial_call=True
+)
+def manage_search_results_visibility(n_blur, search_value, current_style):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # If blurred, hide
+    if trigger_id == 'global-place-search' and 'n_blur' in ctx.triggered[0]['prop_id']:
+        if not n_blur:
+            raise PreventUpdate
+        style = dict(current_style or _search_results_style(False))
+        style['display'] = 'none'
+        return style
+
+    # If value changed (and is long enough), show
+    if trigger_id == 'global-place-search' and 'value' in ctx.triggered[0]['prop_id']:
+        term = (search_value or '').strip()
+        if len(term) >= 2:
+            style = dict(current_style or _search_results_style(False))
+            style['display'] = 'block'
+            return style
+        else:
+             # Hide if search term is too short
+            style = dict(current_style or _search_results_style(False))
+            style['display'] = 'none'
+            return style
+
+    raise PreventUpdate
+
+app.clientside_callback(
+    """
+    function(id) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('mousedown', function(e) {
+                // Prevent default mousedown behavior to avoid losing focus from input
+                if (e.target.tagName !== 'INPUT') {
+                    e.preventDefault();
+                }
+            });
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output('global-search-results', 'title'),
+    Input('global-search-results', 'id')
+)
+
+@app.callback(
     Output('global-search-results', 'children'),
     Output('global-search-results', 'style'),
     Input('global-place-search', 'value'),
