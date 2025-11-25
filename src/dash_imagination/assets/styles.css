@@ -39,20 +39,103 @@ body, html {
 
 .size-control-wrapper {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
+    justify-content: flex-end;
+    min-width: 32px;
+    padding: 4px 6px;
+    margin-right: -4px;
+}
+
+.size-resize-circle {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid #cbd5f5;
+    background-color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+.size-resize-circle:hover {
+    background-color: #eef2ff;
+    border-color: #94a3b8;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+}
+
+.size-circle-indicator {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: #94a3b8;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.size-resize-circle:hover .size-circle-indicator {
+    transform: scale(1.5);
+    background-color: #1d4ed8;
+}
+
+.size-circle-hotspot {
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: none;
+    color: #ffffff;
     font-size: 0.75rem;
-    gap: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    box-shadow: 0 3px 8px rgba(37, 99, 235, 0.3);
 }
 
-.size-control-wrapper .size-btn {
-    padding: 0 6px;
+.size-resize-circle:hover .size-circle-hotspot,
+.size-control-wrapper:hover .size-circle-hotspot,
+.size-circle-hotspot:hover,
+.size-circle-hotspot:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
 }
 
-.size-label {
-    font-weight: 600;
-    color: #64748b;
-    font-size: 0.7rem;
+.size-circle-hotspot--up {
+    top: -6px;
+    left: 50%;
+    transform: translate(-50%, -70%);
+}
+
+.size-circle-hotspot--right {
+    top: 50%;
+    left: 100%;
+    transform: translate(10%, -50%);
+}
+
+.size-circle-hotspot--down {
+    top: 100%;
+    left: 50%;
+    transform: translate(-50%, 10%);
+}
+
+.size-circle-hotspot--left {
+    top: 50%;
+    left: 0%;
+    transform: translate(-120%, -50%);
+}
+
+.size-circle-hotspot--plus {
+    background-color: #2563eb;
+    box-shadow: 0 3px 8px rgba(37, 99, 235, 0.3);
+}
+
+.size-circle-hotspot--minus {
+    background-color: #dc2626;
+    box-shadow: 0 3px 8px rgba(220, 38, 38, 0.35);
 }
 
 .card-title-bar {

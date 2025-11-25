@@ -29,26 +29,48 @@ DEFAULT_CARD_SIZES['similarity-card']['height'] += 160  # Two H+ clicks
 
 
 def size_control_buttons(component_id: str):
-    return html.Div([
-        html.Div([
-            html.Span("W", className="size-label me-1"),
-            dbc.ButtonGroup([
-                dbc.Button("−", id={'type': 'size-btn', 'card': component_id, 'axis': 'width', 'delta': -80},
-                           size="sm", color="light", className="size-btn"),
-                dbc.Button("+", id={'type': 'size-btn', 'card': component_id, 'axis': 'width', 'delta': 80},
-                           size="sm", color="light", className="size-btn")
-            ], size="sm")
-        ], className="d-flex align-items-center gap-1"),
-        html.Div([
-            html.Span("H", className="size-label me-1"),
-            dbc.ButtonGroup([
-                dbc.Button("−", id={'type': 'size-btn', 'card': component_id, 'axis': 'height', 'delta': -80},
-                           size="sm", color="light", className="size-btn"),
-                dbc.Button("+", id={'type': 'size-btn', 'card': component_id, 'axis': 'height', 'delta': 80},
-                           size="sm", color="light", className="size-btn")
-            ], size="sm")
-        ], className="d-flex align-items-center gap-1 mt-1")
-    ], className="size-control-wrapper")
+    return html.Div(
+        html.Div(
+            [
+                html.Span(className="size-circle-indicator"),
+                html.Button(
+                    "+",
+                    id={'type': 'size-btn', 'card': component_id, 'axis': 'height', 'delta': 80},
+                    className="size-circle-hotspot size-circle-hotspot--up size-circle-hotspot--plus",
+                    title="Øk høyde",
+                    type="button",
+                    tabIndex=-1
+                ),
+                html.Button(
+                    "+",
+                    id={'type': 'size-btn', 'card': component_id, 'axis': 'width', 'delta': 80},
+                    className="size-circle-hotspot size-circle-hotspot--right size-circle-hotspot--plus",
+                    title="Øk bredde",
+                    type="button",
+                    tabIndex=-1
+                ),
+                html.Button(
+                    "−",
+                    id={'type': 'size-btn', 'card': component_id, 'axis': 'height', 'delta': -80},
+                    className="size-circle-hotspot size-circle-hotspot--down size-circle-hotspot--minus",
+                    title="Minsk høyde",
+                    type="button",
+                    tabIndex=-1
+                ),
+                html.Button(
+                    "−",
+                    id={'type': 'size-btn', 'card': component_id, 'axis': 'width', 'delta': -80},
+                    className="size-circle-hotspot size-circle-hotspot--left size-circle-hotspot--minus",
+                    title="Minsk bredde",
+                    type="button",
+                    tabIndex=-1
+                )
+            ],
+            className="size-resize-circle",
+            title="Justér kortstørrelse"
+        ),
+        className="size-control-wrapper"
+    )
 
 
 def card_title_bar(

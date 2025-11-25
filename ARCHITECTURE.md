@@ -91,6 +91,7 @@ These stores are read and written by Dash callbacks, ensuring consistent state a
 - Shared header via `card_title_bar` renders macOS-like buttons:
   - **Red ×** closes the card (tied to existing toggle callbacks).
   - **Yellow –** minimizes to title-only, preserving position/size in `dialog-size-store`.
+- Størrelsen styres av en egen sirkulær kontroll: én disk i tittelfeltet viser fire hotspots (blå plusser oppe/høyre for å øke høyde/bredde, røde minus venstre/ned for å redusere). Hotspots trigges via de samme `size-btn`-callbackene som lagrer dimensjoner per kort, men UI-et er mer kompakt enn de tidligere W±/H±-knappene.
 - Each dialog stores state in `*-window-state` so minimize/restore survives size changes.
 - Dragging is handled client-side (`assets/drag.js`) with a single interaction pattern across cards.
 

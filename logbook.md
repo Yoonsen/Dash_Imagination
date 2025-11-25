@@ -60,6 +60,7 @@ This logbook tracks the development progress, decisions, and challenges of the I
   - Refaktorert nye Author-kort til å bruke `dbc.Card` for konsistent styling (farger, padding, skygger).
   - Oppdatert `drag.js` for å støtte de nye kortene.
   - Fjernet midlertidig minimeringsknappen på Place Details siden kortet åpnes raskt via kart/omnibox; notert for fremtidig reimplementasjon.
+  - Erstattet W±/H±-knappene i tittelbaren med en egenutviklet sirkulær resize-kontroll: én knapp viser fire hotspots (blå plusser for å øke bredde/høyde, røde minus for å redusere) ved hover/fokus, med samme backend-logikk for `size-btn`. Gir et ryddigere, mer “mac”-aktig uttrykk.
 
 **Notes**:
 - Bildeoppslag er basert på tekstsøk, så presisjonen avhenger av metadata hos NB. For kjente steder og forfattere fungerer det utmerket.
