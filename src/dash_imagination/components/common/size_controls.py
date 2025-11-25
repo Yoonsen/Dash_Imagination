@@ -14,7 +14,9 @@ CARD_DEFAULT_PRESET = {
     'visualization-controls': 'standard',
     'corpus-builder': 'standard',
     'collocation-card': 'standard',
-    'similarity-card': 'standard'
+    'similarity-card': 'standard',
+    'author-list': 'standard',
+    'author-info': 'standard'
 }
 
 DEFAULT_CARD_SIZES = {key: SIZE_PRESETS[value].copy() for key, value in CARD_DEFAULT_PRESET.items()}

@@ -178,12 +178,9 @@ MINIMIZE_BODY_PROPS = [
 ]
 
 MINIMIZED_BODY_VALUES = {
-    'height': '0px',
-    'maxHeight': '0px',
     'opacity': '0',
     'pointerEvents': 'none',
     'overflow': 'hidden',
-    'flex': '0 0 auto',
     'marginTop': '0',
     'marginBottom': '0',
     'paddingTop': '0',
@@ -200,7 +197,10 @@ def _toggle_window_minimize(card_key, window_state, container_style, body_style)
     body = (body_style or {}).copy()
 
     is_minimized = state.get('minimized', False)
-    default_height = f"{DEFAULT_CARD_SIZES.get(card_key, {}).get('height', 320)}px"
+    # Ensure default_height is a valid string in pixels
+    default_size = DEFAULT_CARD_SIZES.get(card_key, {})
+    default_h_val = default_size.get('height', 320)
+    default_height = f"{default_h_val}px"
 
     if is_minimized:
         restored_height = state.get('stored_height') or default_height
@@ -227,6 +227,11 @@ def _toggle_window_minimize(card_key, window_state, container_style, body_style)
         # Ensure display is not none if we are restoring
         if body.get('display') == 'none':
             body['display'] = 'flex'
+        
+        # Explicitly ensure flex-direction is correct for place summary
+        if card_key == 'place-summary':
+            body['flexDirection'] = 'column'
+            body['flex'] = '1 1 auto'
 
         return {'minimized': False}, container, body
 
@@ -237,12 +242,19 @@ def _toggle_window_minimize(card_key, window_state, container_style, body_style)
         'stored_body_styles': {prop: body.get(prop) for prop in MINIMIZE_BODY_PROPS}
     }
     container['height'] = 'auto'
-    container['minHeight'] = '0'
+    container['minHeight'] = '0px'
     
     # Apply minimized styles
     for prop, value in MINIMIZED_BODY_VALUES.items():
         body[prop] = value
-        
+    
+    # Plate summary needs explicit hidden display to avoid stretched blank area
+    if card_key == 'place-summary':
+        body['display'] = 'none'
+        body['minHeight'] = '0px'
+        body['maxHeight'] = '0px'
+        body['height'] = '0px'
+    
     return new_state, container, body
 
 
@@ -250,7 +262,7 @@ def _enforce_minimized_dimensions(style, window_state):
     minimized = (window_state or {}).get('minimized')
     if minimized:
         style['height'] = 'auto'
-        style['minHeight'] = '0'
+        style['minHeight'] = '0px'
     return style
 
 
@@ -724,14 +736,6 @@ CHIP_CHILD_IDS = [
 CHIP_LAUNCHER_IDS = [f"chip-launcher-{group['group_id']}" for group in CARD_CHIP_GROUPS]
 
 WINDOW_CONTROL_CONFIG = [
-    {
-        'card_key': 'place-summary',
-        'store_id': 'place-summary-window-state',
-        'container_id': 'place-summary-container',
-        'body_id': 'place-summary-body',
-        'minimize_id': 'minimize-place-summary',
-        'close_id': 'close-summary'
-    },
     {
         'card_key': 'places',
         'store_id': 'place-names-window-state',
@@ -1659,9 +1663,7 @@ app.layout = html.Div([
                 'fa fa-grip-horizontal',
                 "Place Details",
                 close_button_id='close-summary',
-                close_button_title="Hide place details",
-                minimize_button_id='minimize-place-summary',
-                minimize_button_title="Minimize place details"
+                close_button_title="Hide place details"
             ),
             className="bg-danger-subtle text-dark",
             id='summary-header'
@@ -1678,7 +1680,7 @@ app.layout = html.Div([
             'display': 'flex',
             'flexDirection': 'column'
         })
-    ], id='place-summary-container', className="position-absolute dialog-card", style={
+    ], id='place-summary-container', className="position-absolute dialog-card place-summary-card", style={
         'width': f"{DEFAULT_CARD_SIZES['place-summary']['width']}px",
         'height': f"{DEFAULT_CARD_SIZES['place-summary']['height']}px",
         'minWidth': '300px',
@@ -3580,32 +3582,31 @@ def update_place_summary(click_data, selected_place, current_style, current_book
                     book_count = int(books_df.iloc[0]['total_books'])
                 else:
                     book_count = len(books_df)
-            summary = html.Div([
-                html.Div([
-                    html.H5(token, style={'marginBottom': '5px'}),
-                    html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
-                    html.P(f"Appears in {book_count:,} books with {frequency:,} total mentions", style={'marginTop': '5px'}),
-                    html.Hr(style={'margin': '10px 0'})
-                ]),
-                html.Div([
-                    html.H6(f"Books mentioning this place (showing {len(books_df):,} of {book_count:,}):", style={'marginBottom': '10px'}),
-                    html.Div([
-                        html.Div([
-                            html.A(
-                                f"{row['title']} ({row['year']})",
-                                href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{token}\"",
-                                target="_blank",
-                                style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
-                            ),
-                            html.Div([
-                                html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
-                                html.Span(f" • {int(row.get('mention_count', 1)):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
-                            ], style={'display': 'flex', 'justifyContent': 'space-between'})
-                        ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
-                        for i, row in books_df.iterrows() if pd.notna(row['title'])
-                    ]) if not books_df.empty else html.Div("No book details available")
-                ])
-            ])
+
+            # Convert books_df to list of dicts for unified rendering
+            books_list = []
+            if not books_df.empty:
+                for _, row in books_df.iterrows():
+                    if pd.notna(row['title']):
+                        books_list.append({
+                            'title': row['title'],
+                            'year': row['year'],
+                            'urn': row['urn'],
+                            'author': row['author'],
+                            'mentions': int(row.get('mention_count', 1))
+                        })
+
+            # Construct place dict
+            place_data = {
+                'token': token,
+                'name': modern_part if modern_part else None,
+                'book_count': book_count,
+                'frequency': frequency,
+                'books': books_list
+            }
+
+            summary = _render_place_summary_from_search(place_data)
+            
             new_style = dict(current_style)
             new_style['display'] = 'flex'
             return new_style, summary
@@ -3637,32 +3638,31 @@ def update_place_summary(click_data, selected_place, current_style, current_book
                     book_count = int(books_df.iloc[0]['total_books'])
                 else:
                     book_count = len(books_df)
-            summary = html.Div([
-                html.Div([
-                    html.H5(token, style={'marginBottom': '5px'}),
-                    html.P(f"Modern name: {modern_part}", style={'fontSize': '14px', 'color': '#666'}) if modern_part else None,
-                    html.P(f"Appears in {book_count:,} books with {frequency:,} total mentions", style={'marginTop': '5px'}),
-                    html.Hr(style={'margin': '10px 0'})
-                ]),
-                html.Div([
-                    html.H6(f"Books mentioning this place (showing {len(books_df):,} of {book_count:,}):", style={'marginBottom': '10px'}),
-                    html.Div([
-                        html.Div([
-                            html.A(
-                                f"{row['title']} ({row['year']})",
-                                href=f"https://www.nb.no/items/{row['urn']}?searchText=\"{token}\"",
-                                target="_blank",
-                                style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
-                            ),
-                            html.Div([
-                                html.Span(f"by {row['author']}", style={'color': '#666', 'fontSize': '13px'}),
-                                html.Span(f" • {int(row.get('mention_count', 1)):,} mentions", style={'color': '#666', 'fontSize': '13px', 'marginLeft': '10px'})
-                            ], style={'display': 'flex', 'justifyContent': 'space-between'})
-                        ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
-                        for i, row in books_df.iterrows() if pd.notna(row['title'])
-                    ]) if not books_df.empty else html.Div("No book details available")
-                ])
-            ])
+
+            # Convert books_df to list of dicts for unified rendering
+            books_list = []
+            if not books_df.empty:
+                for _, row in books_df.iterrows():
+                    if pd.notna(row['title']):
+                        books_list.append({
+                            'title': row['title'],
+                            'year': row['year'],
+                            'urn': row['urn'],
+                            'author': row['author'],
+                            'mentions': int(row.get('mention_count', 1))
+                        })
+
+            # Construct place dict
+            place_data = {
+                'token': token,
+                'name': modern_part if modern_part else None,
+                'book_count': book_count,
+                'frequency': frequency,
+                'books': books_list
+            }
+
+            summary = _render_place_summary_from_search(place_data)
+
             new_style = dict(current_style)
             new_style['display'] = 'flex'
             return new_style, summary

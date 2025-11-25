@@ -299,61 +299,115 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                 ], label="Content", tab_id="content"),
                 ], id="corpus-builder-tabs", active_tab="metadata", className="flex-grow-1")
             , className="flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'})
-        ], id='corpus-builder-body', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'}),
+        ], id='corpus-builder-body', style={
+            'flex': '1 1 auto',
+            'minHeight': 0,
+            'display': 'flex',
+            'flexDirection': 'column',
+            'overflow': 'hidden'
+        })
     ], id="corpus-builder-card", className="shadow position-absolute m-3 dialog-card", style={
         "width": f"{DEFAULT_CARD_SIZES['corpus-builder']['width']}px",
         "height": f"{DEFAULT_CARD_SIZES['corpus-builder']['height']}px",
         "zIndex": 800,
         "display": "none",
         "top": "60px",
-        "left": "620px"
+        "left": "620px",
+        "flexDirection": "column"
     })
 
 @callback(
-    [Output("corpus-builder-card", "style"),
-     Output("corpus-controls-container", "style", allow_duplicate=True)],
+    Output("corpus-builder-card", "style"),
+    Output("corpus-builder-window-state", "data", allow_duplicate=True),
+    Output("corpus-builder-body", "style", allow_duplicate=True),
+    Output("corpus-controls-container", "style", allow_duplicate=True),
     [Input("open-corpus-builder", "n_clicks"),
      Input("close-corpus-builder", "n_clicks"),
      Input("card-chip-builder", "n_clicks")],
     [State("corpus-builder-card", "style"),
+     State("corpus-builder-window-state", "data"),
+     State("corpus-builder-body", "style"),
      State("corpus-controls-container", "style")],
     prevent_initial_call=True
 )
-def toggle_card_visibility(n1, n2, chip_clicks, builder_style, controls_style):
+def toggle_card_visibility(n1, n2, chip_clicks, builder_style, window_state, body_style, controls_style):
     """Toggle the visibility of the corpus builder card only."""
     import dash
-    from dash import no_update
-    import dash_bootstrap_components as dbc
-    import flask
-    import os
-    import sys
-    import math
-    import json
     from dash import ctx
+
     if not ctx.triggered:
-        return dash.no_update, dash.no_update
-    
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
     button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    
-    # Initialize styles if they're None
-    builder_style = builder_style or {}
+
+    builder_style = (builder_style or {}).copy()
     controls_style = controls_style or {}
-    
+    body_style = (body_style or {}).copy()
+    window_state = (window_state or {'minimized': False}).copy()
+
+    MINIMIZE_BODY_PROPS = [
+        'display', 'height', 'maxHeight', 'opacity',
+        'pointerEvents', 'overflow', 'flex',
+        'marginTop', 'marginBottom', 'paddingTop', 'paddingBottom'
+    ]
+
+    def _restore_from_minimize(style_dict, state_dict, body_dict):
+        restored_state = {'minimized': False}
+        stored_height = state_dict.get('stored_height')
+        stored_min_height = state_dict.get('stored_min_height')
+        stored_body_styles = state_dict.get('stored_body_styles', {})
+
+        if stored_height:
+            style_dict['height'] = stored_height
+        if stored_min_height is None:
+            style_dict.pop('minHeight', None)
+        elif stored_min_height:
+            style_dict['minHeight'] = stored_min_height
+
+        for prop in MINIMIZE_BODY_PROPS:
+            if prop in stored_body_styles:
+                value = stored_body_styles[prop]
+                if value is None:
+                    body_dict.pop(prop, None)
+                else:
+                    body_dict[prop] = value
+            else:
+                body_dict.pop(prop, None)
+
+        # Ensure flex layout defaults are restored
+        body_dict.setdefault('display', 'flex')
+        body_dict.setdefault('flexDirection', 'column')
+        body_dict.setdefault('flex', '1 1 auto')
+        body_dict.setdefault('minHeight', 0)
+        body_dict.setdefault('overflow', 'hidden')
+
+        return restored_state, body_dict
+
     if button_id in ("open-corpus-builder", "card-chip-builder"):
-        # Show builder card; leave corpus controls untouched
         current_display = builder_style.get("display", "none")
         if button_id == "card-chip-builder" and current_display != "none":
             builder_style["display"] = "none"
-            return builder_style, dash.no_update
+            return builder_style, dash.no_update, dash.no_update, dash.no_update
+
         builder_style["display"] = "flex"
         builder_style.pop("transform", None)
-        return builder_style, dash.no_update
-    elif button_id == "close-corpus-builder":
-        # Hide builder card only
+
+        if window_state.get('minimized'):
+            window_state, body_style = _restore_from_minimize(builder_style, window_state, body_style)
+        else:
+            body_style.setdefault('display', 'flex')
+            body_style.setdefault('flexDirection', 'column')
+            body_style.setdefault('flex', '1 1 auto')
+            body_style.setdefault('minHeight', 0)
+            body_style.setdefault('overflow', 'hidden')
+
+        return builder_style, window_state, body_style, dash.no_update
+
+    if button_id == "close-corpus-builder":
         builder_style["display"] = "none"
-        return builder_style, dash.no_update
-    
-    return dash.no_update, dash.no_update
+        return builder_style, dash.no_update, dash.no_update, dash.no_update
+
+    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
 # New simplified callback: only updates filters/global state for metadata tab
 @callback(

@@ -297,11 +297,6 @@ body, html {
     transform: translateY(-1px);
 }
 
-/* Place the summary container correctly */
-#place-summary-container {
-    bottom: 80px; /* Move up to avoid overlapping with title */
-}
-
 /* Add these styles to your app.index_string, inside the <style> tags */
 
 /* Draggable container styling */
@@ -318,6 +313,12 @@ body, html {
 #corpus-controls-container.dragging,
 #visualization-controls-container.dragging {
     opacity: 0.8;
+#place-summary-container.place-summary-card {
+    top: 100px;
+    left: 140px;
+    bottom: auto;
+}
+
     box-shadow: 0 8px 30px rgba(0,0,0,0.2);
 }
 

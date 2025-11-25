@@ -59,6 +59,7 @@ This logbook tracks the development progress, decisions, and challenges of the I
   - Fikset minimering av "Place Details" (hindret blankt innhold/resize-glitch).
   - Refaktorert nye Author-kort til å bruke `dbc.Card` for konsistent styling (farger, padding, skygger).
   - Oppdatert `drag.js` for å støtte de nye kortene.
+  - Fjernet midlertidig minimeringsknappen på Place Details siden kortet åpnes raskt via kart/omnibox; notert for fremtidig reimplementasjon.
 
 **Notes**:
 - Bildeoppslag er basert på tekstsøk, så presisjonen avhenger av metadata hos NB. For kjente steder og forfattere fungerer det utmerket.
