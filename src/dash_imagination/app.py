@@ -71,7 +71,12 @@ app._assets_version = assets_version
 
 server = app.server
 
-from dash_imagination.components.corpus import create_corpus_controls, create_visualization_controls, create_corpus_builder_card
+from dash_imagination.components.corpus import (
+    create_corpus_controls,
+    create_map_visuals_card,
+    create_heatmap_visuals_card,
+    create_corpus_builder_card
+)
 from dash_imagination.components.places.place_similarity_dialog import create_place_similarity_dialog
 from dash_imagination.components.authors.author_list_card import create_author_list_card
 from dash_imagination.components.authors.author_info_card import create_author_info_card
@@ -796,6 +801,27 @@ CARD_CHIP_GROUPS = [
                 'title': 'Toggle Place Similarity'
             }
         ]
+    },
+    {
+        'group_id': 'visuals',
+        'label': 'Visuals',
+        'pill_class': 'chip-pill-visualization',
+        'children': [
+            {
+                'chip_id': 'card-chip-map-visuals',
+                'label': 'Map',
+                'subtitle': 'Visuals',
+                'color_class': 'chip-visuals-map',
+                'title': 'Toggle Map Visuals'
+            },
+            {
+                'chip_id': 'card-chip-heatmap-visuals',
+                'label': 'Heatmap',
+                'subtitle': 'Visuals',
+                'color_class': 'chip-visuals-heat',
+                'title': 'Toggle Heatmap Visuals'
+            }
+        ]
     }
 ]
 
@@ -825,12 +851,20 @@ WINDOW_CONTROL_CONFIG = [
         'close_id': 'close-corpus'
     },
     {
-        'card_key': 'visualization-controls',
-        'store_id': 'visualization-controls-window-state',
-        'container_id': 'visualization-controls-container',
-        'body_id': 'visualization-controls-body',
-        'minimize_id': 'minimize-visualization-controls',
-        'close_id': 'close-visualization'
+        'card_key': 'map-visuals',
+        'store_id': 'map-visuals-window-state',
+        'container_id': 'map-visuals-container',
+        'body_id': 'map-visuals-body',
+        'minimize_id': 'minimize-map-visuals',
+        'close_id': 'close-map-visuals'
+    },
+    {
+        'card_key': 'heatmap-visuals',
+        'store_id': 'heatmap-visuals-window-state',
+        'container_id': 'heatmap-visuals-container',
+        'body_id': 'heatmap-visuals-body',
+        'minimize_id': 'minimize-heatmap-visuals',
+        'close_id': 'close-heatmap-visuals'
     },
     {
         'card_key': 'corpus-builder',
@@ -911,18 +945,6 @@ def create_card_launcher():
                 className="chip-launcher-group"
             )
         )
-    group_elements.append(
-        html.Button(
-            [
-                html.Span("Viz", className="card-chip-label"),
-                html.Span("Ctrl", className="card-chip-subtext")
-            ],
-            id='card-chip-visualization',
-            className="chip-pill chip-pill-visualization",
-            title="Toggle Visualization Controls",
-            n_clicks=0
-        )
-    )
     return html.Div(group_elements, id='card-launcher')
 
 
@@ -1666,7 +1688,8 @@ app.layout = html.Div([
 
     # Map controls in a modal
     create_corpus_controls(categories_list, titles_list, default_filters),
-    create_visualization_controls(categories_list, titles_list, default_filters),
+    create_map_visuals_card(),
+    create_heatmap_visuals_card(),
     create_card_launcher(),
 
     # ImagiNation info button and modal
@@ -1928,7 +1951,8 @@ app.layout = html.Div([
     dcc.Store(id='place-summary-window-state', data={'minimized': False}),
     dcc.Store(id='place-names-window-state', data={'minimized': False}),
     dcc.Store(id='corpus-controls-window-state', data={'minimized': False}),
-    dcc.Store(id='visualization-controls-window-state', data={'minimized': False}),
+    dcc.Store(id='map-visuals-window-state', data={'minimized': False}),
+    dcc.Store(id='heatmap-visuals-window-state', data={'minimized': False}),
     dcc.Store(id='corpus-builder-window-state', data={'minimized': False}),
     dcc.Store(id='collocation-card-window-state', data={'minimized': False}),
     dcc.Store(id='similarity-card-window-state', data={'minimized': False}),
@@ -1937,8 +1961,9 @@ app.layout = html.Div([
 
     # Add the new corpus builder card
     create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list, titles_list=titles_list),
-    # Add interval for clearing download status
+    # Add intervals for clearing download status messages
     dcc.Interval(id='clear-download-status-interval', interval=6000, n_intervals=0, disabled=True),
+    dcc.Interval(id='clear-heatmap-download-status-interval', interval=6000, n_intervals=0, disabled=True),
     dcc.Store(id='all-places-store'),  # Store for caching all places for current corpus
     dcc.Store(id='collocation-place-tokens', data=[]),
     dcc.Store(id='collocation-highlight', data=[]),
@@ -2158,7 +2183,8 @@ app.index_string = '''
                     '#place-names-container',
                     '#place-summary-container',
                     '#corpus-controls-container',
-                    '#visualization-controls-container',
+                    '#map-visuals-container',
+                    '#heatmap-visuals-container',
                     '#place-similarity-dialog'
                 ];
                 
@@ -2865,14 +2891,26 @@ def resize_corpus_controls(store, window_state, current_style):
 
 
 @app.callback(
-    Output('visualization-controls-container', 'style', allow_duplicate=True),
+    Output('map-visuals-container', 'style', allow_duplicate=True),
     Input('dialog-size-store', 'data'),
-    State('visualization-controls-window-state', 'data'),
-    State('visualization-controls-container', 'style'),
+    State('map-visuals-window-state', 'data'),
+    State('map-visuals-container', 'style'),
     prevent_initial_call=True
 )
-def resize_visualization_controls(store, window_state, current_style):
-    style = _apply_size_to_style(store, 'visualization-controls', current_style)
+def resize_map_visuals(store, window_state, current_style):
+    style = _apply_size_to_style(store, 'map-visuals', current_style)
+    return _enforce_minimized_dimensions(style, window_state)
+
+
+@app.callback(
+    Output('heatmap-visuals-container', 'style', allow_duplicate=True),
+    Input('dialog-size-store', 'data'),
+    State('heatmap-visuals-window-state', 'data'),
+    State('heatmap-visuals-container', 'style'),
+    prevent_initial_call=True
+)
+def resize_heatmap_visuals(store, window_state, current_style):
+    style = _apply_size_to_style(store, 'heatmap-visuals', current_style)
     return _enforce_minimized_dimensions(style, window_state)
 
 
@@ -3836,38 +3874,103 @@ def toggle_corpus_controls(close_btn, chip_btn, current_style):
         new_style['display'] = 'flex' if current_display == 'none' else 'none'
     return new_style
 
-# Update visualization controls callback
+# Map visuals toggle (button + chip)
 @app.callback(
-    Output('visualization-controls-container', 'style'),
-    [Input('visualization-button', 'n_clicks'),
-     Input('close-visualization', 'n_clicks'),
-     Input('card-chip-visualization', 'n_clicks')],
-    [State('visualization-controls-container', 'style')],
+    Output('map-visuals-container', 'style'),
+    Output('map-visuals-window-state', 'data', allow_duplicate=True),
+    Output('map-visuals-body', 'style', allow_duplicate=True),
+    Input('visualization-button', 'n_clicks'),
+    Input('card-chip-map-visuals', 'n_clicks'),
+    Input('close-map-visuals', 'n_clicks'),
+    State('map-visuals-container', 'style'),
+    State('map-visuals-window-state', 'data'),
+    State('map-visuals-body', 'style'),
     prevent_initial_call=True
 )
-def toggle_visualization_controls(open_btn, close_btn, chip_btn, current_style):
+def toggle_map_visuals(button_clicks, chip_clicks, close_clicks, current_style, window_state, body_style):
     ctx = dash.callback_context
     if not ctx.triggered:
         raise PreventUpdate
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    if trigger_id not in ('visualization-button', 'close-visualization', 'card-chip-visualization'):
+    if trigger_id not in ('visualization-button', 'card-chip-map-visuals', 'close-map-visuals'):
         raise PreventUpdate
-    new_style = dict(current_style or {})
-    if trigger_id == 'close-visualization':
-        new_style['display'] = 'none'
-    else:
-        current_display = new_style.get('display', 'none')
-        new_style['display'] = 'flex' if current_display == 'none' else 'none'
-    return new_style
 
-# Update visualization button style callback
+    new_style = dict(current_style or {})
+    window_state = (window_state or {'minimized': False}).copy()
+    body_style = dict(body_style or {})
+
+    if trigger_id == 'close-map-visuals':
+        new_style['display'] = 'none'
+        return new_style, window_state, body_style
+
+    should_show = new_style.get('display', 'none') == 'none'
+    new_style['display'] = 'flex' if should_show else 'none'
+
+    if should_show:
+        window_state['minimized'] = False
+        for prop in MINIMIZE_BODY_PROPS:
+            body_style.pop(prop, None)
+        body_style.update({
+            'flex': '1 1 auto',
+            'minHeight': 0,
+            'display': 'flex',
+            'flexDirection': 'column'
+        })
+
+    return new_style, window_state, body_style
+
+
+@app.callback(
+    Output('heatmap-visuals-container', 'style'),
+    Output('heatmap-visuals-window-state', 'data', allow_duplicate=True),
+    Output('heatmap-visuals-body', 'style', allow_duplicate=True),
+    Input('card-chip-heatmap-visuals', 'n_clicks'),
+    Input('close-heatmap-visuals', 'n_clicks'),
+    State('heatmap-visuals-container', 'style'),
+    State('heatmap-visuals-window-state', 'data'),
+    State('heatmap-visuals-body', 'style'),
+    prevent_initial_call=True
+)
+def toggle_heatmap_visuals(chip_clicks, close_clicks, current_style, window_state, body_style):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    if trigger_id not in ('card-chip-heatmap-visuals', 'close-heatmap-visuals'):
+        raise PreventUpdate
+
+    new_style = dict(current_style or {})
+    window_state = (window_state or {'minimized': False}).copy()
+    body_style = dict(body_style or {})
+
+    if trigger_id == 'close-heatmap-visuals':
+        new_style['display'] = 'none'
+        return new_style, window_state, body_style
+
+    should_show = new_style.get('display', 'none') == 'none'
+    new_style['display'] = 'flex' if should_show else 'none'
+
+    if should_show:
+        window_state['minimized'] = False
+        for prop in MINIMIZE_BODY_PROPS:
+            body_style.pop(prop, None)
+        body_style.update({
+            'flex': '1 1 auto',
+            'minHeight': 0,
+            'display': 'flex',
+            'flexDirection': 'column'
+        })
+
+    return new_style, window_state, body_style
+
+
 @app.callback(
     Output('visualization-button', 'style'),
-    Input('visualization-controls-container', 'style'),
+    Input('map-visuals-container', 'style'),
     State('visualization-button', 'style'),
     prevent_initial_call=True
 )
-def update_visualization_button_style(viz_style, current_style):
+def update_visualization_button_style(map_style, current_style):
     base_style = {
         'padding': '8px',
         'backgroundColor': 'white',
@@ -3888,7 +3991,8 @@ def update_visualization_button_style(viz_style, current_style):
     active_style = base_style.copy()
     active_style['backgroundColor'] = '#475569'
     active_style['color'] = 'white'
-    return active_style if viz_style and viz_style.get('display') == 'block' else base_style
+    return active_style if map_style and map_style.get('display') not in ('none', 'hidden') else base_style
+
 
 
 def _chip_class(base_class, style_dict):
@@ -3903,22 +4007,33 @@ def _chip_class(base_class, style_dict):
 @app.callback(
     Output('card-chip-places', 'className'),
     Output('card-chip-corpus', 'className'),
-    Output('card-chip-visualization', 'className'),
+    Output('card-chip-map-visuals', 'className'),
+    Output('card-chip-heatmap-visuals', 'className'),
     Output('card-chip-builder', 'className'),
     Output('card-chip-collocations', 'className'),
     Output('card-chip-similarity', 'className'),
     Input('place-names-container', 'style'),
     Input('corpus-controls-container', 'style'),
-    Input('visualization-controls-container', 'style'),
+    Input('map-visuals-container', 'style'),
+    Input('heatmap-visuals-container', 'style'),
     Input('corpus-builder-card', 'style'),
     Input('collocation-card', 'style'),
     Input('place-similarity-dialog', 'style')
 )
-def refresh_card_chips(places_style, corpus_style, viz_style, builder_style, collocation_style, similarity_style):
+def refresh_card_chips(
+    places_style,
+    corpus_style,
+    map_visuals_style,
+    heatmap_visuals_style,
+    builder_style,
+    collocation_style,
+    similarity_style
+):
     return (
         _chip_class('card-chip chip-option chip-places', places_style),
         _chip_class('card-chip chip-option chip-corpus', corpus_style),
-        _chip_class('chip-pill chip-pill-visualization', viz_style),
+        _chip_class('card-chip chip-option chip-visuals-map', map_visuals_style),
+        _chip_class('card-chip chip-option chip-visuals-heat', heatmap_visuals_style),
         _chip_class('card-chip chip-option chip-builder', builder_style),
         _chip_class('card-chip chip-option chip-collocations', collocation_style),
         _chip_class('card-chip chip-option chip-similarity', similarity_style)
@@ -4121,6 +4236,62 @@ def trigger_download(n_clicks, format, resolution, figure):
         print(f"Error generating download: {e}")
         return None, html.Div(f'Error generating download: {e}', style={'color': 'red'}), True, 0
 
+
+@app.callback(
+    [Output('download-heatmap-file', 'data'),
+     Output('heatmap-download-status', 'children'),
+     Output('clear-heatmap-download-status-interval', 'disabled'),
+     Output('clear-heatmap-download-status-interval', 'n_intervals')],
+    [Input('download-heatmap', 'n_clicks')],
+    [State('heatmap-download-format', 'value'),
+     State('heatmap-download-resolution', 'value'),
+     State('main-map', 'figure')],
+    prevent_initial_call=True
+)
+def trigger_heatmap_download(n_clicks, format_value, resolution_value, figure):
+    import dash
+    from dash import dcc, html
+    import plotly.graph_objects as go
+    import io
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+
+    resolution_map = {
+        'standard': {'width': 1920, 'height': 1080},
+        'high': {'width': 3840, 'height': 2160},
+        'publication': {'width': 6000, 'height': 4000}
+    }
+    dimensions = resolution_map.get(resolution_value, resolution_map['standard'])
+    try:
+        fig = go.Figure(figure)
+        fig.update_layout(
+            width=dimensions['width'],
+            height=dimensions['height'],
+            margin=dict(l=0, r=0, t=0, b=0),
+            showlegend=False
+        )
+        if format_value == 'png':
+            img_bytes = fig.to_image(format='png', scale=2 if resolution_value in ['high', 'publication'] else 1)
+            filename = 'imagination_heatmap.png'
+        elif format_value == 'pdf':
+            img_bytes = fig.to_image(format='pdf', scale=2 if resolution_value in ['high', 'publication'] else 1)
+            filename = 'imagination_heatmap.pdf'
+        elif format_value == 'svg':
+            img_bytes = fig.to_image(format='svg', scale=2 if resolution_value in ['high', 'publication'] else 1)
+            filename = 'imagination_heatmap.svg'
+        else:
+            return None, html.Div('Invalid format selected', style={'color': 'red'}), True, 0
+        return (
+            dcc.send_bytes(lambda buf: buf.write(img_bytes), filename),
+            html.Div('Heatmap download started...', style={'color': 'green', 'marginTop': '10px'}),
+            False,
+            0
+        )
+    except Exception as e:
+        print(f"Error generating heatmap download: {e}")
+        return None, html.Div(f'Error generating download: {e}', style={'color': 'red'}), True, 0
+
+
 @app.callback(
     Output('download-status', 'children', allow_duplicate=True),
     [Input('clear-download-status-interval', 'n_intervals')],
@@ -4139,6 +4310,29 @@ def clear_download_status(n_intervals, disabled):
 )
 def disable_interval_on_clear(status):
     # Disable the interval if the status is cleared
+    if not status:
+        return True
+    raise dash.exceptions.PreventUpdate
+
+
+@app.callback(
+    Output('heatmap-download-status', 'children', allow_duplicate=True),
+    [Input('clear-heatmap-download-status-interval', 'n_intervals')],
+    [State('clear-heatmap-download-status-interval', 'disabled')],
+    prevent_initial_call=True
+)
+def clear_heatmap_download_status(n_intervals, disabled):
+    if not disabled and n_intervals > 0:
+        return ''
+    raise dash.exceptions.PreventUpdate
+
+
+@app.callback(
+    Output('clear-heatmap-download-status-interval', 'disabled', allow_duplicate=True),
+    [Input('heatmap-download-status', 'children')],
+    prevent_initial_call=True
+)
+def disable_heatmap_interval_on_clear(status):
     if not status:
         return True
     raise dash.exceptions.PreventUpdate

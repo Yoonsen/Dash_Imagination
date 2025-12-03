@@ -138,6 +138,23 @@ body, html {
     box-shadow: 0 3px 8px rgba(220, 38, 38, 0.35);
 }
 
+.author-list-item {
+    width: 100%;
+    background-color: transparent;
+    border: none;
+    text-align: left;
+    border-radius: 0;
+}
+
+.author-list-item:hover {
+    background-color: #f8fafc !important;
+}
+
+.author-list-item:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 2px;
+}
+
 .card-title-bar {
     display: flex;
     align-items: center;
@@ -386,7 +403,8 @@ body, html {
 #place-summary-container,
 #place-names-container,
 #corpus-controls-container,
-#visualization-controls-container {
+#map-visuals-container,
+#heatmap-visuals-container {
     transition: opacity 0.2s ease;
     z-index: 1000;
 }
@@ -394,7 +412,8 @@ body, html {
 #place-summary-container.dragging,
 #place-names-container.dragging,
 #corpus-controls-container.dragging,
-#visualization-controls-container.dragging {
+#map-visuals-container.dragging,
+#heatmap-visuals-container.dragging {
     opacity: 0.8;
 #place-summary-container.place-summary-card {
     top: 100px;
@@ -409,7 +428,8 @@ body, html {
 #summary-header,
 #place-names-header,
 #corpus-header,
-#visualization-header,
+#map-visuals-header,
+#heatmap-visuals-header,
 #corpus-builder-header,
 #collocation-card-header,
 #similarity-header {
@@ -423,7 +443,8 @@ body, html {
 #summary-header:active,
 #place-names-header:active,
 #corpus-header:active,
-#visualization-header:active,
+#map-visuals-header:active,
+#heatmap-visuals-header:active,
 #corpus-builder-header:active,
 #collocation-card-header:active,
 #similarity-header:active {
@@ -680,8 +701,12 @@ body {
     background: #fef3c7;
 }
 
-.card-chip.chip-visualization {
+.card-chip.chip-visuals-map {
     background: #e0f2fe;
+}
+
+.card-chip.chip-visuals-heat {
+    background: #fee2e2;
 }
 
 .card-chip.chip-builder {

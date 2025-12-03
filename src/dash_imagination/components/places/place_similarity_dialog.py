@@ -248,8 +248,8 @@ def handle_similar_places(n_clicks, search_word, threshold, max_places):
         JOIN valid_tokens vt ON p.token = vt.token
         WHERE p.latitude IS NOT NULL 
         AND p.longitude IS NOT NULL
-        AND p.latitude != '0'
-        AND p.longitude != '0'
+        AND CAST(p.latitude AS REAL) != 0
+        AND CAST(p.longitude AS REAL) != 0
         GROUP BY p.token, p.modern, p.latitude, p.longitude
         ORDER BY frequency DESC
         LIMIT ?

@@ -12,4 +12,7 @@
 - [ ] Add checkbox in Places to let the heatmap follow the current subset (freq/sampling/collocations) instead of whole corpus.
 - [ ] Fix Places dialog background/overflow so the lower half keeps a solid backdrop when scrolling.
 - [ ] Revisit Corpus Controls overlay vs. compact corpus summary div; add affordances to inspect/sample current corpus directly from the summary.
+- [ ] Vurdere egen SQL-kolonne/tabell for stabile forfatter-IDer synkronisert med autoritetsregister slik at UI alltid finner samme person selv ved navnevarianter.
+- [ ] Undersøk hvorfor Author Info iblant ikke viser bøker/bilder selv om forfatteren finnes i korpuset; reproduser og stabiliser kallene.
+- [ ] Utforske bok-bilder: eksponere illustrasjoner/sider per bok (gjerne via Corpus View) og bruk Qdrant-lenker for å hoppe mellom lignende bilder.
 

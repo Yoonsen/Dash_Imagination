@@ -157,28 +157,34 @@ $(document).ready(function() {
                 monitorVisibilityElement($corpusControls);
             }
 
-            // Initialize visualization-controls-container if it exists
-            if ($('#visualization-controls-container').length > 0) {
-                console.log("Found visualization-controls-container, making it draggable");
+            // Initialize visuals containers (map + heatmap) if they exist
+            const visualConfigs = [
+                { selector: '#map-visuals-container', handle: '#map-visuals-header', label: 'map visuals' },
+                { selector: '#heatmap-visuals-container', handle: '#heatmap-visuals-header', label: 'heatmap visuals' }
+            ];
 
-                const $visualization = $('#visualization-controls-container');
-                $visualization.draggable({
-                    handle: '#visualization-header',
-                    containment: 'window',
-                    start: function(event, ui) {
+            visualConfigs.forEach(({ selector, handle, label }) => {
+                if ($(selector).length > 0) {
+                    console.log(`Found ${selector}, making it draggable`);
+                    const $visualCard = $(selector);
+                    $visualCard.draggable({
+                        handle,
+                        containment: 'window',
+                        start: function(event, ui) {
+                            bringToFront($(this));
+                            $(this).addClass("dragging");
+                            console.log(`Started dragging ${label}`);
+                        },
+                        stop: function(event, ui) {
+                            $(this).removeClass("dragging");
+                            console.log(`Stopped dragging ${label} at:`, ui.position);
+                        }
+                    }).on('mousedown', function() {
                         bringToFront($(this));
-                        $(this).addClass("dragging");
-                        console.log("Started dragging visualization controls");
-                    },
-                    stop: function(event, ui) {
-                        $(this).removeClass("dragging");
-                        console.log("Stopped dragging visualization controls at:", ui.position);
-                    }
-                }).on('mousedown', function() {
-                    bringToFront($(this));
-                });
-                monitorVisibilityElement($visualization);
-            }
+                    });
+                    monitorVisibilityElement($visualCard);
+                }
+            });
 
             // Initialize corpus-builder-card if it exists
             if ($('#corpus-builder-card').length > 0) {
@@ -307,12 +313,12 @@ $(document).ready(function() {
             initializeDraggable();
         }
 
-        // Check visualization controls container
-        if ($('#visualization-controls-container').is(':visible') && 
-            !$('#visualization-controls-container').hasClass('ui-draggable')) {
-            console.log("Visualization controls container is visible but not draggable yet, initializing");
-            initializeDraggable();
-        }
+        ['#map-visuals-container', '#heatmap-visuals-container'].forEach(function(selector) {
+            if ($(selector).is(':visible') && !$(selector).hasClass('ui-draggable')) {
+                console.log(selector + " is visible but not draggable yet, initializing");
+                initializeDraggable();
+            }
+        });
 
         // Check collocation card
         if ($('#collocation-card').is(':visible') && 
@@ -366,12 +372,12 @@ $(document).ready(function() {
             initializeDraggable();
         }
 
-        // Check visualization controls container
-        if ($('#visualization-controls-container').is(':visible') && 
-            !$('#visualization-controls-container').hasClass('ui-draggable')) {
-            console.log("Visualization controls container is visible in interval check but not draggable, initializing");
-            initializeDraggable();
-        }
+        ['#map-visuals-container', '#heatmap-visuals-container'].forEach(function(selector) {
+            if ($(selector).is(':visible') && !$(selector).hasClass('ui-draggable')) {
+                console.log(selector + " is visible in interval check but not draggable, initializing");
+                initializeDraggable();
+            }
+        });
 
         // Check collocation card
         if ($('#collocation-card').is(':visible') && 
@@ -396,11 +402,11 @@ $(document).ready(function() {
     }, 2000);
 
     // Set cursor styles
-    $("#summary-header, #place-names-header, #corpus-header, #visualization-header, #corpus-builder-header, #collocation-card-header, #similarity-header, #author-list-header, #author-info-header, .card-title-bar").css("cursor", "grab");
+    $("#summary-header, #place-names-header, #corpus-header, #map-visuals-header, #heatmap-visuals-header, #corpus-builder-header, #collocation-card-header, #similarity-header, #author-list-header, #author-info-header, .card-title-bar").css("cursor", "grab");
 
     // Add touch support for draggable elements
     function addTouchSupport() {
-        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container, #collocation-card, #place-similarity-dialog, #author-list-container, #author-info-container').on('touchstart', function(event) {
+        $('#place-summary-container, #place-names-container, #corpus-controls-container, #map-visuals-container, #heatmap-visuals-container, #collocation-card, #place-similarity-dialog, #author-list-container, #author-info-container').on('touchstart', function(event) {
             var touch = event.originalEvent.touches[0];
             var simulatedEvent = new MouseEvent('mousedown', {
                 bubbles: true,
@@ -413,7 +419,7 @@ $(document).ready(function() {
             event.preventDefault();
         });
 
-        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container, #collocation-card, #place-similarity-dialog, #author-list-container, #author-info-container').on('touchmove', function(event) {
+        $('#place-summary-container, #place-names-container, #corpus-controls-container, #map-visuals-container, #heatmap-visuals-container, #collocation-card, #place-similarity-dialog, #author-list-container, #author-info-container').on('touchmove', function(event) {
             var touch = event.originalEvent.touches[0];
             var simulatedEvent = new MouseEvent('mousemove', {
                 bubbles: true,
@@ -426,7 +432,7 @@ $(document).ready(function() {
             event.preventDefault();
         });
 
-        $('#place-summary-container, #place-names-container, #corpus-controls-container, #visualization-controls-container, #collocation-card, #place-similarity-dialog, #author-list-container, #author-info-container').on('touchend', function(event) {
+        $('#place-summary-container, #place-names-container, #corpus-controls-container, #map-visuals-container, #heatmap-visuals-container, #collocation-card, #place-similarity-dialog, #author-list-container, #author-info-container').on('touchend', function(event) {
             var simulatedEvent = new MouseEvent('mouseup', {
                 bubbles: true,
                 cancelable: true,

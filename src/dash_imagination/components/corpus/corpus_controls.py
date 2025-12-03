@@ -161,140 +161,67 @@ def create_corpus_controls(categories_list=None, titles_list=None, default_filte
         'left': '140px'
     })
 
-def create_visualization_controls(categories_list=None, titles_list=None, default_filters=None):
-    """Create the visualization controls as a popup dialogue."""
-    if categories_list is None:
-        categories_list = []
-    if titles_list is None:
-        titles_list = []
-    if default_filters is None:
-        default_filters = {'categories': [], 'titles': []}
-
+def create_map_visuals_card():
     return dbc.Card([
         dbc.CardHeader(
             card_title_bar(
-                'visualization-controls',
-                'fa fa-chart-bar',
-                "Visualization Controls",
-                close_button_id='close-visualization',
-                close_button_title="Hide visualization controls",
-                minimize_button_id='minimize-visualization-controls',
-                minimize_button_title="Minimize visualization controls"
+                'map-visuals',
+                'fa fa-map',
+                "Map Visuals",
+                close_button_id='close-map-visuals',
+                close_button_title="Hide map controls",
+                minimize_button_id='minimize-map-visuals',
+                minimize_button_title="Minimize map controls"
             ),
             className="bg-info-subtle text-dark",
-            id='visualization-header'
+            id='map-visuals-header'
         ),
         dbc.CardBody([
-            # Tabs for Map and Heatmap views
-            dbc.Tabs([
-                # Map View Tab
-                dbc.Tab([
-                    # Clustering toggle
-                    html.Div([
-                        html.Label("Clustering", className="form-label"),
-                        dcc.Checklist(
-                            id='top-cluster-toggle',
-                            options=[{'label': 'Enable Clustering', 'value': 'cluster'}],
-                            value=[],
-                            className="mt-1"
-                        )
-                    ], className="mb-4"),
-                    
-                    # Marker size slider
-                    html.Div([
-                        html.Label("Place Marker Size", className="form-label"),
-                        dcc.Slider(
-                            id='marker-size-slider',
-                            min=1,
-                            max=20,
-                            step=1,
-                            value=8,
-                            marks={i: str(i) for i in range(1, 21, 2)},
-                            className="mt-1"
-                        )
-                    ], className="mb-4"),
-                    
-                    # Cluster size slider
-                    html.Div([
-                        html.Label("Cluster Marker Size", className="form-label"),
-                        dcc.Slider(
-                            id='cluster-size-slider',
-                            min=1,
-                            max=10,
-                            step=1,
-                            value=3,
-                            marks={i: str(i) for i in range(1, 11, 1)},
-                            className="mt-1"
-                        )
-                    ], className="mb-4"),
-                    
-                    # Cluster radius slider
-                    html.Div([
-                        html.Label("Cluster Radius", className="form-label"),
-                        dcc.Slider(
-                            id='cluster-radius-slider',
-                            min=10,
-                            max=100,
-                            step=10,
-                            value=50,
-                            marks={i: str(i) for i in range(10, 101, 20)},
-                            className="mt-1"
-                        )
-                    ], className="mb-4")
-                ], label="Map View"),
-                
-                # Heatmap View Tab
-                dbc.Tab([
-                    # Heatmap intensity slider
-                    html.Div([
-                        html.Label("Heatmap Intensity", className="form-label"),
-                        dcc.Slider(
-                            id='heatmap-intensity',
-                            min=1,
-                            max=10,
-                            step=1,
-                            value=5,
-                            marks={i: str(i) for i in range(1, 11)},
-                            className="mt-1"
-                        )
-                    ], className="mb-4"),
-                    
-                    # Heatmap radius slider
-                    html.Div([
-                        html.Label("Heatmap Radius", className="form-label"),
-                        dcc.Slider(
-                            id='heatmap-radius',
-                            min=5,
-                            max=50,
-                            step=5,
-                            value=20,
-                            marks={i: str(i) for i in range(5, 51, 5)},
-                            className="mt-1"
-                        )
-                    ], className="mb-4"),
-                    
-                    # Heatmap colorscale dropdown
-                    html.Div([
-                        html.Label("Heatmap Colorscale", className="form-label"),
-                        dcc.Dropdown(
-                            id='heatmap-colorscale',
-                            options=[
-                                {'label': 'Viridis', 'value': 'Viridis'},
-                                {'label': 'Plasma', 'value': 'Plasma'},
-                                {'label': 'Inferno', 'value': 'Inferno'},
-                                {'label': 'Magma', 'value': 'Magma'},
-                                {'label': 'Blues', 'value': 'Blues'},
-                                {'label': 'Reds', 'value': 'Reds'},
-                                {'label': 'Greens', 'value': 'Greens'}
-                            ],
-                            value='Viridis',
-                            clearable=False
-                        )
-                    ], className="mb-4")
-                ], label="Heatmap View")
-            ], className="mt-4"),
-            
-            # Download format dropdown
+            html.Div([
+                html.Label("Clustering", className="form-label"),
+                dcc.Checklist(
+                    id='top-cluster-toggle',
+                    options=[{'label': 'Enable Clustering', 'value': 'cluster'}],
+                    value=[],
+                    className="mt-1"
+                )
+            ], className="mb-4"),
+            html.Div([
+                html.Label("Place Marker Size", className="form-label"),
+                dcc.Slider(
+                    id='marker-size-slider',
+                    min=1,
+                    max=20,
+                    step=1,
+                    value=8,
+                    marks={i: str(i) for i in range(1, 21, 2)},
+                    className="mt-1"
+                )
+            ], className="mb-4"),
+            html.Div([
+                html.Label("Cluster Marker Size", className="form-label"),
+                dcc.Slider(
+                    id='cluster-size-slider',
+                    min=1,
+                    max=10,
+                    step=1,
+                    value=3,
+                    marks={i: str(i) for i in range(1, 11, 1)},
+                    className="mt-1"
+                )
+            ], className="mb-4"),
+            html.Div([
+                html.Label("Cluster Radius", className="form-label"),
+                dcc.Slider(
+                    id='cluster-radius-slider',
+                    min=10,
+                    max=100,
+                    step=10,
+                    value=50,
+                    marks={i: str(i) for i in range(10, 101, 20)},
+                    className="mt-1"
+                )
+            ], className="mb-4"),
             html.Div([
                 html.Label("Download Format", className="form-label"),
                 dcc.Dropdown(
@@ -309,7 +236,6 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
                     className="mb-2"
                 )
             ], className="mb-3"),
-            # Download resolution dropdown
             html.Div([
                 html.Label("Resolution", className="form-label"),
                 dcc.Dropdown(
@@ -324,7 +250,6 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
                     className="mb-2"
                 )
             ], className="mb-3"),
-            # Download button
             dbc.Button(
                 [
                     html.I(className="fas fa-download me-2"),
@@ -334,20 +259,126 @@ def create_visualization_controls(categories_list=None, titles_list=None, defaul
                 color="primary",
                 className="w-100"
             ),
-            # Download component for Dash downloads
             dcc.Download(id="download-map-file"),
-            # Status message
             html.Div(id='download-status', className="mt-2")
-        ], id='visualization-controls-body', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'})
-    ], id='visualization-controls-container', className="position-absolute dialog-card", style={
-        'width': f"{DEFAULT_CARD_SIZES['visualization-controls']['width']}px",
-        'height': f"{DEFAULT_CARD_SIZES['visualization-controls']['height']}px",
+        ], id='map-visuals-body', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'})
+    ], id='map-visuals-container', className="position-absolute dialog-card", style={
+        'width': f"{DEFAULT_CARD_SIZES['map-visuals']['width']}px",
+        'height': f"{DEFAULT_CARD_SIZES['map-visuals']['height']}px",
         'zIndex': 800,
         'display': 'none',
         'top': '100px',
         'left': '360px',
-        'cursor': 'move'
-    }) 
+        'cursor': 'grab'
+    })
+
+
+def create_heatmap_visuals_card():
+    return dbc.Card([
+        dbc.CardHeader(
+            card_title_bar(
+                'heatmap-visuals',
+                'fa fa-fire',
+                "Heatmap Visuals",
+                close_button_id='close-heatmap-visuals',
+                close_button_title="Hide heatmap controls",
+                minimize_button_id='minimize-heatmap-visuals',
+                minimize_button_title="Minimize heatmap controls"
+            ),
+            className="bg-warning-subtle text-dark",
+            id='heatmap-visuals-header'
+        ),
+        dbc.CardBody([
+            html.Div([
+                html.Label("Heatmap Intensity", className="form-label"),
+                dcc.Slider(
+                    id='heatmap-intensity',
+                    min=1,
+                    max=10,
+                    step=1,
+                    value=5,
+                    marks={i: str(i) for i in range(1, 11)},
+                    className="mt-1"
+                )
+            ], className="mb-4"),
+            html.Div([
+                html.Label("Heatmap Radius", className="form-label"),
+                dcc.Slider(
+                    id='heatmap-radius',
+                    min=5,
+                    max=50,
+                    step=5,
+                    value=20,
+                    marks={i: str(i) for i in range(5, 51, 5)},
+                    className="mt-1"
+                )
+            ], className="mb-4"),
+            html.Div([
+                html.Label("Heatmap Colorscale", className="form-label"),
+                dcc.Dropdown(
+                    id='heatmap-colorscale',
+                    options=[
+                        {'label': 'Viridis', 'value': 'Viridis'},
+                        {'label': 'Plasma', 'value': 'Plasma'},
+                        {'label': 'Inferno', 'value': 'Inferno'},
+                        {'label': 'Magma', 'value': 'Magma'},
+                        {'label': 'Blues', 'value': 'Blues'},
+                        {'label': 'Reds', 'value': 'Reds'},
+                        {'label': 'Greens', 'value': 'Greens'}
+                    ],
+                    value='Viridis',
+                    clearable=False
+                )
+            ], className="mb-4"),
+            html.Div([
+                html.Label("Download Format", className="form-label"),
+                dcc.Dropdown(
+                    id='heatmap-download-format',
+                    options=[
+                        {'label': 'PNG (image)', 'value': 'png'},
+                        {'label': 'PDF (vector)', 'value': 'pdf'},
+                        {'label': 'SVG (vector)', 'value': 'svg'}
+                    ],
+                    value='png',
+                    clearable=False,
+                    className="mb-2"
+                )
+            ], className="mb-3"),
+            html.Div([
+                html.Label("Resolution", className="form-label"),
+                dcc.Dropdown(
+                    id='heatmap-download-resolution',
+                    options=[
+                        {'label': 'Standard (1920x1080)', 'value': 'standard'},
+                        {'label': 'High (3840x2160)', 'value': 'high'},
+                        {'label': 'Publication (6000x4000)', 'value': 'publication'}
+                    ],
+                    value='standard',
+                    clearable=False,
+                    className="mb-2"
+                )
+            ], className="mb-3"),
+            dbc.Button(
+                [
+                    html.I(className="fas fa-download me-2"),
+                    "Download Heatmap"
+                ],
+                id='download-heatmap',
+                color="primary",
+                className="w-100"
+            ),
+            dcc.Download(id="download-heatmap-file"),
+            html.Div(id='heatmap-download-status', className="mt-2")
+        ], id='heatmap-visuals-body', style={'flex': '1 1 auto', 'minHeight': 0, 'overflowY': 'auto'})
+    ], id='heatmap-visuals-container', className="position-absolute dialog-card", style={
+        'width': f"{DEFAULT_CARD_SIZES['heatmap-visuals']['width']}px",
+        'height': f"{DEFAULT_CARD_SIZES['heatmap-visuals']['height']}px",
+        'zIndex': 800,
+        'display': 'none',
+        'top': '120px',
+        'left': '520px',
+        'cursor': 'grab'
+    })
 
 @callback(
     Output('reset-corpus-modal', 'is_open'),
