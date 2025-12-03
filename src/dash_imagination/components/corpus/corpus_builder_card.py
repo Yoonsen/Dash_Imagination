@@ -1,5 +1,6 @@
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, Output, State, callback, dash, ctx, no_update
+from dash import html, dcc, Input, Output, State, callback, dash, ctx, no_update, callback_context
+from dash.exceptions import PreventUpdate
 import pandas as pd
 from functools import lru_cache
 from ...utils.corpus_build import corpus_builder, get_corpus_stats, count_words
@@ -8,6 +9,37 @@ import dhlab as dh
 from ..common.size_controls import DEFAULT_CARD_SIZES, card_title_bar
 
 DEFAULT_YEAR_RANGE = [1814, 1905]
+
+LABEL_STYLE = {
+    'fontSize': '0.72rem',
+    'textTransform': 'uppercase',
+    'letterSpacing': '0.08em',
+    'color': '#475569',
+    'fontWeight': 700,
+    'marginBottom': '0.15rem'
+}
+
+HELP_TEXT_STYLE = {'fontSize': '0.75rem', 'color': '#94a3b8'}
+
+DROPDOWN_STYLE = {
+    'backgroundColor': '#f8fafc',
+    'border': '1px solid #e2e8f0',
+    'borderRadius': '10px',
+    'padding': '2px 6px'
+}
+
+
+def _render_year_slider(value=None):
+    slider_value = list(value) if value else DEFAULT_YEAR_RANGE.copy()
+    return dcc.RangeSlider(
+        id='corpus-year-range',
+        min=DEFAULT_YEAR_RANGE[0],
+        max=DEFAULT_YEAR_RANGE[1],
+        step=1,
+        value=slider_value,
+        marks={i: str(i) for i in range(DEFAULT_YEAR_RANGE[0], DEFAULT_YEAR_RANGE[1] + 1, 10)},
+        className="mb-3"
+    )
 
 
 def _format_title_label(title: str, year) -> str:
@@ -191,114 +223,115 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
             id="corpus-builder-header"
         ),
         dbc.CardBody([
-            html.Div(
-                dbc.Tabs([
-                dbc.Tab([
-                    # Metadata Tab Content
-                    html.Div([
-                        html.Label("Year Range", className="form-label"),
-                        dcc.RangeSlider(
-                            id='corpus-year-range',
-                            min=DEFAULT_YEAR_RANGE[0],
-                            max=DEFAULT_YEAR_RANGE[1],
-                            step=1,
-                            value=DEFAULT_YEAR_RANGE.copy(),
-                            marks={i: str(i) for i in range(DEFAULT_YEAR_RANGE[0], DEFAULT_YEAR_RANGE[1] + 1, 10)},
-                            className="mb-3"
-                        )
-                    ], className="mb-4"),
-                    html.Div([
-                        html.Label("Select Categories", className="form-label"),
-                        dcc.Dropdown(
-                            id='corpus-category-dropdown',
-                            options=[{'label': cat, 'value': cat} for cat in categories_list],
-                            value=default_filters.get('categories', []),
-                            multi=True,
-                            placeholder="Select categories..."
-                        )
-                    ], className="mb-4"),
-                    html.Div([
-                        html.Label("Select Authors", className="form-label"),
-                        dcc.Dropdown(
-                            id='corpus-author-dropdown',
-                            options=[{'label': author, 'value': author} for author in authors_list],
-                            value=default_filters.get('authors', []),
-                            multi=True,
-                            placeholder="Select authors..."
-                        )
-                    ], className="mb-4"),
-                    html.Div([
-                        html.Label("Select Titles", className="form-label"),
-                        dcc.Dropdown(
-                            id='corpus-title-dropdown',
-                            options=[{'label': title, 'value': title} for title in titles_list],
-                            value=default_filters.get('titles', []),
-                            multi=True,
-                            placeholder="Search and select works..."
-                        )
-                    ], className="mb-4"),
-                    html.Div([
-                        html.Label("Combine with existing corpus", className="form-label mb-1"),
-                        dbc.ButtonGroup([
-                            dbc.Button("+", id='corpus-op-union-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Add to current corpus"),
-                            dbc.Button("&", id='corpus-op-intersection-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Keep only overlap"),
-                            dbc.Button("-", id='corpus-op-diff-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Remove from current corpus"),
-                        ], size="sm")
-                    ], className="mb-4"),
-                    html.Div([
-                        dcc.Loading(
-                            id="build-corpus-loading",
-                            type="default",
-                            children=[
-                                html.Button([
-                                    html.I(className="fas fa-sync-alt me-2"),
-                                    "Update"
-                                ], id='build-corpus-btn', className="btn btn-primary w-100"),
-                                html.Div(id="build-corpus-status", className="mt-2")
-                            ]
-                        )
-                    ], className="mb-4"),
-                ], label="Metadata", tab_id="metadata"),
-                dbc.Tab([
-                    html.Div([
-                        html.Label("Wordforms (comma-separated)", className="form-label"),
-                        dcc.Input(
-                            id='content-wordforms-input',
-                            type='text',
-                            placeholder='e.g. krig, krigen',
-                            className="form-control mb-3"
+            html.Div([
+                html.Div([
+                    html.Label("Year Range", style=LABEL_STYLE),
+                    html.Div(
+                        _render_year_slider(DEFAULT_YEAR_RANGE.copy()),
+                        id='corpus-year-slider-wrapper',
+                        style={'marginBottom': '0.3rem'}
+                    ),
+                    dbc.Row([
+                        dbc.Col(
+                            dbc.Input(
+                                id='corpus-year-start-input',
+                                type='number',
+                                min=DEFAULT_YEAR_RANGE[0],
+                                max=DEFAULT_YEAR_RANGE[1],
+                                value=DEFAULT_YEAR_RANGE[0],
+                                step=1,
+                                placeholder="From",
+                                className="form-control form-control-sm"
+                            ),
+                            width=6
                         ),
-                        html.Label("Minimum occurrences (n)", className="form-label"),
-                        dcc.Input(
-                            id='content-min-count-input',
-                            type='number',
-                            min=1,
-                            value=1,
-                            className="form-control mb-3"
-                        ),
-                        html.Div([
-                            html.Label("Combine with existing corpus", className="form-label mb-1"),
-                            dbc.ButtonGroup([
-                                dbc.Button("+", id='corpus-op-union-content', n_clicks=0, size="sm", color="secondary", outline=True, title="Add to current corpus"),
-                                dbc.Button("&", id='corpus-op-intersection-content', n_clicks=0, size="sm", color="secondary", outline=True, title="Keep only overlap"),
-                                dbc.Button("-", id='corpus-op-diff-content', n_clicks=0, size="sm", color="secondary", outline=True, title="Remove from current corpus"),
-                            ], size="sm")
-                        ], className="mb-4"),
-                        dcc.Loading(
-                            id="build-content-corpus-loading",
-                            type="default",
-                            children=[
-                                html.Button([
-                                    html.I(className="fas fa-sync-alt me-2"),
-                                    "Update"
-                                ], id='build-content-corpus-btn', className="btn btn-primary w-100 mb-4"),
-                                html.Div(id="build-content-corpus-status", className="mt-2")
-                            ]
+                        dbc.Col(
+                            dbc.Input(
+                                id='corpus-year-end-input',
+                                type='number',
+                                min=DEFAULT_YEAR_RANGE[0],
+                                max=DEFAULT_YEAR_RANGE[1],
+                                value=DEFAULT_YEAR_RANGE[1],
+                                step=1,
+                                placeholder="To",
+                                className="form-control form-control-sm"
+                            ),
+                            width=6
                         )
-                    ])
-                ], label="Content", tab_id="content"),
-                ], id="corpus-builder-tabs", active_tab="metadata", className="flex-grow-1")
-            , className="flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'})
+                    ], className="g-2")
+                ], className="mb-2"),
+
+                html.Div([
+                    html.Label("Metadata", style=LABEL_STYLE),
+                    dcc.Dropdown(
+                        id='corpus-category-dropdown',
+                        options=[{'label': cat, 'value': cat} for cat in categories_list],
+                        value=default_filters.get('categories', []),
+                        multi=True,
+                        placeholder="Categories…",
+                        style=DROPDOWN_STYLE
+                    )
+                ], className="mb-1"),
+
+                html.Div([
+                    dcc.Dropdown(
+                        id='corpus-author-dropdown',
+                        options=[{'label': author, 'value': author} for author in authors_list],
+                        value=default_filters.get('authors', []),
+                        multi=True,
+                        placeholder="Authors…",
+                        style=DROPDOWN_STYLE
+                    )
+                ], className="mb-1"),
+
+                html.Div([
+                    dcc.Dropdown(
+                        id='corpus-title-dropdown',
+                        options=[{'label': title, 'value': title} for title in titles_list],
+                        value=default_filters.get('titles', []),
+                        multi=True,
+                        placeholder="Titles…",
+                        style=DROPDOWN_STYLE
+                    )
+                ], className="mb-2"),
+
+                html.Div([
+                    html.Label("Content Filters", style=LABEL_STYLE),
+                    dcc.Input(
+                        id='content-wordforms-input',
+                        type='text',
+                        placeholder='e.g. krig, krigen',
+                        className="form-control form-control-sm"
+                    )
+                ], className="mb-3"),
+
+                html.Div([
+                    dcc.Loading(
+                        id="build-corpus-loading",
+                        type="default",
+                        children=[
+                            dbc.Row([
+                                dbc.Col(
+                                    dbc.ButtonGroup([
+                                        dbc.Button("+", id='corpus-op-union-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Add to current corpus"),
+                                        dbc.Button("&", id='corpus-op-intersection-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Keep only overlap"),
+                                        dbc.Button("-", id='corpus-op-diff-builder', n_clicks=0, size="sm", color="secondary", outline=True, title="Remove from current corpus"),
+                                    ], size="sm"),
+                                    width="auto"
+                                ),
+                                dbc.Col(
+                                    html.Button([
+                                        html.I(className="fas fa-sync-alt me-2"),
+                                        "Update"
+                                    ], id='build-corpus-btn', className="btn btn-primary w-100"),
+                                    width=True
+                                )
+                            ], className="g-2 align-items-center flex-nowrap"),
+                            html.Div(id="build-corpus-status", className="mt-2")
+                        ]
+                    )
+                ])
+            ], className="flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.5rem'})
         ], id='corpus-builder-body', style={
             'flex': '1 1 auto',
             'minHeight': 0,
@@ -316,21 +349,86 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
         "flexDirection": "column"
     })
 
+
+@callback(
+    Output('corpus-year-start-input', 'value', allow_duplicate=True),
+    Output('corpus-year-end-input', 'value', allow_duplicate=True),
+    Input('corpus-year-range', 'value'),
+    prevent_initial_call=True
+)
+def sync_year_inputs_from_slider(year_range):
+    """Keep precise year inputs in sync with the range slider."""
+    year_range = (year_range or DEFAULT_YEAR_RANGE).copy() if isinstance(year_range, list) else list(year_range or DEFAULT_YEAR_RANGE)
+    if len(year_range) != 2:
+        year_range = DEFAULT_YEAR_RANGE.copy()
+    return year_range[0], year_range[1]
+
+
+@callback(
+    Output('corpus-year-slider-wrapper', 'children', allow_duplicate=True),
+    Output('corpus-year-start-input', 'value', allow_duplicate=True),
+    Output('corpus-year-end-input', 'value', allow_duplicate=True),
+    Input('corpus-year-start-input', 'value'),
+    Input('corpus-year-end-input', 'value'),
+    State('corpus-year-range', 'value'),
+    prevent_initial_call=True
+)
+def sync_year_slider_from_inputs(start_value, end_value, current_range):
+    """Update the slider component when users type exact years."""
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+
+    trigger = ctx.triggered[0]['prop_id'].split('.')[0]
+    slider_min, slider_max = DEFAULT_YEAR_RANGE
+    current_range = list(current_range or DEFAULT_YEAR_RANGE.copy())
+
+    start_val, end_val = current_range
+    changed = False
+
+    if trigger == 'corpus-year-start-input':
+        if start_value is None:
+            raise PreventUpdate
+        new_start = max(slider_min, min(slider_max, int(start_value)))
+        if new_start != start_val:
+            start_val = new_start
+            changed = True
+    elif trigger == 'corpus-year-end-input':
+        if end_value is None:
+            raise PreventUpdate
+        new_end = max(slider_min, min(slider_max, int(end_value)))
+        if new_end != end_val:
+            end_val = new_end
+            changed = True
+
+    if start_val > end_val:
+        if trigger == 'corpus-year-start-input':
+            end_val = start_val
+        else:
+            start_val = end_val
+        changed = True
+
+    if not changed:
+        raise PreventUpdate
+
+    slider = _render_year_slider([start_val, end_val])
+    return slider, start_val, end_val
+
+
 @callback(
     Output("corpus-builder-card", "style"),
     Output("corpus-builder-window-state", "data", allow_duplicate=True),
     Output("corpus-builder-body", "style", allow_duplicate=True),
     Output("corpus-controls-container", "style", allow_duplicate=True),
     [Input("open-corpus-builder", "n_clicks"),
-     Input("close-corpus-builder", "n_clicks"),
-     Input("card-chip-builder", "n_clicks")],
+     Input("close-corpus-builder", "n_clicks")],
     [State("corpus-builder-card", "style"),
      State("corpus-builder-window-state", "data"),
      State("corpus-builder-body", "style"),
      State("corpus-controls-container", "style")],
     prevent_initial_call=True
 )
-def toggle_card_visibility(n1, n2, chip_clicks, builder_style, window_state, body_style, controls_style):
+def toggle_card_visibility(n1, n2, builder_style, window_state, body_style, controls_style):
     """Toggle the visibility of the corpus builder card only."""
     import dash
     from dash import ctx
@@ -383,12 +481,8 @@ def toggle_card_visibility(n1, n2, chip_clicks, builder_style, window_state, bod
 
         return restored_state, body_dict
 
-    if button_id in ("open-corpus-builder", "card-chip-builder"):
+    if button_id == "open-corpus-builder":
         current_display = builder_style.get("display", "none")
-        if button_id == "card-chip-builder" and current_display != "none":
-            builder_style["display"] = "none"
-            return builder_style, dash.no_update, dash.no_update, dash.no_update
-
         builder_style["display"] = "flex"
         builder_style.pop("transform", None)
 
@@ -420,6 +514,7 @@ def toggle_card_visibility(n1, n2, chip_clicks, builder_style, window_state, bod
      State("corpus-title-dropdown", "value"),
      State("corpus-year-range", "value"),
      State("corpus-max-places-slider", "value"),
+     State("content-wordforms-input", "value"),
      State("current-filters", "data"),
      State("corpus-operation", "data"),
      State("current-dhlabids-store", "data")],
@@ -432,17 +527,16 @@ def build_corpus_and_show_stats(
     titles,
     year_range,
     max_places,
+    content_wordforms,
     current_filters,
     operation,
     current_books
 ):
-    import time
     if not n_clicks:
         return dash.no_update, dash.no_update, dash.no_update
     if current_filters is None:
         current_filters = {}
     # Show spinner/message while building
-    status = dbc.Spinner("Preparing books...", color="primary", size="sm", fullscreen=False, spinner_style={"width": "1.5rem", "height": "1.5rem"})
     new_filters = current_filters.copy()
     categories = categories or []
     authors = authors or []
@@ -456,6 +550,9 @@ def build_corpus_and_show_stats(
     new_filters['corpus_source'] = 'Corpus Builder'
     op = (operation or "intersection").lower()
     new_filters['last_operation'] = op
+
+    content_words = [w.strip() for w in (content_wordforms or '').split(',') if w.strip()]
+    apply_content_filter = bool(content_words)
 
     metadata_filters_applied = bool(categories) or bool(authors) or (year_range != DEFAULT_YEAR_RANGE)
     metadata_books = set()
@@ -483,8 +580,40 @@ def build_corpus_and_show_stats(
     else:
         incoming_books = sorted(metadata_books)
 
+    def _resolve_content_pool():
+        if incoming_books:
+            return incoming_books
+        if current_books:
+            return current_books
+        base = corpus_builder.get_corpus()
+        if base:
+            return [int(b) for b in base]
+        conn = get_db_connection()
+        try:
+            df_all = pd.read_sql_query("SELECT dhlabid FROM corpus", conn)
+            return df_all['dhlabid'].dropna().astype(int).tolist()
+        finally:
+            conn.close()
+
+    if apply_content_filter:
+        content_pool = _resolve_content_pool()
+        if not content_pool:
+            status_error = html.Span("Fant ingen bøker å bruke for innholdssøk.", style={"color": "#dc2626", "fontWeight": "500"})
+            return dash.no_update, status_error, dash.no_update
+        try:
+            counts_df = count_words(content_pool, content_words)
+            dhlabid_sums = counts_df.sum(axis=0)
+            content_books = [int(dhl) for dhl, total in dhlabid_sums.items() if total >= 1]
+        except Exception as e:
+            error = html.Span(f"Error during content search: {e}", style={"color": "#dc2626"})
+            return dash.no_update, error, dash.no_update
+        incoming_books = sorted(content_books)
+        new_filters['content_words'] = content_words
+    else:
+        new_filters.pop('content_words', None)
+
     if not incoming_books:
-        status_error = html.Span("Fant ingen bøker for filteret", style={"color": "#dc2626", "fontWeight": "500"})
+        status_error = html.Span("Fant ingen bøker for valgte filter.", style={"color": "#dc2626", "fontWeight": "500"})
         return dash.no_update, status_error, dash.no_update
 
     current_books = current_books or []
@@ -570,11 +699,11 @@ def synchronize_metadata_filters(selected_categories, selected_authors, selected
     )
 
 @callback(
-    [Output("corpus-category-dropdown", "value"),
-     Output("corpus-author-dropdown", "value"),
-     Output("corpus-title-dropdown", "value"),
-     Output("corpus-year-range", "value"),
-     Output("corpus-max-places-slider", "value"),
+    [Output("corpus-category-dropdown", "value", allow_duplicate=True),
+     Output("corpus-author-dropdown", "value", allow_duplicate=True),
+     Output("corpus-title-dropdown", "value", allow_duplicate=True),
+     Output("corpus-year-range", "value", allow_duplicate=True),
+     Output("corpus-max-places-slider", "value", allow_duplicate=True),
      Output("current-filters", "data", allow_duplicate=True),
      Output("reset-corpus-btn", "color"),
      Output("reset-corpus-btn", "title")],
@@ -586,9 +715,9 @@ def synchronize_metadata_filters(selected_categories, selected_authors, selected
 )
 def reset_corpus_filters(n_clicks_timestamp, n_clicks, color, title):
     """Require double-click to confirm reset. On first click, change color/title. On second click within 3s, reset."""
-    ctx = dash.callback_context
+    ctx = callback_context
     if not n_clicks:
-        raise dash.exceptions.PreventUpdate
+        raise PreventUpdate
     # Store last click timestamp in a hidden div or use local state
     if color != "danger":
         # First click: warn
@@ -604,62 +733,3 @@ def reset_corpus_filters(n_clicks_timestamp, n_clicks, color, title):
             'corpus_source': 'Corpus Builder'
         }
         return [], [], [], DEFAULT_YEAR_RANGE.copy(), 500, default_filters, "secondary", "Clear Filters (double-click to confirm)"
-
-# New simplified callback: only updates filters/global state
-@callback(
-    [Output("current-filters", "data", allow_duplicate=True),
-     Output("build-content-corpus-status", "children"),
-     Output("current-dhlabids-store", "data", allow_duplicate=True)],
-    [Input("build-content-corpus-btn", "n_clicks")],
-    [State("content-wordforms-input", "value"),
-     State("content-min-count-input", "value"),
-     State("current-filters", "data"),
-     State("corpus-operation", "data"),
-     State("current-dhlabids-store", "data")],
-    prevent_initial_call=True
-)
-def build_content_corpus_and_show_stats(n_clicks, wordforms, min_count, current_filters, operation, current_books):
-    if not n_clicks:
-        return dash.no_update, dash.no_update, dash.no_update
-    from ...utils.corpus_build import corpus_builder
-    current_books = current_books or []
-    dhlabids = current_books.copy()
-    # If corpus is empty, use all dhlabids from the database
-    if not dhlabids:
-        dhlabids = corpus_builder.get_corpus()
-        if not dhlabids:
-            # If still empty, fetch all from DB
-            import pandas as pd
-            from ...utils.db import get_db_connection
-            conn = get_db_connection()
-            df = pd.read_sql_query("SELECT dhlabid FROM corpus", conn)
-            dhlabids = df['dhlabid'].tolist()
-            conn.close()
-    words = [w.strip() for w in (wordforms or '').split(',') if w.strip()]
-    if not words:
-        return dash.no_update, dash.no_update
-    # Show spinner/message while building
-    status = dbc.Spinner("Preparing books...", color="primary", size="sm", fullscreen=False, spinner_style={"width": "1.5rem", "height": "1.5rem"})
-    try:
-        counts_df = count_words(dhlabids, words)
-        print(f"[ContentTab] Counts dataframe shape: {counts_df.shape}")
-        dhlabid_sums = counts_df.sum(axis=0)
-        selected_dhlabids = [int(dhl) for dhl, total in dhlabid_sums.items() if total >= (min_count or 1)]
-    except Exception as e:
-        error = html.Span(f"Error during content search: {e}", style={"color": "#dc2626"})
-        return dash.no_update, error, dash.no_update
-    if not selected_dhlabids:
-        no_matches = html.Span("Fant ingen bøker som matcher innholdssøket.", style={"color": "#dc2626", "fontWeight": "500"})
-        return dash.no_update, no_matches, dash.no_update
-    op = (operation or "intersection").lower()
-    updated_books = apply_book_operation(current_books, selected_dhlabids, operation=op)
-    place_tokens = fetch_place_tokens(updated_books)
-    new_filters = current_filters.copy() if current_filters else {}
-    new_filters['content_words'] = words
-    new_filters['content_min_count'] = min_count
-    new_filters['corpus_source'] = 'Content'
-    new_filters['last_operation'] = op
-    # Optionally, show a success message
-    status_done = html.Span("Books added!", style={"color": "#059669", "fontWeight": "500"})
-    new_filters['selected_tokens'] = place_tokens
-    return new_filters, status_done, updated_books

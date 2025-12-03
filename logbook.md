@@ -43,17 +43,23 @@ This logbook tracks the development progress, decisions, and challenges of the I
 
 ## Development Log
 
+### November 26, 2025
+- Marked `Corpus Modify` card as “ready”: layout tightened (Year → Metadata → Content), chip wiring verified, and builder visibility confirmed. Safe checkpoint before deployment tweaks.
+
 ### November 24, 2025 (Session 2: Authors & Images)
 **Progress**:
 - Introdusert en **Authors**-modul:
   - Ny pille "Authors" i venstre meny med "List"-valg.
   - Flytende kort med liste over alle forfattere i gjeldende korpus, filtrerbart søkefelt.
   - Detaljkort for valgt forfatter med bildegalleri (fra NB.no) og liste over bøker i korpuset.
+- Forfattere identifiseres nå via en syntetisk `author_key` (LOWER(TRIM(author))) slik at klikk i listen alltid finner korrekt person selv om navnet er skrevet forskjellig i databasen.
 - Implementert **Historiske Bilder** (IIIF):
   - Integrasjon mot NB.no sitt API for å hente bilder basert på søketermer (stedsnavn, forfatternavn).
   - Filterer på `mediaType=bilder` og sorterer etter dato (eldste først) for å finne relevante historiske foto.
   - Viser resultatene i en horisontal galleri-stripe i både "Place Info" og "Author Info".
   - Bilder er klikkbare og leder direkte til NB.no sin visning.
+- Utvidet bildehentingen med Gallica (BnF): SRU-søk → IIIF-manifest → thumbnails, slik at vi alltid får noen treff selv når NB ikke har materiale.
+- Galleriene viser nå inntil 5 bilder per kilde (NB + Gallica) med små kildebadges så brukeren ser hvor motivet kommer fra.
 - UX-forbedringer:
   - Fikset omnibox-oppførsel: søkeskuffen lukkes ved klikk utenfor, men holdes åpen ved interaksjon (klient-side `preventDefault` på `mousedown`).
   - Fikset minimering av "Place Details" (hindret blankt innhold/resize-glitch).

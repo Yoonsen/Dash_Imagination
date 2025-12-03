@@ -364,6 +364,83 @@ def _fetch_place_overview(token: str) -> dict | None:
 
 from dash_imagination.utils.images import fetch_historical_images
 
+
+def _build_image_tile(image: dict, *, height: int = 100, show_caption: bool = False) -> html.A | None:
+    """Create a clickable thumbnail with a source badge and optional caption."""
+    if not image or not image.get('thumbnail'):
+        return None
+
+    source_label = (image.get('source') or "NB.no").upper()
+    title = image.get('title') or "Historisk bilde"
+
+    badge = html.Span(
+        source_label,
+        style={
+            'position': 'absolute',
+            'top': '6px',
+            'left': '6px',
+            'backgroundColor': 'rgba(15,23,42,0.85)',
+            'color': '#f8fafc',
+            'fontSize': '9px',
+            'fontWeight': '600',
+            'padding': '2px 8px',
+            'borderRadius': '999px',
+            'textTransform': 'uppercase',
+            'letterSpacing': '0.08em',
+            'pointerEvents': 'none'
+        }
+    )
+
+    img = html.Img(
+        src=image['thumbnail'],
+        style={
+            'height': f'{height}px',
+            'width': 'auto',
+            'objectFit': 'cover',
+            'display': 'block'
+        }
+    )
+
+    wrapper = html.Div(
+        [img, badge],
+        style={
+            'position': 'relative',
+            'border': '1px solid #e2e8f0',
+            'borderRadius': '8px',
+            'backgroundColor': '#ffffff',
+            'display': 'inline-flex',
+            'alignItems': 'center',
+            'justifyContent': 'center',
+            'padding': '4px',
+            'minWidth': f'{int(height * 0.75)}px'
+        }
+    )
+
+    children = [wrapper]
+    if show_caption:
+        year = (image.get('date') or '')[:4]
+        caption = html.Div(
+            year,
+            style={
+                'fontSize': '10px',
+                'color': '#64748b',
+                'marginTop': '4px',
+                'textAlign': 'center'
+            }
+        )
+        children.append(caption)
+
+    href = image.get('view_url') or image.get('manifest') or "#"
+
+    return html.A(
+        children,
+        href=href,
+        target="_blank",
+        title=f"{title} ({image.get('date') or 'ukjent dato'})",
+        style={'textDecoration': 'none'}
+    )
+
+
 def _render_place_summary_from_search(place: dict) -> html.Div:
     books = place.get('books', [])
     
@@ -389,26 +466,21 @@ def _render_place_summary_from_search(place: dict) -> html.Div:
     # Image gallery section
     gallery = html.Div()
     if images:
+        thumb_elements = [
+            tile for tile in (_build_image_tile(img, height=100, show_caption=True) for img in images) if tile
+        ]
         gallery = html.Div([
-            html.Div("Historiske bilder (NB.no)", style={
+            html.Div("Historiske bilder (IIIF)", style={
                 'fontSize': '12px', 'fontWeight': '600', 'color': '#64748b', 
                 'marginBottom': '8px', 'textTransform': 'uppercase', 'letterSpacing': '0.05em'
             }),
-            html.Div([
-                html.A([
-                    html.Img(src=img['thumbnail'], style={
-                        'height': '100px', 'width': 'auto', 'borderRadius': '4px', 
-                        'border': '1px solid #e2e8f0', 'objectFit': 'cover'
-                    }),
-                    html.Div(f"{img['date'][:4] if img['date'] else ''}", style={
-                        'fontSize': '10px', 'color': '#666', 'marginTop': '2px', 'textAlign': 'center'
-                    })
-                ], href=img['view_url'], target="_blank", title=f"{img['title']} ({img['date']})", style={'textDecoration': 'none'})
-                for img in images
-            ], style={
-                'display': 'flex', 'gap': '10px', 'overflowX': 'auto', 
-                'paddingBottom': '8px', 'scrollbarWidth': 'thin'
-            })
+            html.Div(
+                thumb_elements,
+                style={
+                    'display': 'flex', 'gap': '10px', 'overflowX': 'auto', 
+                    'paddingBottom': '8px', 'scrollbarWidth': 'thin'
+                }
+            )
         ], style={'margin': '16px 0'})
 
     book_list = html.Div([
@@ -669,17 +741,17 @@ CARD_CHIP_GROUPS = [
         'children': [
             {
                 'chip_id': 'card-chip-corpus',
-                'label': 'Corpus',
-                'subtitle': 'View',
+                'label': 'View',
+                'subtitle': 'List',
                 'color_class': 'chip-corpus',
                 'title': 'Toggle Corpus View'
             },
             {
                 'chip_id': 'card-chip-builder',
-                'label': 'Corpus',
+                'label': 'Build',
                 'subtitle': 'Modify',
                 'color_class': 'chip-builder',
-                'title': 'Toggle Corpus Modify'
+                'title': 'Toggle Corpus Build/Modify'
             }
         ]
     },
@@ -898,7 +970,7 @@ def _register_window_callbacks():
         card_key = cfg['card_key']
 
         @app.callback(
-            Output(store_id, 'data'),
+            Output(store_id, 'data', allow_duplicate=True),
             Output(container_id, 'style', allow_duplicate=True),
             Output(body_id, 'style', allow_duplicate=True),
             Input(minimize_id, 'n_clicks'),
@@ -1061,8 +1133,8 @@ def get_places_for_map(filters=None, books=None, return_total=False, selected_to
                 WHERE p.token IN ({})
                 AND p.latitude IS NOT NULL 
                 AND p.longitude IS NOT NULL
-                AND p.latitude != '0'
-                AND p.longitude != '0'
+                AND CAST(p.latitude AS REAL) != 0
+                AND CAST(p.longitude AS REAL) != 0
             )
             SELECT 
                 sp.token,
@@ -1096,8 +1168,8 @@ def get_places_for_map(filters=None, books=None, return_total=False, selected_to
             WHERE b.dhlabid IN ({})
             AND p.latitude IS NOT NULL 
             AND p.longitude IS NOT NULL
-            AND p.latitude != '0'
-            AND p.longitude != '0'
+            AND CAST(p.latitude AS REAL) != 0
+            AND CAST(p.longitude AS REAL) != 0
             GROUP BY b.token, p.modern, p.latitude, p.longitude
             ORDER BY frequency DESC
             """
@@ -1189,7 +1261,8 @@ def get_corpus_authors(book_ids: list[int], filter_text: str = None) -> pd.DataF
     try:
         query = f"""
         SELECT 
-            author,
+            LOWER(TRIM(author)) as author_key,
+            MIN(TRIM(author)) as display_name,
             COUNT(DISTINCT dhlabid) as book_count,
             MIN(year) as min_year,
             MAX(year) as max_year
@@ -1205,8 +1278,8 @@ def get_corpus_authors(book_ids: list[int], filter_text: str = None) -> pd.DataF
             params.append(f"%{filter_text.lower()}%")
             
         query += """
-        GROUP BY author
-        ORDER BY book_count DESC, author ASC
+        GROUP BY LOWER(TRIM(author))
+        ORDER BY book_count DESC, display_name ASC
         """
         return pd.read_sql_query(query, conn, params=tuple(params))
     finally:
@@ -1264,34 +1337,37 @@ def update_author_list(book_ids, filter_text):
 
     items = []
     for _, row in df.iterrows():
-        author = row['author']
+        author_key = row['author_key']
+        author = row['display_name']
         count = row['book_count']
         years = f"({int(row['min_year'])}–{int(row['max_year'])})" if pd.notnull(row['min_year']) else ""
         
         items.append(
-            html.Div([
-                html.Div([
-                    html.Span(author, style={'fontWeight': '500', 'color': '#334155'}),
-                    html.Span(years, style={'fontSize': '12px', 'color': '#94a3b8', 'marginLeft': '6px'})
-                ]),
-                html.Div([
-                    html.Span(f"{count} books", style={'fontSize': '12px', 'color': '#64748b', 'marginRight': '10px'}),
-                    html.Button(
-                        html.I(className="fas fa-chevron-right"),
-                        id={'type': 'author-select-btn', 'author': author},
-                        className="btn btn-sm btn-light",
-                        style={'padding': '2px 6px', 'fontSize': '12px'}
-                    )
-                ], style={'display': 'flex', 'alignItems': 'center'})
-            ], style={
-                'display': 'flex', 
-                'justifyContent': 'space-between', 
-                'alignItems': 'center',
-                'padding': '8px 12px',
-                'borderBottom': '1px solid #f1f5f9',
-                'cursor': 'pointer',
-                'transition': 'background-color 0.2s'
-            }, className="author-list-item")
+            html.Button(
+                [
+                    html.Div([
+                        html.Span(author, style={'fontWeight': '500', 'color': '#334155'}),
+                        html.Span(years, style={'fontSize': '12px', 'color': '#94a3b8', 'marginLeft': '6px'})
+                    ]),
+                    html.Div([
+                        html.Span(f"{count} books", style={'fontSize': '12px', 'color': '#64748b', 'marginRight': '10px'}),
+                        html.I(className="fas fa-chevron-right", style={'color': '#94a3b8'})
+                    ], style={'display': 'flex', 'alignItems': 'center'})
+                ],
+                id={'type': 'author-select-row', 'author_key': author_key, 'display_name': author},
+                n_clicks=0,
+                type='button',
+                className="author-list-item",
+                style={
+                    'display': 'flex',
+                    'justifyContent': 'space-between',
+                    'alignItems': 'center',
+                    'padding': '8px 12px',
+                    'borderBottom': '1px solid #f1f5f9',
+                    'cursor': 'pointer',
+                    'transition': 'background-color 0.2s'
+                }
+            )
         )
         
     return html.Div(items), f"{len(df):,} authors"
@@ -1299,7 +1375,7 @@ def update_author_list(book_ids, filter_text):
 @app.callback(
     Output('author-info-container', 'style', allow_duplicate=True),
     Output('author-info-content', 'children'),
-    Input({'type': 'author-select-btn', 'author': ALL}, 'n_clicks'),
+    Input({'type': 'author-select-row', 'author_key': ALL, 'display_name': ALL}, 'n_clicks'),
     State('author-info-container', 'style'),
     State('current-dhlabids-store', 'data'),
     prevent_initial_call=True
@@ -1316,35 +1392,31 @@ def show_author_details(n_clicks, current_style, current_books):
         
     try:
         prop_id = json.loads(trigger['prop_id'].split('.')[0])
-        author_name = prop_id['author']
-    except:
+        author_key = prop_id['author_key']
+        author_display = prop_id.get('display_name') or author_key
+    except Exception:
         raise PreventUpdate
 
     # Fetch details
     # 1. Images (fetch multiple, like for places)
-    images = fetch_historical_images(author_name, limit=5)
+    images = fetch_historical_images(author_display, limit=5)
     image_section = html.Div()
     if images:
+        thumb_elements = [
+            tile for tile in (_build_image_tile(img, height=120, show_caption=True) for img in images) if tile
+        ]
         image_section = html.Div([
-            html.Div("Historiske bilder (NB.no)", style={
+            html.Div("Historiske bilder (IIIF)", style={
                 'fontSize': '12px', 'fontWeight': '600', 'color': '#64748b', 
                 'marginBottom': '8px', 'textTransform': 'uppercase', 'letterSpacing': '0.05em'
             }),
-            html.Div([
-                html.A([
-                    html.Img(src=img['thumbnail'], style={
-                        'height': '120px', 'width': 'auto', 'borderRadius': '4px', 
-                        'border': '1px solid #e2e8f0', 'objectFit': 'cover'
-                    }),
-                    html.Div(f"{img['date'][:4] if img['date'] else ''}", style={
-                        'fontSize': '10px', 'color': '#666', 'marginTop': '2px', 'textAlign': 'center'
-                    })
-                ], href=img['view_url'], target="_blank", title=f"{img['title']} ({img['date']})", style={'textDecoration': 'none'})
-                for img in images
-            ], style={
-                'display': 'flex', 'gap': '10px', 'overflowX': 'auto', 
-                'paddingBottom': '8px', 'scrollbarWidth': 'thin'
-            })
+            html.Div(
+                thumb_elements,
+                style={
+                    'display': 'flex', 'gap': '10px', 'overflowX': 'auto', 
+                    'paddingBottom': '8px', 'scrollbarWidth': 'thin'
+                }
+            )
         ], style={'marginBottom': '16px'})
     else:
         # Placeholder or empty
@@ -1357,13 +1429,14 @@ def show_author_details(n_clicks, current_style, current_books):
     conn = get_db_connection()
     try:
         books_query = f"""
-        SELECT title, year, urn
+        SELECT title, year, urn, author
         FROM corpus
         WHERE dhlabid IN ({','.join(['?'] * len(current_books))})
-        AND author = ?
+        AND LOWER(TRIM(author)) = ?
         ORDER BY year ASC
         """
-        books_df = pd.read_sql_query(books_query, conn, params=tuple(list(current_books) + [author_name]))
+        params = tuple(list(current_books) + [author_key])
+        books_df = pd.read_sql_query(books_query, conn, params=params)
     finally:
         conn.close()
         
@@ -1380,7 +1453,7 @@ def show_author_details(n_clicks, current_style, current_books):
     ], style={'maxHeight': '200px', 'overflowY': 'auto'})
 
     content = html.Div([
-        html.H4(author_name, style={'marginBottom': '16px', 'color': '#1e293b'}),
+        html.H4(author_display, style={'marginBottom': '16px', 'color': '#1e293b'}),
         image_section,
         html.H6(f"Books in Corpus ({len(books_df)})", style={'marginTop': '16px', 'marginBottom': '8px', 'color': '#64748b', 'fontSize': '12px', 'textTransform': 'uppercase'}),
         book_list
@@ -2893,6 +2966,41 @@ def toggle_place_names_container(chip_btn, current_style, window_state, body_sty
     elif should_show:
         window_state['minimized'] = False
         # ensure body props reset if they were collapsed previously
+        for prop in MINIMIZE_BODY_PROPS:
+            body_style.pop(prop, None)
+        body_style.update({
+            'flex': '1 1 auto',
+            'minHeight': 0,
+            'display': 'flex',
+            'flexDirection': 'column'
+        })
+
+    return new_style, window_state, body_style
+
+
+@app.callback(
+    Output('corpus-builder-card', 'style', allow_duplicate=True),
+    Output('corpus-builder-window-state', 'data', allow_duplicate=True),
+    Output('corpus-builder-body', 'style', allow_duplicate=True),
+    Input('card-chip-builder', 'n_clicks'),
+    State('corpus-builder-card', 'style'),
+    State('corpus-builder-window-state', 'data'),
+    State('corpus-builder-body', 'style'),
+    prevent_initial_call=True
+)
+def toggle_corpus_builder_from_chip(chip_clicks, current_style, window_state, body_style):
+    if not chip_clicks:
+        raise PreventUpdate
+    new_style = dict(current_style or {})
+    window_state = (window_state or {'minimized': False}).copy()
+    body_style = dict(body_style or {})
+
+    current_display = new_style.get('display', 'none')
+    should_show = current_display == 'none'
+    new_style['display'] = 'flex' if should_show else 'none'
+
+    if should_show:
+        window_state['minimized'] = False
         for prop in MINIMIZE_BODY_PROPS:
             body_style.pop(prop, None)
         body_style.update({
@@ -4546,9 +4654,13 @@ def update_corpus_info_and_table(_, filter_data, current_books, current_filters)
         info = pd.read_sql_query(query, conn, params=tuple(books)).iloc[0]
         # Places count
         places_query = f"""
-        SELECT COUNT(DISTINCT token) as place_count
-        FROM books
-        WHERE dhlabid IN ({','.join(['?'] * len(books))})
+        SELECT COUNT(DISTINCT b.token) as place_count
+        FROM books b
+        JOIN places p ON b.token = p.token
+        WHERE b.dhlabid IN ({','.join(['?'] * len(books))})
+          AND p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+          AND CAST(p.latitude AS REAL) != 0
+          AND CAST(p.longitude AS REAL) != 0
         """
         place_count = pd.read_sql_query(places_query, conn, params=tuple(books))['place_count'].iloc[0]
         # Year range
@@ -4692,7 +4804,8 @@ def get_all_places_for_corpus(book_ids):
         JOIN places p ON b.token = p.token
         WHERE b.dhlabid IN ({','.join(['?'] * len(book_ids))})
           AND p.latitude IS NOT NULL AND p.longitude IS NOT NULL
-          AND p.latitude != '0' AND p.longitude != '0'
+          AND CAST(p.latitude AS REAL) != 0
+          AND CAST(p.longitude AS REAL) != 0
         GROUP BY b.token, p.modern, p.latitude, p.longitude
         '''
         df = pd.read_sql_query(query, conn, params=tuple(book_ids))
