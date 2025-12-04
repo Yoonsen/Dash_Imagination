@@ -510,23 +510,42 @@ def _render_place_summary_from_search(place: dict) -> html.Div:
     return html.Div([header, gallery, html.Hr(style={'margin': '10px 0'}), book_list])
 
 
-def _fetch_author_book_ids(author_name: str) -> list[int]:
-    if not author_name:
+def _fetch_author_book_ids(author_key: str | None = None, author_name: str | None = None) -> list[int]:
+    """
+    Resolve a list of DHLab IDs for a given author.
+
+    Prefer passing `author_key` (LOWER(TRIM(author))) so we have a stable lookup.
+    `author_name` is kept for backwards compatibility and falls back to a LIKE query.
+    """
+    if not author_key and not author_name:
         return []
     conn = get_db_connection()
     try:
-        pattern = f"%{author_name}%"
-        df = pd.read_sql_query(
-            """
-            SELECT DISTINCT dhlabid
-            FROM corpus
-            WHERE author IS NOT NULL
-            AND TRIM(author) != ''
-            AND LOWER(author) LIKE LOWER(?)
-            """,
-            conn,
-            params=(pattern,)
-        )
+        if author_key:
+            df = pd.read_sql_query(
+                """
+                SELECT DISTINCT dhlabid
+                FROM corpus
+                WHERE author IS NOT NULL
+                  AND TRIM(author) != ''
+                  AND LOWER(TRIM(author)) = ?
+                """,
+                conn,
+                params=(author_key,)
+            )
+        else:
+            pattern = f"%{author_name}%"
+            df = pd.read_sql_query(
+                """
+                SELECT DISTINCT dhlabid
+                FROM corpus
+                WHERE author IS NOT NULL
+                  AND TRIM(author) != ''
+                  AND LOWER(author) LIKE LOWER(?)
+                """,
+                conn,
+                params=(pattern,)
+            )
         if df.empty:
             return []
         return df['dhlabid'].dropna().astype(int).tolist()
@@ -1395,33 +1414,67 @@ def update_author_list(book_ids, filter_text):
     return html.Div(items), f"{len(df):,} authors"
 
 @app.callback(
-    Output('author-info-container', 'style', allow_duplicate=True),
-    Output('author-info-content', 'children'),
-    Input({'type': 'author-select-row', 'author_key': ALL, 'display_name': ALL}, 'n_clicks'),
-    State('author-info-container', 'style'),
-    State('current-dhlabids-store', 'data'),
+    Output('selected-author-store', 'data'),
+    Input({'type': 'author-select-row', 'author_key': ALL, 'display_name': ALL}, 'n_clicks_timestamp'),
     prevent_initial_call=True
 )
-def show_author_details(n_clicks, current_style, current_books):
+def set_selected_author(n_clicks):
     ctx = dash.callback_context
     if not ctx.triggered:
         raise PreventUpdate
         
     # Find which button was clicked
     trigger = ctx.triggered[0]
-    if not trigger['value']:
+    trigger_timestamp = trigger.get('value')
+
+    trigger_id = getattr(ctx, "triggered_id", None)
+    prop_id = None
+    if isinstance(trigger_id, dict):
+        prop_id = trigger_id
+    else:
+        raw_id = trigger['prop_id'].split('.', 1)[0]
+        try:
+            prop_id = json.loads(raw_id)
+        except Exception as exc:
+            print(f"[AuthorDetails] Unable to parse trigger id: {exc} (raw={raw_id})")
+            raise PreventUpdate
+
+    author_key = prop_id.get('author_key')
+    display_name = prop_id.get('display_name')
+    if not trigger_timestamp:
+        print(f"[AuthorDetails] Proceeding despite zero-timestamp for key={author_key} ({display_name})")
+    else:
+        print(f"[AuthorDetails] Button click captured for key={author_key} ({display_name}) ts={trigger_timestamp}")
+    return prop_id
+
+
+@app.callback(
+    Output('author-info-container', 'style', allow_duplicate=True),
+    Output('author-info-content', 'children'),
+    Input('selected-author-store', 'data'),
+    State('author-info-container', 'style'),
+    State('current-dhlabids-store', 'data'),
+    prevent_initial_call=True
+)
+def show_author_details(selected_author, current_style, current_books):
+    if not selected_author:
         raise PreventUpdate
-        
-    try:
-        prop_id = json.loads(trigger['prop_id'].split('.')[0])
-        author_key = prop_id['author_key']
-        author_display = prop_id.get('display_name') or author_key
-    except Exception:
+
+    author_key = selected_author.get('author_key')
+    author_display = selected_author.get('display_name') or author_key
+    if not author_key:
         raise PreventUpdate
+
+    current_books = current_books or []
+    print(f"[AuthorDetails] Requested key={author_key} ({author_display}), corpus_size={len(current_books)}")
 
     # Fetch details
     # 1. Images (fetch multiple, like for places)
-    images = fetch_historical_images(author_display, limit=5)
+    try:
+        images = fetch_historical_images(author_display, limit=5)
+    except Exception as exc:
+        print(f"[AuthorDetails] Image fetch failed for {author_display}: {exc}")
+        images = []
     image_section = html.Div()
     if images:
         thumb_elements = [
@@ -1448,19 +1501,25 @@ def show_author_details(n_clicks, current_style, current_books):
         ], style={'width': '100%', 'height': '120px', 'display': 'flex', 'flexDirection': 'column', 'alignItems': 'center', 'justifyContent': 'center', 'backgroundColor': '#f8fafc', 'borderRadius': '8px', 'marginBottom': '12px'})
 
     # 2. Books in corpus
-    conn = get_db_connection()
-    try:
-        books_query = f"""
-        SELECT title, year, urn, author
-        FROM corpus
-        WHERE dhlabid IN ({','.join(['?'] * len(current_books))})
-        AND LOWER(TRIM(author)) = ?
-        ORDER BY year ASC
-        """
-        params = tuple(list(current_books) + [author_key])
-        books_df = pd.read_sql_query(books_query, conn, params=params)
-    finally:
-        conn.close()
+    books_df = pd.DataFrame()
+    if current_books:
+        conn = get_db_connection()
+        try:
+            books_query = f"""
+            SELECT title, year, urn, author
+            FROM corpus
+            WHERE dhlabid IN ({','.join(['?'] * len(current_books))})
+            AND LOWER(TRIM(author)) = ?
+            ORDER BY year ASC
+            """
+            params = tuple(list(current_books) + [author_key])
+            books_df = pd.read_sql_query(books_query, conn, params=params)
+        finally:
+            conn.close()
+    else:
+        print("[AuthorDetails] current_books is empty – no corpus loaded")
+
+    print(f"[AuthorDetails] Book rows for key={author_key}: {len(books_df)}")
         
     book_list = html.Div([
         html.Div([
@@ -4459,12 +4518,15 @@ def update_global_search_results(search_term, filter_selection):
             author_clause = "LOWER(author) LIKE LOWER(?)"
             author_params = [search_pattern]
         authors_query = f"""
-            SELECT c.author, COUNT(DISTINCT c.dhlabid) AS book_count
+            SELECT 
+                LOWER(TRIM(c.author)) as author_key,
+                c.author,
+                COUNT(DISTINCT c.dhlabid) AS book_count
             FROM corpus c
             WHERE c.author IS NOT NULL
               AND TRIM(c.author) != ''
               AND {author_clause}
-            GROUP BY c.author
+            GROUP BY c.author, author_key
             ORDER BY CASE WHEN LOWER(c.author) = LOWER(?) THEN 0 ELSE 1 END,
                      c.author
             LIMIT 5
@@ -4588,6 +4650,7 @@ def update_global_search_results(search_term, filter_selection):
         for _, author in authors_df.iterrows():
             name = author.get('author')
             count = int(author.get('book_count') or 0)
+            author_key = author.get('author_key')
             items.append(
                 html.Div([
                     html.Div([
@@ -4596,7 +4659,7 @@ def update_global_search_results(search_term, filter_selection):
                     ], style={'display': 'flex', 'flexDirection': 'column', 'gap': '2px'}),
                     html.Button(
                         "Legg bøker til korpus",
-                        id={'type': 'search-author-action', 'author': name},
+                        id={'type': 'search-author-action', 'author_key': author_key, 'display_name': name},
                         n_clicks=0,
                         style={
                             'border': 'none',
@@ -4756,8 +4819,9 @@ def add_author_books_from_search(_, current_books):
         trigger_id = json.loads(prop)
     except (json.JSONDecodeError, TypeError):
         raise PreventUpdate
-    author = trigger_id.get('author')
-    dhlabids = _fetch_author_book_ids(author)
+    author_key = trigger_id.get('author_key')
+    display_name = trigger_id.get('display_name')
+    dhlabids = _fetch_author_book_ids(author_key=author_key, author_name=display_name)
     if not dhlabids:
         raise PreventUpdate
     books = set(current_books or [])
