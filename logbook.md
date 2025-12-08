@@ -46,6 +46,14 @@ This logbook tracks the development progress, decisions, and challenges of the I
 ### November 26, 2025
 - Marked `Corpus Modify` card as “ready”: layout tightened (Year → Metadata → Content), chip wiring verified, and builder visibility confirmed. Safe checkpoint before deployment tweaks.
 
+### December 8, 2025 – Historical Image Gallery
+- Levered thumbnailstripene i Place/Author-kortene om til klikkbare triggers (pattern matching IDs) som åpner et felles `dbc.Modal` (`image-gallery-modal`) med responsive kort (`image-gallery-grid`).
+- La til `place-images-store`, `author-images-store` og `image-gallery-store` slik at NB-/Gallica-responsen caches og hydreres via `hydrate_gallery_images` før modalen vises. Dette gjør at vi bare trenger å hente IIIF-manifester én gang per entitet.
+- Bygget `hydrate_gallery_images`, `resolve_iiif_image` m.m. i `utils/images.py` for å støtte både IIIF Presentation v2 (`sequences/canvases`) og v3 (`items`), og generere `full`-URLer i formatet `/full/!1400,1400/0/default.jpg`.
+- Oppgradert galleriet med kildebadges, “Åpne kilde”-lenker og CSS (`image-thumb`, `image-gallery-card`) så NB- og Gallica-materiale ser ut som én helhetlig opplevelse.
+- Rettet modaldetaljer: `dbc.ModalHeader` får nå et custom child-tre i stedet for `close_button`, og `html.Img`-komponenten ble renset for uoffisielle props (`loading`) etter Dash-runtime-feil.
+- Neste steg: vurdere keyboard-/swipe-navigasjon og dedikerte mobile presets (nåværende laptop-demo funker, men kortene kan flyttes nærmere hjørnet ved behov).
+
 ### November 24, 2025 (Session 2: Authors & Images)
 **Progress**:
 - Introdusert en **Authors**-modul:

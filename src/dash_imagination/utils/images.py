@@ -173,6 +173,137 @@ def fetch_gallica_images(search_term: str, limit: int = 5) -> list[dict]:
     return images
 
 
+def hydrate_gallery_images(
+    images: list[dict] | None,
+    *,
+    max_items: int = 8,
+    max_px: int = 1400
+) -> list[dict]:
+    """
+    Resolve IIIF manifests so the UI can display larger previews.
+
+    Returns a copy of the incoming list with an extra `full` key that points to
+    a high-resolution rendition (falls back to the thumbnail when unavailable).
+    """
+    if not images:
+        return []
+
+    hydrated: list[dict] = []
+    for image in images[: max(1, max_items)]:
+        manifest_url = image.get("manifest")
+        full_src = resolve_iiif_image(manifest_url, max_px=max_px) if manifest_url else None
+        hydrated.append(
+            {
+                **image,
+                "full": full_src or image.get("thumbnail"),
+            }
+        )
+    return hydrated
+
+
+def resolve_iiif_image(manifest_url: str | None, *, max_px: int = 1400) -> str | None:
+    """
+    Best-effort fetch of a single high-resolution image URL from a IIIF manifest.
+    Supports both Presentation v2 (`sequences`) and v3 (`items`).
+    """
+    if not manifest_url:
+        return None
+    try:
+        response = requests.get(manifest_url, timeout=6)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as exc:
+        logger.warning("Unable to load IIIF manifest %s: %s", manifest_url, exc)
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    # IIIF Presentation v3
+    items = data.get("items")
+    if isinstance(items, list):
+        for canvas in items:
+            url = _extract_from_canvas_v3(canvas, max_px)
+            if url:
+                return url
+
+    # IIIF Presentation v2
+    sequences = data.get("sequences")
+    if isinstance(sequences, list):
+        for sequence in sequences:
+            canvases = sequence.get("canvases", [])
+            for canvas in canvases:
+                url = _extract_from_canvas_v2(canvas, max_px)
+                if url:
+                    return url
+
+    return None
+
+
+def _extract_from_canvas_v3(canvas: dict, max_px: int) -> str | None:
+    if not isinstance(canvas, dict):
+        return None
+    annotation_pages = canvas.get("items", [])
+    for page in annotation_pages:
+        items = page.get("items", [])
+        for annotation in items:
+            body = annotation.get("body")
+            if isinstance(body, list):
+                for candidate in body:
+                    url = _build_fullsize_from_body(candidate, max_px)
+                    if url:
+                        return url
+            else:
+                url = _build_fullsize_from_body(body, max_px)
+                if url:
+                    return url
+    return None
+
+
+def _build_fullsize_from_body(body: dict | None, max_px: int) -> str | None:
+    if not isinstance(body, dict):
+        return None
+    image_id = body.get("id") or body.get("@id")
+    service = body.get("service")
+    return _compose_iiif_url(image_id, service, max_px)
+
+
+def _extract_from_canvas_v2(canvas: dict, max_px: int) -> str | None:
+    if not isinstance(canvas, dict):
+        return None
+    images = canvas.get("images", [])
+    for image in images:
+        resource = image.get("resource")
+        url = _build_fullsize_from_resource(resource, max_px)
+        if url:
+            return url
+    return None
+
+
+def _build_fullsize_from_resource(resource: dict | None, max_px: int) -> str | None:
+    if not isinstance(resource, dict):
+        return None
+    image_id = resource.get("@id") or resource.get("id")
+    service = resource.get("service")
+    return _compose_iiif_url(image_id, service, max_px)
+
+
+def _compose_iiif_url(image_id: str | None, service: dict | str | None, max_px: int) -> str | None:
+    service_id = None
+    if isinstance(service, list) and service:
+        service = service[0]
+    if isinstance(service, dict):
+        service_id = service.get("id") or service.get("@id")
+    elif isinstance(service, str):
+        service_id = service
+
+    if service_id:
+        base = service_id.rstrip("/")
+        return f"{base}/full/!{max_px},{max_px}/0/default.jpg"
+
+    return image_id
+
+
 def _first_text(parent, tag: str, ns: dict) -> str | None:
     """
     Retrieve the text for the first matching child element.

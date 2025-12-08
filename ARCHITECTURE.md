@@ -85,7 +85,14 @@ Session-specific state is kept in `dcc.Store` components to avoid leaking contex
     - Highlights from collocation queries (places near keywords).
     - Temporary “focus” subsets from user selections.
 
-These stores are read and written by Dash callbacks, ensuring consistent state across panels, dialogs, and map overlays.
+- `place-images-store`, `author-images-store`
+  - Cache the latest NB/Gallica payload for the active place/author so thumbnails can render without another HTTP round-trip.
+  - Preserve titles, dates, manifests, and `view_url`s for the fullscreen gallery callback.
+
+- `image-gallery-store`
+  - Holds the hydrated IIIF payload (after `hydrate_gallery_images` resolves `full` image URLs) so the modal can be reopened or extended without reprocessing.
+
+These stores are read and written by Dash callbacks, ensuring consistent state across panels, dialogs, map overlays, and the historical image gallery.
 
 ### 2.3 Floating Dialog Shell
 - Shared header via `card_title_bar` renders macOS-like buttons:
@@ -95,7 +102,15 @@ These stores are read and written by Dash callbacks, ensuring consistent state a
 - Each dialog stores state in `*-window-state` so minimize/restore survives size changes.
 - Dragging is handled client-side (`assets/drag.js`) with a single interaction pattern across cards.
 
-### 2.4 Core Callbacks
+### 2.4 Historical Image Gallery
+- Place and Author dialogs now render IIIF thumbnails with pattern-matching IDs (`{"type": "image-thumb", "context": "place" | "author", "index": n}`).
+- Clicking a thumbnail triggers a shared callback that:
+  1. Loads the cached NB/Gallica payload from `place-images-store` or `author-images-store`.
+  2. Hydrates the manifests via `hydrate_gallery_images`, resolving up to eight `full` IIIF URLs.
+  3. Pushes the ordered set to `image-gallery-store` and opens `image-gallery-modal`, a `dbc.Modal` containing a responsive grid (`image-gallery-grid`) with metadata, source badges, and “Åpne kilde” links.
+- Because the modal consumes store data, any future surface (e.g., omnibox cards) can launch the same gallery without duplicating fetch logic.
+
+### 2.5 Core Callbacks
 
 Key callback groups:
 
@@ -229,6 +244,8 @@ Integration for retrieving historical images related to places and authors.
 **Usage in App:**
 - **Place Info Card**: When viewing a place, fetch relevant historical images (e.g., pre-1920) using the place name.
 - Display images in a gallery or carousel within the place details.
+- Cache results in `place-images-store` / `author-images-store`, then hydrate the returned IIIF manifests via `hydrate_gallery_images` so the fullscreen gallery can show large previews (`.../full/!{max_px},{max_px}/0/default.jpg`) regardless of Presentation v2/v3 format.
+- Fallback to the Gallica integration (below) when NB has no suitable material, ensuring the UI always offers a handful of historical images per entity.
 
 ### 4.4 Qdrant (Image Similarity, Planned UI Integration)
 

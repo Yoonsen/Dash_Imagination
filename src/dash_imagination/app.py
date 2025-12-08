@@ -367,10 +367,26 @@ def _fetch_place_overview(token: str) -> dict | None:
         conn.close()
 
 
-from dash_imagination.utils.images import fetch_historical_images
+from dash_imagination.utils.images import fetch_historical_images, hydrate_gallery_images
 
 
-def _build_image_tile(image: dict, *, height: int = 100, show_caption: bool = False) -> html.A | None:
+def _make_image_store_payload(source: str, label: str | None, subtitle: str | None, images: list[dict]) -> dict:
+    return {
+        'source': source,
+        'label': label,
+        'subtitle': subtitle,
+        'images': images or []
+    }
+
+
+def _build_image_tile(
+    image: dict,
+    *,
+    height: int = 100,
+    show_caption: bool = False,
+    context: str = "place",
+    index: int = 0
+) -> html.Div | None:
     """Create a clickable thumbnail with a source badge and optional caption."""
     if not image or not image.get('thumbnail'):
         return None
@@ -436,17 +452,68 @@ def _build_image_tile(image: dict, *, height: int = 100, show_caption: bool = Fa
         children.append(caption)
 
     href = image.get('view_url') or image.get('manifest') or "#"
-
-    return html.A(
-        children,
+    link = html.A(
+        "Åpne kilde",
         href=href,
         target="_blank",
-        title=f"{title} ({image.get('date') or 'ukjent dato'})",
-        style={'textDecoration': 'none'}
+        className="image-thumb-link"
+    )
+    children.append(link)
+
+    return html.Div(
+        children,
+        id={'type': 'image-thumb', 'context': context, 'index': index},
+        n_clicks=0,
+        role='button',
+        tabIndex=0,
+        className="image-thumb",
+        title=f"{title} ({image.get('date') or 'ukjent dato'})"
     )
 
 
-def _render_place_summary_from_search(place: dict) -> html.Div:
+def _build_gallery_card(image: dict) -> html.Div | None:
+    if not image:
+        return None
+    full_src = image.get('full') or image.get('thumbnail')
+    if not full_src:
+        return None
+    title = image.get('title') or "Historisk bilde"
+    date = image.get('date') or "ukjent"
+    source_label = image.get('source') or "NB.no"
+    description = image.get('description') or ''
+
+    meta = html.Div([
+        html.Strong(title),
+        html.Span(f"{date}", style={'display': 'block', 'color': '#475569'}),
+        html.Span(description, style={'display': 'block'}) if description else None
+    ], className="image-meta")
+
+    actions = html.Div([
+        html.Span(source_label.upper(), className="source-badge"),
+        html.A(
+            "Åpne kilde",
+            href=image.get('view_url') or image.get('manifest') or "#",
+            target="_blank",
+            className="image-gallery-link"
+        )
+    ], className="image-actions")
+
+    return html.Div([
+        html.Img(
+            src=full_src,
+            style={
+                'width': '100%',
+                'height': 'auto',
+                'borderRadius': '8px',
+                'backgroundColor': '#000'
+            }
+        ),
+        meta,
+        actions
+    ], className="image-gallery-card")
+
+
+def _render_place_summary_from_search(place: dict) -> tuple[html.Div, list[dict]]:
     books = place.get('books', [])
     
     # Fetch historical images
@@ -470,10 +537,19 @@ def _render_place_summary_from_search(place: dict) -> html.Div:
     
     # Image gallery section
     gallery = html.Div()
+    thumb_elements: list[html.Div] = []
     if images:
-        thumb_elements = [
-            tile for tile in (_build_image_tile(img, height=100, show_caption=True) for img in images) if tile
-        ]
+        for idx, img in enumerate(images):
+            tile = _build_image_tile(
+                img,
+                height=100,
+                show_caption=True,
+                context='place',
+                index=idx
+            )
+            if tile:
+                thumb_elements.append(tile)
+    if thumb_elements:
         gallery = html.Div([
             html.Div("Historiske bilder (IIIF)", style={
                 'fontSize': '12px', 'fontWeight': '600', 'color': '#64748b', 
@@ -507,7 +583,8 @@ def _render_place_summary_from_search(place: dict) -> html.Div:
         for row in books if row.get('title')
     ]) if books else html.Div("No book details available", style={'color': '#475569'})
 
-    return html.Div([header, gallery, html.Hr(style={'margin': '10px 0'}), book_list])
+    summary = html.Div([header, gallery, html.Hr(style={'margin': '10px 0'}), book_list])
+    return summary, images
 
 
 def _fetch_author_book_ids(author_key: str | None = None, author_name: str | None = None) -> list[int]:
@@ -1451,6 +1528,7 @@ def set_selected_author(n_clicks):
 @app.callback(
     Output('author-info-container', 'style', allow_duplicate=True),
     Output('author-info-content', 'children'),
+    Output('author-images-store', 'data'),
     Input('selected-author-store', 'data'),
     State('author-info-container', 'style'),
     State('current-dhlabids-store', 'data'),
@@ -1477,9 +1555,17 @@ def show_author_details(selected_author, current_style, current_books):
         images = []
     image_section = html.Div()
     if images:
-        thumb_elements = [
-            tile for tile in (_build_image_tile(img, height=120, show_caption=True) for img in images) if tile
-        ]
+        thumb_elements = []
+        for idx, img in enumerate(images):
+            tile = _build_image_tile(
+                img,
+                height=120,
+                show_caption=True,
+                context='author',
+                index=idx
+            )
+            if tile:
+                thumb_elements.append(tile)
         image_section = html.Div([
             html.Div("Historiske bilder (IIIF)", style={
                 'fontSize': '12px', 'fontWeight': '600', 'color': '#64748b', 
@@ -1543,7 +1629,8 @@ def show_author_details(selected_author, current_style, current_books):
     style = dict(current_style or {})
     style['display'] = 'flex'
     
-    return style, content
+    image_payload = _make_image_store_payload('author', author_display, None, images)
+    return style, content, image_payload
 
 @app.callback(
     Output('author-info-container', 'style', allow_duplicate=True),
@@ -1986,6 +2073,42 @@ app.layout = html.Div([
     create_place_similarity_dialog(),
     create_author_list_card(),
     create_author_info_card(),
+    dbc.Modal(
+        [
+            dbc.ModalHeader(
+                html.Div(
+                    [
+                        dbc.ModalTitle("Historiske bilder", id='image-gallery-title'),
+                        html.Button(
+                            html.Span(className="visually-hidden", children="Lukk"),
+                            id='image-gallery-dismiss',
+                            className='btn-close',
+                            n_clicks=0,
+                            type='button'
+                        )
+                    ],
+                    className='d-flex align-items-center justify-content-between w-100'
+                ),
+                close_button=False
+            ),
+            dbc.ModalBody(
+                dcc.Loading(
+                    html.Div(id='image-gallery-grid', className='image-gallery-grid'),
+                    type='default'
+                )
+            ),
+            dbc.ModalFooter(
+                dbc.Button("Lukk", id='image-gallery-close', color='secondary', n_clicks=0)
+            )
+        ],
+        id='image-gallery-modal',
+        is_open=False,
+        backdrop='static',
+        size='xl',
+        scrollable=True,
+        centered=True,
+        className='image-gallery-modal'
+    ),
 
     # Hidden divs and stores
     html.Div(id='reset-status', style={'display': 'none'}),
@@ -2017,6 +2140,9 @@ app.layout = html.Div([
     dcc.Store(id='similarity-card-window-state', data={'minimized': False}),
     dcc.Store(id='global-search-filter-store', data=['places', 'books', 'authors']),
     dcc.Store(id='similarity-places-data'),
+    dcc.Store(id='place-images-store', data={'source': 'place', 'label': None, 'subtitle': None, 'images': []}),
+    dcc.Store(id='author-images-store', data={'source': 'author', 'label': None, 'subtitle': None, 'images': []}),
+    dcc.Store(id='image-gallery-store'),
 
     # Add the new corpus builder card
     create_corpus_builder_card(categories_list=categories_list, authors_list=authors_list, titles_list=titles_list),
@@ -3715,8 +3841,9 @@ def handle_place_click(n_clicks, ids, lats, lons, hovers):
 
 # Callback to update place summary
 @app.callback(
-    [Output('place-summary-container', 'style'),
-     Output('place-summary', 'children')],
+    Output('place-summary-container', 'style'),
+    Output('place-summary', 'children'),
+    Output('place-images-store', 'data', allow_duplicate=True),
     [Input('main-map', 'clickData'),
      Input('selected-place', 'data')],
     [State('place-summary-container', 'style'),
@@ -3731,7 +3858,7 @@ def update_place_summary(click_data, selected_place, current_style, current_book
     if triggered == 'main-map':
         try:
             if not click_data or 'points' not in click_data or not click_data['points']:
-                return current_style, dash.no_update
+                return current_style, dash.no_update, dash.no_update
             point = click_data['points'][0]
             token = point.get('customdata') or point.get('text')
             # Try to extract modern name and hover text if available
@@ -3785,19 +3912,25 @@ def update_place_summary(click_data, selected_place, current_style, current_book
                 'books': books_list
             }
 
-            summary = _render_place_summary_from_search(place_data)
+            summary, images = _render_place_summary_from_search(place_data)
             
             new_style = dict(current_style)
             new_style['display'] = 'flex'
-            return new_style, summary
+            image_payload = _make_image_store_payload(
+                'place',
+                place_data.get('name') or place_data.get('token'),
+                place_data.get('token'),
+                images
+            )
+            return new_style, summary, image_payload
         except Exception as e:
             print(f"Error updating place summary (map): {e}")
-            return dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update
     # If triggered by list click
     elif triggered == 'selected-place':
         try:
             if not selected_place:
-                return current_style, dash.no_update
+                return current_style, dash.no_update, dash.no_update
             # Use selected_place (token) to fetch and display the place info
             token = selected_place
             # Get book details for the place
@@ -3841,16 +3974,22 @@ def update_place_summary(click_data, selected_place, current_style, current_book
                 'books': books_list
             }
 
-            summary = _render_place_summary_from_search(place_data)
+            summary, images = _render_place_summary_from_search(place_data)
 
             new_style = dict(current_style)
             new_style['display'] = 'flex'
-            return new_style, summary
+            image_payload = _make_image_store_payload(
+                'place',
+                place_data.get('name') or place_data.get('token'),
+                place_data.get('token'),
+                images
+            )
+            return new_style, summary, image_payload
         except Exception as e:
             print(f"Error updating place summary (list): {e}")
-            return dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update
     else:
-        return dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update
 
 # Callback for the close button on place summary
 app.clientside_callback(
@@ -4732,6 +4871,7 @@ def update_global_search_results(search_term, filter_selection):
     Output('main-map', 'figure', allow_duplicate=True),
     Output('place-summary-container', 'style', allow_duplicate=True),
     Output('place-summary', 'children', allow_duplicate=True),
+    Output('place-images-store', 'data', allow_duplicate=True),
     Output('global-search-results', 'style', allow_duplicate=True),
     Input({'type': 'search-place-action', 'token': ALL}, 'n_clicks'),
     State('main-map', 'figure'),
@@ -4763,12 +4903,80 @@ def show_place_from_search(_, current_figure, summary_style):
     new_summary_style['display'] = 'flex'
     new_summary_style.pop('transform', None)
 
+    summary, images = _render_place_summary_from_search(place)
+    image_payload = _make_image_store_payload(
+        'place',
+        place.get('name') or place.get('token'),
+        place.get('token'),
+        images
+    )
+
     return (
         fig,
         new_summary_style,
-        _render_place_summary_from_search(place),
+        summary,
+        image_payload,
         _search_results_style(False)
     )
+
+
+@app.callback(
+    Output('image-gallery-modal', 'is_open'),
+    Output('image-gallery-title', 'children'),
+    Output('image-gallery-grid', 'children'),
+    Output('image-gallery-store', 'data'),
+    Input({'type': 'image-thumb', 'context': ALL, 'index': ALL}, 'n_clicks'),
+    Input('image-gallery-close', 'n_clicks'),
+    Input('image-gallery-dismiss', 'n_clicks'),
+    State('place-images-store', 'data'),
+    State('author-images-store', 'data'),
+    prevent_initial_call=True
+)
+def toggle_image_gallery(_, close_clicks, dismiss_clicks, place_images, author_images):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+
+    trigger = ctx.triggered[0]
+    trigger_id = getattr(ctx, 'triggered_id', None)
+
+    if trigger_id in ('image-gallery-close', 'image-gallery-dismiss'):
+        if not trigger.get('value'):
+            raise PreventUpdate
+        return False, dash.no_update, dash.no_update, None
+
+    if isinstance(trigger_id, dict) and trigger_id.get('type') == 'image-thumb':
+        if not trigger.get('value'):
+            raise PreventUpdate
+        context_key = trigger_id.get('context')
+        index = trigger_id.get('index') or 0
+        source_data = place_images if context_key == 'place' else author_images if context_key == 'author' else None
+        if not source_data or not source_data.get('images'):
+            raise PreventUpdate
+        raw_images = source_data.get('images') or []
+        if not raw_images:
+            raise PreventUpdate
+        try:
+            index = int(index)
+        except (ValueError, TypeError):
+            index = 0
+        index = max(0, min(index, len(raw_images) - 1))
+        ordered = raw_images[index:] + raw_images[:index]
+        hydrated = hydrate_gallery_images(ordered, max_items=8, max_px=1400)
+        cards = [card for card in (_build_gallery_card(img) for img in hydrated) if card]
+        if not cards:
+            cards = [html.Div("Ingen IIIF-bilder kunne lastes", className="text-muted")]
+        label = source_data.get('label') or source_data.get('subtitle') or "Uten navn"
+        title = f"Historiske bilder – {label}"
+        payload = {
+            'context': context_key,
+            'label': label,
+            'subtitle': source_data.get('subtitle'),
+            'images': hydrated
+        }
+        return True, title, cards, payload
+
+    raise PreventUpdate
 
 
 @app.callback(
