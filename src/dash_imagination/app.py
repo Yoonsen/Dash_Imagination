@@ -1775,27 +1775,6 @@ app.layout = html.Div([
             # Buttons container
             html.Div([
                 html.Button(
-                    html.I(className="fas fa-trash-alt"),
-                    id='reset-corpus-btn-top',
-                    title="Tøm korpus",
-                    style={
-                        'padding': '8px',
-                        'backgroundColor': '#f8fafc',
-                        'color': '#dc2626',
-                        'border': '1px solid #e2e8f0',
-                        'borderRadius': '8px',
-                        'cursor': 'pointer',
-                        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
-                        'transition': 'all 0.2s',
-                        'height': '36px',
-                        'display': 'flex',
-                        'alignItems': 'center',
-                        'justifyContent': 'center',
-                        'fontSize': '14px',
-                        'flexShrink': '0'
-                    }
-                ),
-                html.Button(
                     html.I(className="fas fa-sliders-h"),
                     id='visualization-button',
                     style={
@@ -3035,7 +3014,7 @@ def update_places_lamps(current_filters):
     Output('current-dhlabids-store', 'data', allow_duplicate=True),
     Output('current-filters', 'data', allow_duplicate=True),
     Output('filtered-data', 'data', allow_duplicate=True),
-    Input('reset-corpus-btn-top', 'n_clicks'),
+    Input('reset-corpus-btn-builder', 'n_clicks'),
     prevent_initial_call=True
 )
 def quick_reset_corpus(n_clicks):

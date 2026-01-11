@@ -224,6 +224,21 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
         ),
         dbc.CardBody([
             html.Div([
+                html.Button(
+                    html.I(className="fas fa-trash-alt"),
+                    id='reset-corpus-btn-builder',
+                    title="Tøm korpus",
+                    className="btn btn-link p-0",
+                    style={
+                        'color': '#dc2626',
+                        'textDecoration': 'none',
+                        'boxShadow': 'none',
+                        'border': 'none',
+                        'fontSize': '1rem'
+                    }
+                )
+            ], className="mb-2 text-end"),
+            html.Div([
                 html.Div([
                     html.Label("Year Range", style=LABEL_STYLE),
                     html.Div(
