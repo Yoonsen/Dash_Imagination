@@ -194,6 +194,16 @@ MINIMIZED_BODY_VALUES = {
 }
 
 
+# Simple z-index bumping to bring active dialogs to front
+Z_COUNTER = 3000
+def _bump_z(style: dict | None) -> dict:
+    global Z_COUNTER
+    Z_COUNTER += 1
+    new_style = dict(style or {})
+    new_style['zIndex'] = Z_COUNTER
+    return new_style
+
+
 def _toggle_window_minimize(card_key, window_state, container_style, body_style):
     """
     Toggle minimized state for floating dialog cards. Keep header visible when minimized.
@@ -1635,6 +1645,7 @@ def show_author_details(selected_author, current_style, current_books):
 
     style = dict(current_style or {})
     style['display'] = 'flex'
+    style = _bump_z(style)
     
     image_payload = _make_image_store_payload('author', author_display, None, images)
     return style, content, image_payload
@@ -3958,6 +3969,7 @@ def update_place_summary(click_data, selected_place, current_style, current_book
             
             new_style = dict(current_style)
             new_style['display'] = 'flex'
+            new_style = _bump_z(new_style)
             image_payload = _make_image_store_payload(
                 'place',
                 place_data.get('name') or place_data.get('token'),
@@ -4020,6 +4032,7 @@ def update_place_summary(click_data, selected_place, current_style, current_book
 
             new_style = dict(current_style)
             new_style['display'] = 'flex'
+            new_style = _bump_z(new_style)
             image_payload = _make_image_store_payload(
                 'place',
                 place_data.get('name') or place_data.get('token'),
