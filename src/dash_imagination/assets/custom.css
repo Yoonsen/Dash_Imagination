@@ -68,4 +68,6 @@
     white-space: normal !important;
     box-shadow: 0 4px 12px rgba(0,0,0,0.12);
     max-width: 520px !important; /* allow pop-out but keep menu usable */
+    padding-top: 6px;
+    padding-bottom: 6px;
 }
