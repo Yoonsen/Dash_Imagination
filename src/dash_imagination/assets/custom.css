@@ -78,3 +78,19 @@
     padding-top: 6px;
     padding-bottom: 6px;
 }
+
+/* Window controls state */
+.card-window-btn.window-close {
+    color: #ef4444;
+}
+.card-window-btn.window-close:disabled {
+    color: #9ca3af;
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+.card-window-btn.window-minimize {
+    color: #f59e0b;
+}
+.card-window-btn.window-minimize.minimized-active {
+    color: #22c55e;
+}

@@ -1158,6 +1158,24 @@ def _register_window_callbacks():
 
 _register_window_callbacks()
 
+# Reflect minimized state on minimize button class/style for styling
+for cfg in WINDOW_CONTROL_CONFIG:
+    minimize_id = cfg['minimize_id']
+    store_id = cfg['store_id']
+
+    @app.callback(
+        Output(minimize_id, 'className', allow_duplicate=True),
+        Output(minimize_id, 'style', allow_duplicate=True),
+        Input(store_id, 'data'),
+        prevent_initial_call=True
+    )
+    def _set_minimize_state(window_state, base_class="card-window-btn window-minimize"):
+        state = window_state or {}
+        is_min = state.get('minimized')
+        cls = f"{base_class} minimized-active" if is_min else base_class
+        style = {'color': '#22c55e'} if is_min else {'color': '#f59e0b'}
+        return cls, style
+
 # Database Connection & Queries
 def pdquery(conn, query, params=()):
     return pd.read_sql_query(query, conn, params=params)
