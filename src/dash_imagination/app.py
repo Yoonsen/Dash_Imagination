@@ -239,8 +239,8 @@ def _toggle_window_minimize(card_key, window_state, container_style, body_style)
             else:
                 body.pop(prop, None)
         
-        if body.get('display') == 'none':
-            body['display'] = 'flex'
+        # Force body visible when restoring
+        body['display'] = 'flex'
         if card_key == 'place-summary':
             body['flexDirection'] = 'column'
             body['flex'] = '1 1 auto'
@@ -248,6 +248,10 @@ def _toggle_window_minimize(card_key, window_state, container_style, body_style)
             body['overflow'] = 'hidden'
         if container.get('display') == 'none':
             container['display'] = 'flex'
+
+        # Ensure restored body is visible and interactive
+        body['opacity'] = '1'
+        body['pointerEvents'] = 'auto'
 
         state['minimized'] = False
         state.pop('stored_height', None)
@@ -1107,6 +1111,7 @@ def _register_window_callbacks():
             Output(store_id, 'data', allow_duplicate=True),
             Output(container_id, 'style', allow_duplicate=True),
             Output(body_id, 'style', allow_duplicate=True),
+            Output(close_id, 'disabled', allow_duplicate=True),
             Input(minimize_id, 'n_clicks'),
             Input(close_id, 'n_clicks'),
             State(store_id, 'data'),
@@ -1130,8 +1135,14 @@ def _register_window_callbacks():
                         body_style
                     )
                     restored_state['minimized'] = False
-                    return restored_state, dash.no_update, restored_body
-                return {'minimized': False}, dash.no_update, dash.no_update
+                    restored_body = restored_body or {}
+                    restored_body['opacity'] = '1'
+                    restored_body['pointerEvents'] = 'auto'
+                    return restored_state, dash.no_update, restored_body, False
+                normalized_body = dict(body_style or {})
+                normalized_body['opacity'] = '1'
+                normalized_body['pointerEvents'] = 'auto'
+                return {'minimized': False}, dash.no_update, normalized_body, False
             if trigger == cfg['minimize_id']:
                 new_state, new_container_style, new_body_style = _toggle_window_minimize(
                     card_key,
@@ -1139,7 +1150,9 @@ def _register_window_callbacks():
                     container_style,
                     body_style
                 )
-                return new_state, new_container_style, new_body_style
+                # disable close button only while minimized; re-enable when restored
+                disabled = new_state.get('minimized', False)
+                return new_state, new_container_style, new_body_style, disabled
             raise PreventUpdate
 
 
@@ -3192,7 +3205,10 @@ def toggle_place_names_container(chip_btn, current_style, window_state, body_sty
         if restored_container:
             new_style.update(restored_container)
         new_style['display'] = 'flex'
-        body_style = restored_body
+        body_style = restored_body or {}
+        body_style['display'] = 'flex'
+        body_style['opacity'] = '1'
+        body_style['pointerEvents'] = 'auto'
     elif should_show:
         window_state['minimized'] = False
         # ensure body props reset if they were collapsed previously
@@ -3202,8 +3218,11 @@ def toggle_place_names_container(chip_btn, current_style, window_state, body_sty
             'flex': '1 1 auto',
             'minHeight': 0,
             'display': 'flex',
-            'flexDirection': 'column'
+            'flexDirection': 'column',
+            'opacity': '1',
+            'pointerEvents': 'auto'
         })
+        body_style['display'] = 'flex'
 
     return new_style, window_state, body_style
 
@@ -3237,27 +3256,31 @@ def toggle_corpus_builder_from_chip(chip_clicks, current_style, window_state, bo
             'flex': '1 1 auto',
             'minHeight': 0,
             'display': 'flex',
-            'flexDirection': 'column'
+            'flexDirection': 'column',
+            'opacity': '1',
+            'pointerEvents': 'auto'
         })
+        body_style['display'] = 'flex'
 
     return new_style, window_state, body_style
 
 # Close button callback
-app.clientside_callback(
-    """
-    function(n_clicks, currentStyle) {
-        if (!n_clicks) return dash_clientside.no_update;
-        
-        const newStyle = {...currentStyle};
-        newStyle.display = 'none';
-        return newStyle;
-    }
-    """,
+@app.callback(
     Output('place-names-container', 'style', allow_duplicate=True),
-    [Input('close-place-names', 'n_clicks')],
-    [State('place-names-container', 'style')],
+    Input('close-place-names', 'n_clicks'),
+    State('place-names-container', 'style'),
+    State('place-names-window-state', 'data'),
     prevent_initial_call=True
 )
+def close_place_names(n_clicks, current_style, window_state):
+    # Disable close while minimized to avoid reopening with hidden body styles.
+    if not n_clicks:
+        raise PreventUpdate
+    if window_state and window_state.get('minimized'):
+        raise PreventUpdate
+    new_style = dict(current_style or {})
+    new_style['display'] = 'none'
+    return new_style
 
 
 @app.callback(
@@ -4121,8 +4144,11 @@ def toggle_map_visuals(button_clicks, chip_clicks, close_clicks, current_style, 
             'flex': '1 1 auto',
             'minHeight': 0,
             'display': 'flex',
-            'flexDirection': 'column'
+            'flexDirection': 'column',
+            'opacity': '1',
+            'pointerEvents': 'auto'
         })
+        body_style['display'] = 'flex'
 
     return new_style, window_state, body_style
 
@@ -4165,8 +4191,11 @@ def toggle_heatmap_visuals(chip_clicks, close_clicks, current_style, window_stat
             'flex': '1 1 auto',
             'minHeight': 0,
             'display': 'flex',
-            'flexDirection': 'column'
+            'flexDirection': 'column',
+            'opacity': '1',
+            'pointerEvents': 'auto'
         })
+        body_style['display'] = 'flex'
 
     return new_style, window_state, body_style
 

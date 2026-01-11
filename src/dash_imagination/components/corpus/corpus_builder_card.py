@@ -509,6 +509,8 @@ def toggle_card_visibility(n1, n2, builder_style, window_state, body_style, cont
             body_style.setdefault('flex', '1 1 auto')
             body_style.setdefault('minHeight', 0)
             body_style.setdefault('overflow', 'hidden')
+            body_style['opacity'] = '1'
+            body_style['pointerEvents'] = 'auto'
 
         return builder_style, window_state, body_style, dash.no_update
 
