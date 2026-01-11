@@ -315,7 +315,37 @@ Søk skjer i tre parallelle “univers” – vi splitter inputten i ord og matc
 
 ---
 
-## 7. Evolution Notes
+## 7. Statemodell og API for videreføring (PWA / FastAPI)
+
+### 7.1 Kjernestate (Dash i dag, beholdes som kontrakt)
+- `current-dhlabids-store`: gjeldende korpus (liste av dhlabid). Set-operasjoner (+, &, −) oppdaterer denne.
+- `current-filters`: metadata (kategori/forfatter/tittel), år, max_places, corpus_source, selected_tokens.
+- `dialog-size-store`: per-kort bredde/høyde, justert via W±/H± (JSON shape `{card_key: {width, height}}`).
+- Per-kort window state: `*-window-state` med `minimized`, samt `*-body` style som resettes ved åpning.
+- Places-data i JSON (pandas orient='split') for frekvens/sampling/kollokasjoner; samme format kan brukes i API-respons.
+
+### 7.2 API-retning (FastAPI)
+- Unngå direkte SQLite fra frontend; legg et tynt API-lag som eksponerer:
+  - `GET /corpus` (liste av dhlabid + metadata)
+  - `POST /corpus/op` med payload `{dhlabids: [...], op: union|intersection|difference}` → returnerer ny liste og ev. selected_tokens/places.
+  - `GET /places` med filtrering (år, kategori, søketekst, max_places) → `orient='split'` JSON.
+  - `POST /collocations` (ordliste, før/etter) → kollokasjons-DF i `orient='split'`.
+- Behold identiske felt/ID-er som i Dash, slik at PWA kan hydreres fra samme JSON-shape (current_dhlabids, current_filters, places_*, dialog-size-store).
+
+### 7.3 UI-kontrakter å dokumentere for PWA
+- Kort-ID-er og header-ID-er (draghåndtak): corpus-builder, corpus-controls, place-names, place-summary, map-visuals, heatmap-visuals, collocation-card, place-similarity, author-list, author-info.
+- Chips → kort: pille/launcher åpner/lukker kort via `display: flex/none`; minimize holder header synlig.
+- Reset-scenarier: “Nullstill filtre” (resetter filtre, ikke korpus) vs “Tøm korpus” (tømmer current_dhlabids).
+- Touch/drag: dagens løsning er jQuery UI + touch-punch; i PWA foreslås React-draggable (eller ren pointer events) med clamp og z-index i JS.
+
+### 7.4 Migrasjonsnotat
+- Behold set-operasjonene (+, &, −) og JSON-formatet for places/korpus for kompatibilitet.
+- Service worker kan cache siste corpus/filters/places og gjenåpne med samme tilstand.
+- API-et bør returnere samme “orient='split'” payloads som dagens callbacks forventer, for enkel porting.
+
+---
+
+## 8. Evolution Notes
 
 - The app originated as a **Streamlit** prototype and was later rewritten in Dash to gain:
   - finer control over layout and state,
