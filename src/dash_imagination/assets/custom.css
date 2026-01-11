@@ -41,3 +41,26 @@
     color: #6c757d;
     font-size: 0.875rem;
 } 
+
+/* Prevent overlapping lines in dropdowns (authors, titles) and show full text on hover */
+.Select-option,
+.VirtualizedSelectOption,
+.Select-value-label {
+    white-space: normal !important;
+    line-height: 1.3 !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    max-width: none !important;
+}
+
+.Select-menu-outer {
+    overflow: visible !important;
+}
+
+.Select-option:hover,
+.VirtualizedSelectOption:hover,
+.Select-value-label:hover {
+    background: #f8fafc;
+    position: relative;
+    z-index: 10;
+}
