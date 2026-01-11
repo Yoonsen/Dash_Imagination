@@ -43,6 +43,12 @@ This logbook tracks the development progress, decisions, and challenges of the I
 
 ## Development Log
 
+### January 10, 2026 – Plan for JS/PWA rewrite (post-course)
+- Hold Dash stabil for masterkurset; etterpå migrere til React/Vite/TS PWA med FastAPI-backend for SQLite-data (behold orient='split' og set-op kontrakter).
+- Frontend hostes på GitHub Pages (gh-pages script), backend på Render/Cloud Run og senere NTNU.
+- Involver studenter i UI/dock/paneler, kart og API-kall; egen gren for PWA vurderes.
+- Fokus i ny frontend: dock/panelmanager (React), React-Leaflet/Plotly, state (Redux/Zustand), pointer-basert drag og klar CSS-styling.
+
 ### January 9, 2026 – Staging deploy helper + UI touch/clamp fixes
 - La til `deploy-staging.sh` med default `imagination-map-staging` for enkel test-deploy til Cloud Run (samme image/oppstart som prod).
 - Corpus Builder: egen knapp “Nullstill filtre” som resetter år/kategori/forfatter/tittel og max places uten å tømme korpuset.
