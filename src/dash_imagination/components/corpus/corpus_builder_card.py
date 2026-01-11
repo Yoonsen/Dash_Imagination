@@ -507,8 +507,7 @@ def toggle_card_visibility(n1, n2, builder_style, window_state, body_style, cont
 @callback(
     [Output("current-filters", "data", allow_duplicate=True),
      Output("build-corpus-status", "children"),
-     Output("current-dhlabids-store", "data", allow_duplicate=True),
-     Output("selected-author-store", "data", allow_duplicate=True)],
+     Output("current-dhlabids-store", "data", allow_duplicate=True)],
     [Input("build-corpus-btn", "n_clicks")],
     [State("corpus-category-dropdown", "value"),
      State("corpus-author-dropdown", "value"),
@@ -534,7 +533,7 @@ def build_corpus_and_show_stats(
     current_books
 ):
     if not n_clicks:
-        return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update
     if current_filters is None:
         current_filters = {}
     # Show spinner/message while building
@@ -600,14 +599,14 @@ def build_corpus_and_show_stats(
         content_pool = _resolve_content_pool()
         if not content_pool:
             status_error = html.Span("Fant ingen bøker å bruke for innholdssøk.", style={"color": "#dc2626", "fontWeight": "500"})
-            return dash.no_update, status_error, dash.no_update, dash.no_update
+            return dash.no_update, status_error, dash.no_update
         try:
             counts_df = count_words(content_pool, content_words)
             dhlabid_sums = counts_df.sum(axis=0)
             content_books = [int(dhl) for dhl, total in dhlabid_sums.items() if total >= 1]
         except Exception as e:
             error = html.Span(f"Error during content search: {e}", style={"color": "#dc2626"})
-            return dash.no_update, error, dash.no_update, dash.no_update
+            return dash.no_update, error, dash.no_update
         incoming_books = sorted(content_books)
         new_filters['content_words'] = content_words
     else:
@@ -615,7 +614,7 @@ def build_corpus_and_show_stats(
 
     if not incoming_books:
         status_error = html.Span("Fant ingen bøker for valgte filter.", style={"color": "#dc2626", "fontWeight": "500"})
-        return dash.no_update, status_error, dash.no_update, dash.no_update
+        return dash.no_update, status_error, dash.no_update
 
     current_books = current_books or []
     updated_books = apply_book_operation(current_books, incoming_books, operation=op)
@@ -623,7 +622,7 @@ def build_corpus_and_show_stats(
     # Optionally, show a success message
     status_done = html.Span("Books added!", style={"color": "#059669", "fontWeight": "500"})
     new_filters['selected_tokens'] = place_tokens
-    return new_filters, status_done, updated_books, None
+    return new_filters, status_done, updated_books
 
 
 def _build_option_list(values):

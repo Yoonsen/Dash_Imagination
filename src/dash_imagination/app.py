@@ -19,6 +19,7 @@ import json
 import copy
 from flask import request, send_file
 from typing import Tuple
+from urllib.parse import quote
 
 #=== initialize
 
@@ -195,14 +196,13 @@ MINIMIZED_BODY_VALUES = {
 
 def _toggle_window_minimize(card_key, window_state, container_style, body_style):
     """
-    Toggle minimized state for floating dialog cards.
+    Toggle minimized state for floating dialog cards. Keep header visible when minimized.
     """
     state = (window_state or {}).copy()
     container = (container_style or {}).copy()
     body = (body_style or {}).copy()
 
     is_minimized = state.get('minimized', False)
-    # Ensure default_height is a valid string in pixels
     default_size = DEFAULT_CARD_SIZES.get(card_key, {})
     default_h_val = default_size.get('height', 320)
     default_height = f"{default_h_val}px"
@@ -229,16 +229,21 @@ def _toggle_window_minimize(card_key, window_state, container_style, body_style)
             else:
                 body.pop(prop, None)
         
-        # Ensure display is not none if we are restoring
         if body.get('display') == 'none':
             body['display'] = 'flex'
-        
-        # Explicitly ensure flex-direction is correct for place summary
         if card_key == 'place-summary':
             body['flexDirection'] = 'column'
             body['flex'] = '1 1 auto'
+            body['minHeight'] = 0
+            body['overflow'] = 'hidden'
+        if container.get('display') == 'none':
+            container['display'] = 'flex'
 
-        return {'minimized': False}, container, body
+        state['minimized'] = False
+        state.pop('stored_height', None)
+        state.pop('stored_min_height', None)
+        state.pop('stored_body_styles', None)
+        return state, container, body
 
     new_state = {
         'minimized': True,
@@ -246,21 +251,18 @@ def _toggle_window_minimize(card_key, window_state, container_style, body_style)
         'stored_min_height': container.get('minHeight'),
         'stored_body_styles': {prop: body.get(prop) for prop in MINIMIZE_BODY_PROPS}
     }
-    container['height'] = 'auto'
-    container['minHeight'] = '0px'
-    
-    # Apply minimized styles
+
+    # Header-only: keep container visible but shrink; hide body
+    container['display'] = 'flex'
+    container['height'] = '36px'
+    container['minHeight'] = '36px'
+
     for prop, value in MINIMIZED_BODY_VALUES.items():
         body[prop] = value
-    
-    # Plate summary needs explicit hidden display to avoid stretched blank area
-    if card_key == 'place-summary':
-        body['display'] = 'none'
-        body['minHeight'] = '0px'
-        body['maxHeight'] = '0px'
-        body['height'] = '0px'
+    body['display'] = 'none'
     
     return new_state, container, body
+
 
 
 def _enforce_minimized_dimensions(style, window_state):
@@ -564,11 +566,15 @@ def _render_place_summary_from_search(place: dict) -> tuple[html.Div, list[dict]
             )
         ], style={'margin': '16px 0'})
 
+    place_token = place.get('token') or ''
+    token_query = quote(f'"{place_token}"') if place_token else ''
     book_list = html.Div([
         html.Div([
             html.A(
                 f"{row.get('title')} ({row.get('year')})",
-                href=f"https://www.nb.no/items/{row.get('urn')}" if row.get('urn') else "#",
+                href=(
+                    f"https://www.nb.no/items/{row.get('urn')}?searchText={token_query}"
+                ) if row.get('urn') else "#",
                 target="_blank",
                 style={'fontWeight': '500', 'color': '#1a56db', 'textDecoration': 'none'}
             ),
@@ -1504,6 +1510,10 @@ def set_selected_author(n_clicks):
     trigger = ctx.triggered[0]
     trigger_timestamp = trigger.get('value')
 
+    # Ignore render/list-change events; only act on real clicks
+    if not trigger_timestamp or trigger_timestamp <= 0:
+        raise PreventUpdate
+
     trigger_id = getattr(ctx, "triggered_id", None)
     prop_id = None
     if isinstance(trigger_id, dict):
@@ -1518,10 +1528,7 @@ def set_selected_author(n_clicks):
 
     author_key = prop_id.get('author_key')
     display_name = prop_id.get('display_name')
-    if not trigger_timestamp:
-        print(f"[AuthorDetails] Proceeding despite zero-timestamp for key={author_key} ({display_name})")
-    else:
-        print(f"[AuthorDetails] Button click captured for key={author_key} ({display_name}) ts={trigger_timestamp}")
+    print(f"[AuthorDetails] Button click captured for key={author_key} ({display_name}) ts={trigger_timestamp}")
     return prop_id
 
 
@@ -1756,6 +1763,27 @@ app.layout = html.Div([
 
             # Buttons container
             html.Div([
+                html.Button(
+                    html.I(className="fas fa-trash-alt"),
+                    id='reset-corpus-btn-top',
+                    title="Tøm korpus",
+                    style={
+                        'padding': '8px',
+                        'backgroundColor': '#f8fafc',
+                        'color': '#dc2626',
+                        'border': '1px solid #e2e8f0',
+                        'borderRadius': '8px',
+                        'cursor': 'pointer',
+                        'boxShadow': '0 1px 3px rgba(0,0,0,0.1)',
+                        'transition': 'all 0.2s',
+                        'height': '36px',
+                        'display': 'flex',
+                        'alignItems': 'center',
+                        'justifyContent': 'center',
+                        'fontSize': '14px',
+                        'flexShrink': '0'
+                    }
+                ),
                 html.Button(
                     html.I(className="fas fa-sliders-h"),
                     id='visualization-button',
@@ -2661,7 +2689,7 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
             'Token': 'first'
         })
         .sort_values(by='Total count', ascending=False)
-        .head(50)
+        .head(23000)
     )
     tokens = match_df['Token'].dropna().astype(str).unique().tolist()
     summary = html.Div(
@@ -2990,6 +3018,20 @@ def update_places_lamps(current_filters):
     sample_icon, sample_color = lamp_props('sampling')
     colloc_icon, colloc_color = lamp_props('collocations')
     return freq_icon, freq_color, sample_icon, sample_color, colloc_icon, colloc_color
+
+
+@app.callback(
+    Output('current-dhlabids-store', 'data', allow_duplicate=True),
+    Output('current-filters', 'data', allow_duplicate=True),
+    Output('filtered-data', 'data', allow_duplicate=True),
+    Input('reset-corpus-btn-top', 'n_clicks'),
+    prevent_initial_call=True
+)
+def quick_reset_corpus(n_clicks):
+    if not n_clicks:
+        raise PreventUpdate
+    empty_df = pd.DataFrame().to_json(date_format='iso', orient='split')
+    return [], {}, empty_df
 
 
 @app.callback(
