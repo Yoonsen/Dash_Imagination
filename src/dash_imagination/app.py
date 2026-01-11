@@ -2018,6 +2018,14 @@ app.layout = html.Div([
         ),
         dbc.CardBody([
             html.Div([
+                dbc.Button(
+                    "Nullstill markering",
+                    id='clear-selected-place',
+                    color='outline-secondary',
+                    size='sm',
+                    className='me-3 mb-2',
+                    style={'fontSize': '12px', 'flex': '0 0 auto'}
+                ),
                 html.Div([
                     html.Label("Search", className="form-label mb-1"),
                     dcc.Input(
@@ -3941,6 +3949,17 @@ def handle_place_click(n_clicks, ids, lats, lons, hovers):
     }
     
     return place_token, click_data
+
+# Clear selected place
+@app.callback(
+    Output('selected-place', 'data'),
+    Input('clear-selected-place', 'n_clicks'),
+    prevent_initial_call=True
+)
+def clear_selected_place(n):
+    if not n:
+        raise PreventUpdate
+    return None
 
 # Callback to update place summary
 @app.callback(
