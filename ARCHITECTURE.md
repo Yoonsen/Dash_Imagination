@@ -356,3 +356,46 @@ Søk skjer i tre parallelle “univers” – vi splitter inputten i ord og matc
   - integrate analysis (DHLab) and discovery (Qdrant/NB.no) through stable identifiers (URNs).
 
 The manifest captures where the app is going; this architecture describes the current implementation and the path for incremental enhancements.
+
+---
+
+## 9. Kodekart / Navigasjonsguide
+
+- **Inngang / kjøring**
+  - `run.py` starter Dash (`src.dash_imagination.app:server`). Dockerfile kjører gunicorn med samme entry.
+  - Deploy: `deploy.sh` (prod), `deploy-staging.sh` (staging; default `imagination-map-staging`).
+
+- **Hovedmoduler**
+  - `src/dash_imagination/app.py`: layout, callbacks, kart (`update_map`), stedskort (`update_place_summary`), author-info/list, window/minimize/size-styring.
+  - `components/corpus/corpus_builder_card.py`: UI for korpusfilter + set-operasjon (+/&/−) + nullstill filtre / tøm korpus.
+  - `components/corpus/corpus_controls.py`: vis/last ned korpus, chips.
+  - `components/places/place_similarity*.py`: places/similarity dialog.
+  - `components/authors/author_*_card.py`: forfatterliste og -detaljer.
+  - `utils/db.py`: DB-hjelper (`get_db_connection`); data i `data/imagination.db`.
+
+- **Vinduer/dialoger (ID-er)**
+  - Container-IDer: `corpus-builder-card`, `corpus-controls-container`, `place-names-container`, `place-summary-container`, `map-visuals-container`, `heatmap-visuals-container`, `collocation-card`, `place-similarity-dialog`, `author-list-container`, `author-info-container`.
+  - Header/handle: `*-header` eller `.card-title-bar`; minimize/close-id finnes i `WINDOW_CONTROL_CONFIG`.
+  - State per vindu: `*-window-state` (`minimized`), `dialog-size-store` for bredde/høyde.
+
+- **State/stores (kjerne)**
+  - `current-dhlabids-store`: gjeldende korpus (liste dhlabid).
+  - `current-filters`: filtermetadata (kategori/forfatter/tittel/år/max_places/selected_tokens/corpus_source).
+  - `dialog-size-store`: per-kort width/height (endres av W±/H±).
+  - Places-data: `filtered-data` (samplet), `all-places-store` (fullt) i pandas `orient='split'` JSON.
+  - Andre: `place-images-store`, `author-images-store`, `image-gallery-store`, `collocation-*` osv.
+
+- **Viktige callbacks (høydepunkt)**
+  - Kart: `update_map` (scatter/heatmap) fra `filtered-data`, `view-type`, sliders m.m.
+  - Stedskort: `update_place_summary` (map click/selected-place → DB lookup → HTML via `_render_place_summary_from_search`).
+  - Korpusbygging: filter + set-op i `corpus_builder_card.py`, samt `set_corpus_operation` i `app.py`.
+  - Størrelse/minimering: `_toggle_window_minimize`, resize-callbacks per kort (lytter på `dialog-size-store`), klasse/farge for minimize/close.
+
+- **Data/API-kontrakt (for PWA/FastAPI)**
+  - JSON `orient='split'` for places/corpus/kollokasjoner; hold felt: token, name, lat/lon, frequency, book_count.
+  - Set-operasjoner: union/intersection/difference på `current-dhlabids-store`.
+
+- **Known quirks / touch**
+  - Drag via jQuery UI (+ touch-punch); touch-drag kan være ustabil, men scroll fungerer på mobil.
+  - Minimering: close er disabled i minimert tilstand; minimize-knapp viser grønn/oransje status.
+
