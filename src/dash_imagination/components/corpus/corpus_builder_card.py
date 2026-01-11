@@ -361,7 +361,8 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
         "display": "none",
         "top": "60px",
         "left": "620px",
-        "flexDirection": "column"
+        "flexDirection": "column",
+        "display": "flex"
     })
 
 
