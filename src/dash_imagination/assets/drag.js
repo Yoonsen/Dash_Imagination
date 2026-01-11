@@ -342,6 +342,11 @@ $(document).ready(function() {
         }
     });
 
+    // Also initialize on first touch (tablets/phones) so drag works via touch punch
+    $(document).on('touchstart', function() {
+        initializeDraggable();
+    });
+
     // Also check periodically
     setInterval(function() {
         // Check place summary container

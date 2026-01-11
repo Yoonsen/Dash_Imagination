@@ -225,6 +225,19 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
         dbc.CardBody([
             html.Div([
                 html.Button(
+                    "Nullstill filtre",
+                    id='reset-filters-btn',
+                    className="btn btn-link p-0 me-3",
+                    title="Sett år/kategori/forfatter/tittel og maks steder tilbake til default",
+                    style={
+                        'color': '#475569',
+                        'textDecoration': 'none',
+                        'boxShadow': 'none',
+                        'border': 'none',
+                        'fontSize': '0.95rem'
+                    }
+                ),
+                html.Button(
                     html.I(className="fas fa-trash-alt"),
                     id='reset-corpus-btn-builder',
                     title="Tøm korpus",
@@ -237,7 +250,7 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                         'fontSize': '1rem'
                     }
                 )
-            ], className="mb-2 text-end"),
+            ], className="mb-2 text-end d-flex justify-content-end align-items-center gap-2"),
             html.Div([
                 html.Div([
                     html.Label("Year Range", style=LABEL_STYLE),
@@ -750,3 +763,18 @@ def reset_corpus_filters(n_clicks_timestamp, n_clicks, color, title):
             'corpus_source': 'Corpus Builder'
         }
         return [], [], [], DEFAULT_YEAR_RANGE.copy(), 500, default_filters, "secondary", "Clear Filters (double-click to confirm)"
+
+
+@callback(
+    Output("corpus-category-dropdown", "value", allow_duplicate=True),
+    Output("corpus-author-dropdown", "value", allow_duplicate=True),
+    Output("corpus-title-dropdown", "value", allow_duplicate=True),
+    Output("corpus-year-range", "value", allow_duplicate=True),
+    Output("corpus-max-places-slider", "value", allow_duplicate=True),
+    Input("reset-filters-btn", "n_clicks"),
+    prevent_initial_call=True
+)
+def reset_filter_controls(n_clicks):
+    if not n_clicks:
+        raise PreventUpdate
+    return [], [], [], DEFAULT_YEAR_RANGE.copy(), 500

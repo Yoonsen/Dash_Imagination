@@ -42,6 +42,13 @@
     font-size: 0.875rem;
 } 
 
+.card-title-bar,
+.card-header,
+.modal-header {
+    /* Allow touch-punch to prevent default gestures for dragging */
+    touch-action: none;
+}
+
 /* Dropdown items (authors/titles): truncate inline, show full on hover */
 .Select-option,
 .VirtualizedSelectOption,

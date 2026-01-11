@@ -43,6 +43,12 @@ This logbook tracks the development progress, decisions, and challenges of the I
 
 ## Development Log
 
+### January 9, 2026 – Staging deploy helper + UI touch/clamp fixes
+- La til `deploy-staging.sh` med default `imagination-map-staging` for enkel test-deploy til Cloud Run (samme image/oppstart som prod).
+- Corpus Builder: egen knapp “Nullstill filtre” som resetter år/kategori/forfatter/tittel og max places uten å tømme korpuset.
+- Touch-drag: la inn jQuery UI touch-punch og init på `touchstart`, samt `touch-action: none` på headerne for å støtte nettbrett.
+- Clamp: posisjonering av dialoger trigges nå også når de blir synlige (MutationObserver + klikk), for å unngå at første visning havner utenfor viewport.
+
 ### November 26, 2025
 - Marked `Corpus Modify` card as “ready”: layout tightened (Year → Metadata → Content), chip wiring verified, and builder visibility confirmed. Safe checkpoint before deployment tweaks.
 

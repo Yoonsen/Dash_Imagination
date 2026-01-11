@@ -28,7 +28,35 @@
     document.querySelectorAll('.dialog-card').forEach(clampDialog);
   }
 
+  function clampSoon(el) {
+    if (!el) return;
+    requestAnimationFrame(() => clampDialog(el));
+  }
+
   // Initial clamp and on resize
   window.addEventListener('load', clampAll);
   window.addEventListener('resize', clampAll);
+
+  // Clamp newly shown dialogs on click as fallback
+  document.addEventListener('click', clampAll);
+
+  // Observe style/display changes to clamp when dialogs become visible
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+        const el = mutation.target;
+        const display = el.style.display || '';
+        if (display !== 'none' && display !== 'hidden') {
+          clampSoon(el);
+        }
+      }
+    });
+  });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.dialog-card').forEach((el) => {
+      observer.observe(el, { attributes: true });
+      clampSoon(el);
+    });
+  });
 })();
