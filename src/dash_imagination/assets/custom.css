@@ -42,19 +42,20 @@
     font-size: 0.875rem;
 } 
 
-/* Prevent overlapping lines in dropdowns (authors, titles) and show full text on hover */
+/* Dropdown items (authors/titles): truncate inline, show full on hover */
 .Select-option,
 .VirtualizedSelectOption,
 .Select-value-label {
-    white-space: normal !important;
-    line-height: 1.3 !important;
-    overflow: visible !important;
-    text-overflow: clip !important;
-    max-width: none !important;
+    white-space: nowrap !important;
+    line-height: 1.25 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 100% !important;
+    position: relative;
 }
 
 .Select-menu-outer {
-    overflow: visible !important;
+    overflow: hidden !important;
 }
 
 .Select-option:hover,
@@ -62,5 +63,9 @@
 .Select-value-label:hover {
     background: #f8fafc;
     position: relative;
-    z-index: 10;
+    z-index: 25;
+    overflow: visible !important;
+    white-space: normal !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    max-width: 520px !important; /* allow pop-out but keep menu usable */
 }
