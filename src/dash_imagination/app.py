@@ -582,7 +582,16 @@ def _render_place_summary_from_search(place: dict) -> tuple[html.Div, list[dict]
 
     place_token = place.get('token') or ''
     token_query = quote(f'"{place_token}"') if place_token else ''
-    book_list = html.Div([
+
+    total_books = place.get('book_count', 0)
+    total_mentions = place.get('frequency', 0)
+    page_size = 20
+    book_list_caption = html.Div(
+        f"Viser topp {min(page_size, len(books))} av {total_books:,} bøker (sortert på forekomster) · {total_mentions:,} totalt antall forekomster",
+        style={'fontSize': '12px', 'color': '#475569', 'marginBottom': '6px'}
+    ) if books else html.Div("Ingen bøker for dette stedet i aktivt korpus.", style={'fontSize': '12px', 'color': '#64748b'})
+
+    book_rows = [
         html.Div([
             html.A(
                 f"{row.get('title')} ({row.get('year')})",
@@ -601,7 +610,11 @@ def _render_place_summary_from_search(place: dict) -> tuple[html.Div, list[dict]
             ], style={'display': 'flex', 'justifyContent': 'space-between'})
         ], style={'marginBottom': '10px', 'paddingBottom': '8px', 'borderBottom': '1px solid #eee'})
         for row in books if row.get('title')
-    ]) if books else html.Div("No book details available", style={'color': '#475569'})
+    ]
+
+    book_list = html.Div([book_list_caption] + book_rows) if books else html.Div(
+        "No book details available", style={'color': '#475569'}
+    )
 
     summary = html.Div([header, gallery, html.Hr(style={'margin': '10px 0'}), book_list])
     return summary, images
@@ -1282,11 +1295,18 @@ def get_places_for_map(filters=None, books=None, return_total=False, selected_to
 
     conn = get_db_connection()
     try:
-        if tokens:
-            if not books:
-                empty = pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
-                return (empty, 0) if return_total else empty
+        cur = conn.cursor()
+        # Temp table for books to avoid SQLite 999-parameter limit
+        cur.execute("DROP TABLE IF EXISTS tmp_books")
+        cur.execute("CREATE TEMP TABLE tmp_books (dhlabid INTEGER)")
+        cur.executemany("INSERT INTO tmp_books (dhlabid) VALUES (?)", [(int(b),) for b in books])
 
+        if tokens:
+            cur.execute("DROP TABLE IF EXISTS tmp_tokens")
+            cur.execute("CREATE TEMP TABLE tmp_tokens (token TEXT)")
+            cur.executemany("INSERT INTO tmp_tokens (token) VALUES (?)", [(t,) for t in tokens])
+
+        if tokens:
             query = """
             WITH selected_places AS (
                 SELECT 
@@ -1295,11 +1315,14 @@ def get_places_for_map(filters=None, books=None, return_total=False, selected_to
                     p.latitude,
                     p.longitude
                 FROM places p
-                WHERE p.token IN ({})
-                AND p.latitude IS NOT NULL 
-                AND p.longitude IS NOT NULL
-                AND CAST(p.latitude AS REAL) != 0
-                AND CAST(p.longitude AS REAL) != 0
+                JOIN tmp_tokens tt ON p.token = tt.token
+                WHERE p.latitude IS NOT NULL 
+                  AND p.longitude IS NOT NULL
+                  AND CAST(p.latitude AS REAL) != 0
+                  AND CAST(p.longitude AS REAL) != 0
+            ),
+            selected_books AS (
+                SELECT dhlabid FROM tmp_books
             )
             SELECT 
                 sp.token,
@@ -1310,17 +1333,15 @@ def get_places_for_map(filters=None, books=None, return_total=False, selected_to
                 COUNT(DISTINCT b.dhlabid) as book_count
             FROM selected_places sp
             LEFT JOIN books b ON sp.token = b.token
-            WHERE b.dhlabid IN ({})
+            JOIN selected_books sb ON b.dhlabid = sb.dhlabid
             GROUP BY sp.token, sp.name, sp.latitude, sp.longitude
             """
-            query = query.format(
-                ','.join(['?'] * len(tokens)),
-                ','.join(['?'] * len(books))
-            )
-            params = tuple(tokens + books)
-            places_df = pd.read_sql_query(query, conn, params=params)
+            places_df = pd.read_sql_query(query, conn)
         else:
             query = """
+            WITH selected_books AS (
+                SELECT dhlabid FROM tmp_books
+            )
             SELECT 
                 b.token,
                 p.modern as name,
@@ -1329,20 +1350,16 @@ def get_places_for_map(filters=None, books=None, return_total=False, selected_to
                 SUM(b.book_count) as frequency,
                 COUNT(DISTINCT b.dhlabid) as book_count
             FROM books b
+            JOIN selected_books sb ON b.dhlabid = sb.dhlabid
             JOIN places p ON b.token = p.token
-            WHERE b.dhlabid IN ({})
-            AND p.latitude IS NOT NULL 
-            AND p.longitude IS NOT NULL
-            AND CAST(p.latitude AS REAL) != 0
-            AND CAST(p.longitude AS REAL) != 0
+            WHERE p.latitude IS NOT NULL 
+              AND p.longitude IS NOT NULL
+              AND CAST(p.latitude AS REAL) != 0
+              AND CAST(p.longitude AS REAL) != 0
             GROUP BY b.token, p.modern, p.latitude, p.longitude
             ORDER BY frequency DESC
             """
-            if not books:
-                empty = pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
-                return (empty, 0) if return_total else empty
-            query = query.format(','.join(['?'] * len(books)))
-            places_df = pd.read_sql_query(query, conn, params=tuple(books))
+            places_df = pd.read_sql_query(query, conn)
 
         places_df['latitude'] = pd.to_numeric(places_df['latitude'], errors='coerce')
         places_df['longitude'] = pd.to_numeric(places_df['longitude'], errors='coerce')
@@ -1395,7 +1412,7 @@ def get_place_details(token, books, page=1, per_page=20):
             (SELECT total_mentions FROM place_stats) as total_mentions
         FROM book_mentions bm
         JOIN corpus c ON bm.dhlabid = c.dhlabid
-        ORDER BY c.year DESC, c.title
+        ORDER BY bm.mention_count DESC, c.year DESC, c.title
         LIMIT ? OFFSET ?
         """.format(','.join(['?'] * len(books)), ','.join(['?'] * len(books)))
         
@@ -2753,23 +2770,25 @@ def style_collocation_highlight_button(highlight_tokens):
     Output('places-frequency-data', 'data'),
     Output('places-sample-data', 'data'),
     Output('places-collocation-data', 'data'),
-    Input('all-places-store', 'data'),
+    Input('filtered-data', 'data'),
     Input('corpus-max-places-slider', 'value'),
     Input('resample-places', 'n_clicks'),
     Input('collocation-place-tokens', 'data'),
     State('places-sample-data', 'data')
 )
-def update_places_datasets(all_places_json, max_places, resample_n, collocation_tokens, current_sample_json):
+def update_places_datasets(filtered_data_json, max_places, resample_n, collocation_tokens, current_sample_json):
     import pandas as pd
     ctx = dash.callback_context
     triggered = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
     max_places = max_places or 500
     base_columns = ['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']
     empty_json = pd.DataFrame(columns=base_columns).to_json(date_format='iso', orient='split')
-    if not all_places_json:
+
+    if not filtered_data_json:
         return empty_json, empty_json, empty_json
 
-    df = load_places_frame(all_places_json)
+    df = load_places_frame(filtered_data_json)
+    print(f"[places] source={triggered} rows={len(df)} max_places={max_places}")
     if df.empty:
         return empty_json, empty_json, empty_json
 
@@ -2778,7 +2797,7 @@ def update_places_datasets(all_places_json, max_places, resample_n, collocation_
         .head(max_places)
         .reset_index(drop=True)
     )
-    recompute_sample = triggered in ('all-places-store', 'resample-places') or current_sample_json is None
+    recompute_sample = triggered in ('resample-places', 'filtered-data') or current_sample_json is None
     if recompute_sample:
         sample_df = sample_places(df, n=max_places).reset_index(drop=True)
     else:
@@ -2799,6 +2818,7 @@ def update_places_datasets(all_places_json, max_places, resample_n, collocation_
     else:
         colloc_df = pd.DataFrame(columns=base_columns)
 
+    print(f"[places] freq={len(freq_df)} sample={len(sample_df)} colloc={len(colloc_df)}")
     return (
         freq_df.to_json(date_format='iso', orient='split'),
         sample_df.to_json(date_format='iso', orient='split'),
@@ -2866,7 +2886,11 @@ def style_places_mode_buttons(active_mode):
 )
 def display_frequency_places(freq_json, search_term, selected_place):
     df = load_places_frame(freq_json)
+    before = len(df)
     df = filter_places_search(df, search_term)
+    after = len(df)
+    if search_term:
+        print(f"[places] freq table rows before/after search '{search_term}': {before}/{after}")
     summary, table = render_place_preview(df, selected_place, empty_message="Ingen steder tilgjengelig ennå.")
     return summary, table
 
@@ -2880,7 +2904,10 @@ def display_frequency_places(freq_json, search_term, selected_place):
 )
 def display_sampling_places(sample_json, search_term, selected_place):
     df = load_places_frame(sample_json)
+    before = len(df)
     df = filter_places_search(df, search_term)
+    if search_term:
+        print(f"[places] sample table rows before/after search '{search_term}': {before}/{len(df)}")
     summary, table = render_place_preview(df, selected_place, empty_message="Trykk «Resample Places» for å hente en ny liste.")
     return summary, table
 
@@ -2899,7 +2926,10 @@ def display_collocation_places(colloc_json, search_term, selected_place):
             html.Div("Kjør et kollokasjonssøk for å fylle denne fanen.", style={'fontSize': '0.85rem'}),
             html.Div("Ingen kollokasjoner funnet.", className="text-muted")
         )
+    before = len(df)
     df = filter_places_search(df, search_term)
+    if search_term:
+        print(f"[places] colloc table rows before/after search '{search_term}': {before}/{len(df)}")
     summary, table = render_place_preview(df, selected_place, empty_message="Ingen kollokasjonstreff som matcher søket.")
     return summary, table
 
@@ -5314,7 +5344,14 @@ def get_all_places_for_corpus(book_ids):
         return pd.DataFrame(columns=['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count'])
     conn = get_db_connection()
     try:
-        query = f'''
+        cur = conn.cursor()
+        cur.execute("DROP TABLE IF EXISTS tmp_books_all")
+        cur.execute("CREATE TEMP TABLE tmp_books_all (dhlabid INTEGER)")
+        cur.executemany("INSERT INTO tmp_books_all (dhlabid) VALUES (?)", [(int(b),) for b in book_ids])
+        query = '''
+        WITH selected_books AS (
+            SELECT dhlabid FROM tmp_books_all
+        )
         SELECT 
             b.token,
             p.modern as name,
@@ -5323,14 +5360,14 @@ def get_all_places_for_corpus(book_ids):
             SUM(b.book_count) as frequency,
             COUNT(DISTINCT b.dhlabid) as book_count
         FROM books b
+        JOIN selected_books sb ON b.dhlabid = sb.dhlabid
         JOIN places p ON b.token = p.token
-        WHERE b.dhlabid IN ({','.join(['?'] * len(book_ids))})
-          AND p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+        WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL
           AND CAST(p.latitude AS REAL) != 0
           AND CAST(p.longitude AS REAL) != 0
         GROUP BY b.token, p.modern, p.latitude, p.longitude
         '''
-        df = pd.read_sql_query(query, conn, params=tuple(book_ids))
+        df = pd.read_sql_query(query, conn)
         df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
         df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
         return df
