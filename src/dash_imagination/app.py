@@ -2099,11 +2099,11 @@ app.layout = html.Div([
                                 'places-frequency-table',
                                 'download-places-frequency-btn',
                                 'download-places-frequency',
-                                'apply-places-frequency',
-                                action_prefix=html.Span("Frekvenskutt", className="places-tab-pill"),
-                                activate_btn_id='activate-places-frequency',
+                                None,
+                                action_prefix=None,
+                                activate_btn_id=None,
                                 source_key='frequency',
-                                activate_title="Vis frekvenslisten på kartet"
+                                activate_title=None
                             ),
                             id='places-frequency-panel',
                             style={'flex': '1 1 auto', 'minHeight': 0, 'display': 'flex'}
@@ -2124,7 +2124,9 @@ app.layout = html.Div([
                             style={'flex': '1 1 auto', 'minHeight': 0, 'display': 'none'}
                         )
                     ], className="places-mode-panels flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'})
-                ], className="flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'})
+                ], className="flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'}),
+                # Hidden frequency apply button to satisfy callbacks (frekvenskutt fjernet)
+                html.Button(id='activate-places-frequency', style={'display': 'none'})
             ], id='place-names-list', style={
                 'flex': '1 1 auto',
                 'minHeight': 0,
@@ -2907,12 +2909,12 @@ def style_places_mode_buttons(active_mode):
     Input('place-search', 'value'),
     Input('places-sort-field', 'data'),
     Input('places-sort-dir', 'data'),
+    Input('corpus-max-places-slider', 'value'),
     State('selected-place', 'data'),
     State('all-places-store', 'data'),
-    State('corpus-max-places-slider', 'value'),
     prevent_initial_call=True
 )
-def display_frequency_places(freq_json, search_term, sort_field, sort_dir, selected_place, all_places_json, max_places):
+def display_frequency_places(freq_json, search_term, sort_field, sort_dir, max_places, selected_place, all_places_json):
     max_places = max_places or 500
     sort_field = sort_field or 'book_count'
     sort_dir = sort_dir or 'desc'
@@ -2964,11 +2966,11 @@ def display_frequency_places(freq_json, search_term, sort_field, sort_dir, selec
     Input('place-search', 'value'),
     Input('places-sort-field', 'data'),
     Input('places-sort-dir', 'data'),
+    Input('corpus-max-places-slider', 'value'),
     State('selected-place', 'data'),
     State('all-places-store', 'data'),
-    State('corpus-max-places-slider', 'value')
 )
-def display_sampling_places(sample_json, search_term, sort_field, sort_dir, selected_place, all_places_json, max_places):
+def display_sampling_places(sample_json, search_term, sort_field, sort_dir, max_places, selected_place, all_places_json):
     max_places = max_places or 500
     sort_field = sort_field or 'book_count'
     sort_dir = sort_dir or 'desc'
