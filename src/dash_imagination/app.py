@@ -2816,15 +2816,10 @@ def update_places_datasets(filtered_data_json, max_places, resample_n, collocati
     base_columns = ['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']
     empty_json = pd.DataFrame(columns=base_columns).to_json(date_format='iso', orient='split')
 
-    if not filtered_data_json and not all_places_json:
+    if not filtered_data_json:
         return empty_json, empty_json, empty_json
 
-    # Use full corpus when filtering collocation tokens, else current filtered set
-    base_json = filtered_data_json
-    if collocation_tokens and all_places_json:
-        base_json = all_places_json
-
-    df = load_places_frame(base_json)
+    df = load_places_frame(filtered_data_json)
     df['frequency'] = pd.to_numeric(df.get('frequency'), errors='coerce')
     df['book_count'] = pd.to_numeric(df.get('book_count'), errors='coerce')
     print(f"[places] source={triggered} rows={len(df)} max_places={max_places}")
@@ -2940,9 +2935,8 @@ def display_frequency_places(freq_json, search_term, sort_field, sort_dir, max_p
     before = len(df)
     filtered_payload = dash.no_update
 
-    if search_term and len(search_term.strip()) >= 3 and all_places_json:
-        df_all = load_places_frame(all_places_json)
-        hits = filter_places_search(df_all, search_term)
+    if search_term and len(search_term.strip()) >= 3:
+        hits = filter_places_search(df, search_term)
         hits = hits.sort_values(by='frequency', ascending=False).head(max_places)
         base = df.sort_values(by='frequency', ascending=False)
         base = base[~base['token'].isin(hits['token'])]
@@ -2974,12 +2968,7 @@ def display_frequency_places(freq_json, search_term, sort_field, sort_dir, max_p
     except Exception:
         pass
 
-    total_count = None
-    try:
-        if all_places_json:
-            total_count = len(load_places_frame(all_places_json))
-    except Exception:
-        pass
+    total_count = len(df)
 
     summary, table = render_place_preview(
         df,
