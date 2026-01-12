@@ -48,6 +48,9 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Search now merges hits into the frequency list; place list decoupled from collocation view (coll shows full collocation set, place list capped by Max places).
 - Collocation filter button/lamp builds corpus from full collocation result; highlight remains a separate overlay.
 - Noted: Dash roundtrips add latency; plan to move place list/search/sorting to React client for snappier updates post-course.
+- Added client-side sorting for place, collocation, and corpus tables (assets/client_sort.js) to remove roundtrips.
+- Place search: prefix/wildcard (*on*) support; debounce on Enter/blur; inline search icon with tooltip. Clearing search restores full list and map markers.
+- Reset buttons in corpus builder restyle: gray text, red icons; “Tøm alle filtre” also clears content filter; “Nullstill korpus” clarified.
 
 ### January 10, 2026 – Plan for JS/PWA rewrite (post-course)
 - Hold Dash stabil for masterkurset; etterpå migrere til React/Vite/TS PWA med FastAPI-backend for SQLite-data (behold orient='split' og set-op kontrakter).
