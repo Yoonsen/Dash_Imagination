@@ -2040,13 +2040,28 @@ app.layout = html.Div([
             html.Div([
                 html.Div([
                     html.Label("Search", className="form-label mb-1"),
-                    dcc.Input(
-                        id='place-search',
-                        type='text',
-                        placeholder='Type to search...',
-                        className="form-control",
-                        debounce=True
-                    )
+                    html.Div([
+                        dcc.Input(
+                            id='place-search',
+                            type='text',
+                            placeholder='Type to search...',
+                            className="form-control ps-4",
+                            debounce=True,
+                            style={'position': 'relative', 'paddingLeft': '30px'}
+                        ),
+                        html.I(
+                            className="fas fa-search",
+                            style={
+                                'position': 'absolute',
+                                'left': '8px',
+                                'top': '50%',
+                                'transform': 'translateY(-50%)',
+                                'color': '#94a3b8',
+                                'fontSize': '0.85rem',
+                                'pointerEvents': 'none'
+                            }
+                        )
+                    ], style={'position': 'relative'})
                 ], className="flex-fill me-md-3 mb-3 mb-md-0"),
                 html.Div([
                     html.Label("Max places", className="form-label mb-1"),
