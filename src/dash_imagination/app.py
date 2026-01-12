@@ -3194,13 +3194,15 @@ def handle_size_buttons(n_clicks, store):
     State('heatmap-subset-checkbox', 'value'),
     State('place-search', 'value'),
     State('corpus-max-places-slider', 'value'),
+    State('collocation-words-input', 'value'),
+    State('current-dhlabids-store', 'data'),
     State('current-filters', 'data'),
     prevent_initial_call=True
 )
 def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks,
                         freq_json, sample_json, colloc_json,
                         heatmap_subset_value,
-                        search_term, max_places, current_filters):
+                        search_term, max_places, colloc_words_value, current_books, current_filters):
     ctx = dash.callback_context
     if not ctx.triggered:
         raise PreventUpdate
@@ -3226,7 +3228,27 @@ def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks
     new_filters['selected_tokens'] = tokens
     new_filters['max_places'] = max_places or len(tokens)
     new_filters['places_source'] = mode
-    new_filters['corpus_source'] = 'Places'
+
+    # For collocations: filter books to those containing collocation words
+    if mode == 'collocations':
+        words = [w.strip() for w in (colloc_words_value or "").split(',') if w.strip()]
+        filtered_books = current_books or []
+        if words and filtered_books:
+            from dash_imagination.utils.corpus_build import count_words
+            try:
+                counts_df = count_words(filtered_books, words)
+                if not counts_df.empty:
+                    sums = counts_df.sum(axis=0)
+                    filtered_books = [int(d) for d, total in sums.items() if total >= 1]
+            except Exception as e:
+                print(f"[collocation] count_words error: {e}")
+        if filtered_books:
+            new_filters['books'] = filtered_books
+            new_filters['corpus_source'] = 'Collocations'
+        else:
+            new_filters['corpus_source'] = 'Places'
+    else:
+        new_filters['corpus_source'] = 'Places'
     subset_mode = 'subset' if heatmap_subset_value else 'all'
     return new_filters, subset_mode
 
