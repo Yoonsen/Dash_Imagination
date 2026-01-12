@@ -2972,16 +2972,17 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
     max_places = max_places or 500
     sort_field = sort_field or 'book_count'
     sort_dir = sort_dir or 'desc'
-    df = load_places_frame(freq_json)
-    df['frequency'] = pd.to_numeric(df.get('frequency'), errors='coerce')
-    df['book_count'] = pd.to_numeric(df.get('book_count'), errors='coerce')
-    df = df.sort_values(by='frequency', ascending=False).head(max_places)
-    before = len(df)
-    filtered_payload = dash.no_update
+    base_df = load_places_frame(freq_json)
+    base_df['frequency'] = pd.to_numeric(base_df.get('frequency'), errors='coerce')
+    base_df['book_count'] = pd.to_numeric(base_df.get('book_count'), errors='coerce')
+    base_df = base_df.sort_values(by='frequency', ascending=False).head(max_places)
+    before = len(base_df)
+    filtered_payload = base_df.to_json(date_format='iso', orient='split')
+    df = base_df
 
     if search_term:
         # Search across full corpus if available, otherwise current df
-        search_df = df
+        search_df = base_df
         try:
             if all_places_json:
                 search_df = load_places_frame(all_places_json)
@@ -2993,14 +2994,19 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
         hits = filter_places_search(search_df, search_term)
         hits = hits.sort_values(by='frequency', ascending=False).head(max_places)
         df = hits
-        print(f"[places] freq table search '{search_term}': hits={len(hits)} (max {max_places})")
+        # Merge hits into base for map (allow hits to extend beyond max_places)
+        merged = (
+            pd.concat([hits, base_df[~base_df['token'].isin(hits['token'])]], ignore_index=True)
+            .sort_values(by='frequency', ascending=False)
+            .head(max_places + len(hits))
+        )
+        filtered_payload = merged.to_json(date_format='iso', orient='split')
+        print(f"[places] freq table search '{search_term}': hits={len(hits)} merged={len(merged)} (max {max_places}+hits)")
     else:
         # No search term: reset to base frequency list (already head(max_places) above)
-        df = df.sort_values(by='frequency', ascending=False).head(max_places)
+        df = base_df
         after = len(df)
-        if search_term:
-            print(f"[places] freq table rows before/after search '{search_term}': {before}/{after}")
-        filtered_payload = dash.no_update
+        print(f"[places] freq table reset to base: {after} rows (max {max_places})")
 
     # Apply optional sort with secondary keys to avoid alpha-ties
     if sort_field not in df.columns:
