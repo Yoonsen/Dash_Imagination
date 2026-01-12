@@ -2969,6 +2969,11 @@ def display_frequency_places(freq_json, search_term, sort_field, sort_dir, max_p
         pass
 
     total_count = len(df)
+    try:
+        if all_places_json:
+            total_count = len(load_places_frame(all_places_json))
+    except Exception:
+        pass
 
     summary, table = render_place_preview(
         df,
