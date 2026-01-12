@@ -2961,6 +2961,7 @@ def display_frequency_places(freq_json, search_term, sort_field, sort_dir, max_p
         after = len(df)
         if search_term:
             print(f"[places] freq table rows before/after search '{search_term}': {before}/{after}")
+        filtered_payload = df.to_json(date_format='iso', orient='split')
 
     # Apply optional sort with secondary keys to avoid alpha-ties
     if sort_field not in df.columns:
