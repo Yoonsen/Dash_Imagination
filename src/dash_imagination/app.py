@@ -2945,10 +2945,14 @@ def display_frequency_places(freq_json, search_term, sort_field, sort_dir, max_p
         if search_term:
             print(f"[places] freq table rows before/after search '{search_term}': {before}/{after}")
 
-    # Apply optional sort
+    # Apply optional sort with secondary keys to avoid alpha-ties
     if sort_field not in df.columns:
         sort_field = 'book_count'
-    df = df.sort_values(by=sort_field, ascending=(sort_dir == 'asc'))
+    ascending_main = (sort_dir == 'asc')
+    df = df.sort_values(
+        by=[sort_field, 'frequency', 'book_count', 'token'],
+        ascending=[ascending_main, False, False, True]
+    )
     try:
         top_tokens = df[['token', 'frequency', 'book_count']].head(5).to_dict('records')
         print(f"[places] sort_field={sort_field} dir={sort_dir} top={top_tokens}")
@@ -3071,11 +3075,25 @@ def sort_places_table(n_clicks, current_field, current_dir):
     Output('places-sort-field', 'data', allow_duplicate=True),
     Output('places-sort-dir', 'data', allow_duplicate=True),
     Input('places-frequency-data', 'data'),
+    Input('place-search', 'value'),
+    Input('corpus-max-places-slider', 'value'),
     prevent_initial_call=True
 )
-def reset_places_sort_on_data(_):
-    # When the underlying dataset refreshes (e.g. new corpus/search), default to book_count/desc
+def reset_places_sort_on_data(_, search_term, max_places):
+    # Reset sort to book_count/desc on data refresh, search change, or max-places change
     return 'book_count', 'desc'
+
+
+@app.callback(
+    Output('current-filters', 'data', allow_duplicate=True),
+    Input('corpus-max-places-slider', 'value'),
+    State('current-filters', 'data'),
+    prevent_initial_call=True
+)
+def set_max_places_filter(max_places, current_filters):
+    filters = (current_filters or {}).copy()
+    filters['max_places'] = max_places or 500
+    return filters
 
 
 @app.callback(
