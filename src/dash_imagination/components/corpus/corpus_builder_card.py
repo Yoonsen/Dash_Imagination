@@ -225,7 +225,10 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
         dbc.CardBody([
             html.Div([
                 html.Button(
-                    [html.I(className="fas fa-filter me-2"), "Tøm alle filtre"],
+                    [
+                        html.I(className="fas fa-filter me-2", style={'color': '#dc2626'}),
+                        "Tøm alle filtre"
+                    ],
                     id='reset-filters-btn',
                     className="btn btn-link p-0",
                     title="Nullstill år/kategori/forfatter/tittel, maks steder og innholdssøk",
@@ -238,7 +241,10 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                     }
                 ),
                 html.Button(
-                    ["Nullstill korpus", html.I(className="fas fa-trash-alt ms-2")],
+                    [
+                        "Nullstill korpus",
+                        html.I(className="fas fa-trash-alt ms-2", style={'color': '#dc2626'})
+                    ],
                     id='reset-corpus-btn-builder',
                     title="Tøm korpus",
                     className="btn btn-link p-0",
