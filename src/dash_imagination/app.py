@@ -2941,18 +2941,21 @@ def display_frequency_places(freq_json, search_term, sort_field, sort_dir, max_p
     filtered_payload = dash.no_update
 
     if search_term and len(search_term.strip()) >= 3:
-        hits = filter_places_search(df, search_term)
+        # Search across full corpus if available, otherwise current df
+        search_df = df
+        try:
+            if all_places_json:
+                search_df = load_places_frame(all_places_json)
+                search_df['frequency'] = pd.to_numeric(search_df.get('frequency'), errors='coerce')
+                search_df['book_count'] = pd.to_numeric(search_df.get('book_count'), errors='coerce')
+        except Exception:
+            pass
+
+        hits = filter_places_search(search_df, search_term)
         hits = hits.sort_values(by='frequency', ascending=False).head(max_places)
-        base = df.sort_values(by='frequency', ascending=False)
-        base = base[~base['token'].isin(hits['token'])]
-        merged = (
-            pd.concat([hits, base], ignore_index=True)
-            .sort_values(by='frequency', ascending=False)
-            .head(max_places)
-        )
-        df = merged
+        df = hits
         filtered_payload = df.to_json(date_format='iso', orient='split')
-        print(f"[places] freq table search '{search_term}': hits={len(hits)} merged={len(df)} (max {max_places})")
+        print(f"[places] freq table search '{search_term}': hits={len(hits)} (max {max_places})")
     else:
         df = filter_places_search(df, search_term)
         after = len(df)
