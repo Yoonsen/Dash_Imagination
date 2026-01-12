@@ -2804,10 +2804,11 @@ def style_collocation_highlight_button(highlight_tokens):
     Input('corpus-max-places-slider', 'value'),
     Input('resample-places', 'n_clicks'),
     Input('collocation-place-tokens', 'data'),
+    Input('current-dhlabids-store', 'data'),
     State('places-sample-data', 'data'),
     State('all-places-store', 'data')
 )
-def update_places_datasets(filtered_data_json, max_places, resample_n, collocation_tokens, current_sample_json, all_places_json):
+def update_places_datasets(filtered_data_json, max_places, resample_n, collocation_tokens, current_books, current_sample_json, all_places_json):
     import pandas as pd
     ctx = dash.callback_context
     triggered = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
