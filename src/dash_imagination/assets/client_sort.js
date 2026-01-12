@@ -37,8 +37,7 @@
       btn.addEventListener(
         "click",
         (e) => {
-          e.preventDefault();
-          e.stopPropagation();
+          // allow Dash callbacks to still receive clicks (no stopPropagation)
           const rows = Array.from(container.querySelectorAll(".place-item"));
           if (!rows.length) return;
           const parent = rows[0].parentNode;

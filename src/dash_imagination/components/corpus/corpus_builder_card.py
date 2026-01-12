@@ -230,7 +230,7 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                     className="btn btn-link p-0",
                     title="Nullstill år/kategori/forfatter/tittel, maks steder og innholdssøk",
                     style={
-                        'color': '#dc2626',
+                        'color': '#475569',
                         'textDecoration': 'none',
                         'boxShadow': 'none',
                         'border': 'none',
@@ -243,7 +243,7 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                     title="Tøm korpus",
                     className="btn btn-link p-0",
                     style={
-                        'color': '#dc2626',
+                        'color': '#475569',
                         'textDecoration': 'none',
                         'boxShadow': 'none',
                         'border': 'none',
