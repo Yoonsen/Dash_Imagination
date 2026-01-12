@@ -2126,7 +2126,7 @@ app.layout = html.Div([
                     ], className="places-mode-panels flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'})
                 ], className="flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'}),
                 # Hidden frequency apply button to satisfy callbacks (frekvenskutt fjernet)
-                html.Button(id='activate-places-frequency', style={'display': 'none'})
+                dbc.Button(id='activate-places-frequency', style={'display': 'none'}, color='light')
             ], id='place-names-list', style={
                 'flex': '1 1 auto',
                 'minHeight': 0,
