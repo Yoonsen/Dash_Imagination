@@ -2761,7 +2761,7 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
     )
     tokens = match_df['Token'].dropna().astype(str).unique().tolist()
     summary = html.Div(
-        f"Fant {len(tokens)} steder. Se tabellen under for detaljer.",
+        f"Fant {len(tokens)} steder. Listen kan avkortes av Max places i stedsvisningen.",
         style={'color': '#0f172a', 'fontSize': '0.85rem'}
     )
     return summary, tokens
