@@ -225,12 +225,12 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
         dbc.CardBody([
             html.Div([
                 html.Button(
-                    "Nullstill filtre",
+                    [html.I(className="fas fa-filter me-2"), "Tøm alle filtre"],
                     id='reset-filters-btn',
-                    className="btn btn-link p-0 me-3",
-                    title="Sett år/kategori/forfatter/tittel og maks steder tilbake til default",
+                    className="btn btn-link p-0",
+                    title="Nullstill år/kategori/forfatter/tittel, maks steder og innholdssøk",
                     style={
-                        'color': '#475569',
+                        'color': '#dc2626',
                         'textDecoration': 'none',
                         'boxShadow': 'none',
                         'border': 'none',
@@ -238,7 +238,7 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                     }
                 ),
                 html.Button(
-                    html.I(className="fas fa-trash-alt"),
+                    ["Nullstill korpus", html.I(className="fas fa-trash-alt ms-2")],
                     id='reset-corpus-btn-builder',
                     title="Tøm korpus",
                     className="btn btn-link p-0",
@@ -247,10 +247,10 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                         'textDecoration': 'none',
                         'boxShadow': 'none',
                         'border': 'none',
-                        'fontSize': '1rem'
+                        'fontSize': '0.95rem'
                     }
                 )
-            ], className="mb-2 text-end d-flex justify-content-end align-items-center gap-2"),
+            ], className="mb-2 d-flex justify-content-between align-items-center gap-2"),
             html.Div([
                 html.Div([
                     html.Label("Year Range", style=LABEL_STYLE),
@@ -771,10 +771,11 @@ def reset_corpus_filters(n_clicks_timestamp, n_clicks, color, title):
     Output("corpus-title-dropdown", "value", allow_duplicate=True),
     Output("corpus-year-range", "value", allow_duplicate=True),
     Output("corpus-max-places-slider", "value", allow_duplicate=True),
+    Output("content-wordforms-input", "value", allow_duplicate=True),
     Input("reset-filters-btn", "n_clicks"),
     prevent_initial_call=True
 )
 def reset_filter_controls(n_clicks):
     if not n_clicks:
         raise PreventUpdate
-    return [], [], [], DEFAULT_YEAR_RANGE.copy(), 500
+    return [], [], [], DEFAULT_YEAR_RANGE.copy(), 500, ""
