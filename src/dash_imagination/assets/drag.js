@@ -186,26 +186,44 @@ $(document).ready(function() {
                 }
             });
 
-            // Initialize corpus-builder-card if it exists
-            if ($('#corpus-builder-card').length > 0) {
-                console.log("Found corpus-builder-card, making it draggable");
-                const $builder = $('#corpus-builder-card');
-                $builder.draggable({
-                    handle: '#corpus-builder-header',
+            function ensureDraggable($el, handleSelector) {
+                if (!$el || $el.length === 0) return;
+                if ($el.data('draggableInit')) return;
+                $el.data('draggableInit', true);
+                $el.draggable({
+                    handle: handleSelector,
                     containment: 'window',
                     start: function(event, ui) {
                         bringToFront($(this));
                         $(this).addClass("dragging");
-                        console.log("Started dragging corpus builder card");
                     },
                     stop: function(event, ui) {
                         $(this).removeClass("dragging");
-                        console.log("Stopped dragging corpus builder card at:", ui.position);
                     }
                 }).on('mousedown', function() {
                     bringToFront($(this));
                 });
-                monitorVisibilityElement($builder);
+                monitorVisibilityElement($el);
+            }
+
+            // Initialize corpus-builder-card if it exists
+            if ($('#corpus-builder-card').length > 0) {
+                console.log("Found corpus-builder-card, making it draggable");
+                const $builder = $('#corpus-builder-card');
+                ensureDraggable($builder, '#corpus-builder-header');
+
+                // Re-ensure draggable when visibility changes (first show)
+                const builderEl = $builder.get(0);
+                const obs = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.attributeName === 'style' || mutation.attributeName === 'class') {
+                            if ($builder.is(':visible')) {
+                                ensureDraggable($builder, '#corpus-builder-header');
+                            }
+                        }
+                    });
+                });
+                obs.observe(builderEl, { attributes: true, attributeFilter: ['style', 'class'] });
             }
 
             // Initialize collocation-card if it exists
