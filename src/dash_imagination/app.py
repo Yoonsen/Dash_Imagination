@@ -2843,10 +2843,15 @@ def update_places_datasets(filtered_data_json, max_places, resample_n, collocati
 
     tokens = set(collocation_tokens or [])
     if tokens:
+        base_colloc_df = df
+        if all_places_json:
+            try:
+                base_colloc_df = load_places_frame(all_places_json)
+            except Exception:
+                base_colloc_df = df
         colloc_df = (
-            df[df['token'].isin(tokens)]
+            base_colloc_df[base_colloc_df['token'].isin(tokens)]
             .sort_values(by='frequency', ascending=False)
-            .head(max_places)
             .reset_index(drop=True)
         )
     else:
@@ -3109,20 +3114,15 @@ def set_max_places_filter(max_places, current_filters):
     Output('places-collocation-summary', 'children'),
     Output('places-collocation-table', 'children'),
     Input('places-collocation-data', 'data'),
-    Input('place-search', 'value'),
     State('selected-place', 'data')
 )
-def display_collocation_places(colloc_json, search_term, selected_place):
+def display_collocation_places(colloc_json, selected_place):
     df = load_places_frame(colloc_json)
     if df.empty:
         return (
             html.Div("Kjør et kollokasjonssøk for å fylle denne fanen.", style={'fontSize': '0.85rem'}),
             html.Div("Ingen kollokasjoner funnet.", className="text-muted")
         )
-    before = len(df)
-    df = filter_places_search(df, search_term)
-    if search_term:
-        print(f"[places] colloc table rows before/after search '{search_term}': {before}/{len(df)}")
     summary, table = render_place_preview(df, selected_place, empty_message="Ingen kollokasjonstreff som matcher søket.")
     return summary, table
 
@@ -3231,11 +3231,15 @@ def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks
     else:
         raise PreventUpdate
 
-    df = filter_places_search(df, search_term)
-    if df.empty:
+    if mode == 'collocations':
+        # Do not filter collocation corpus by place search; use full collocation set
+        filtered_df = df
+    else:
+        filtered_df = filter_places_search(df, search_term)
+    if filtered_df.empty:
         raise PreventUpdate
 
-    tokens = df['token'].dropna().astype(str).tolist()
+    tokens = filtered_df['token'].dropna().astype(str).tolist()
     new_filters = (current_filters or {}).copy()
     new_filters['selected_tokens'] = tokens
     new_filters['max_places'] = max_places or len(tokens)
