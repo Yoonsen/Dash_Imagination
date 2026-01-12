@@ -43,6 +43,12 @@ This logbook tracks the development progress, decisions, and challenges of the I
 
 ## Development Log
 
+### January 13, 2026 – Place list/search, sorting, collocations
+- Stabilized place list counts (uses full corpus for total) and ensured sorting by book_count/frequency with clickable headers.
+- Search now merges hits into the frequency list; place list decoupled from collocation view (coll shows full collocation set, place list capped by Max places).
+- Collocation filter button/lamp builds corpus from full collocation result; highlight remains a separate overlay.
+- Noted: Dash roundtrips add latency; plan to move place list/search/sorting to React client for snappier updates post-course.
+
 ### January 10, 2026 – Plan for JS/PWA rewrite (post-course)
 - Hold Dash stabil for masterkurset; etterpå migrere til React/Vite/TS PWA med FastAPI-backend for SQLite-data (behold orient='split' og set-op kontrakter).
 - Frontend hostes på GitHub Pages (gh-pages script), backend på Render/Cloud Run og senere NTNU.
