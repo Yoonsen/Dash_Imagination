@@ -2050,8 +2050,7 @@ app.layout = html.Div([
                             style={
                                 'position': 'relative',
                                 'paddingLeft': '30px'
-                            },
-                            title="Søk i korpuset. Bruk prefix eller * for jokertegn (f.eks. *on*)."
+                            }
                         ),
                         html.Button(
                             html.I(className="fas fa-search"),
