@@ -2047,18 +2047,30 @@ app.layout = html.Div([
                             placeholder='Type to search...',
                             className="form-control ps-4",
                             debounce=True,
-                            style={'position': 'relative', 'paddingLeft': '30px'}
+                            style={
+                                'position': 'relative',
+                                'paddingLeft': '30px'
+                            },
+                            title="Søk i korpuset. Bruk prefix eller * for jokertegn (f.eks. *on*)."
                         ),
-                        html.I(
-                            className="fas fa-search",
+                        html.Button(
+                            html.I(className="fas fa-search"),
+                            id='place-search-icon',
+                            n_clicks=0,
+                            title="Søk i korpuset. Bruk * som jokertegn (f.eks. *on*).",
                             style={
                                 'position': 'absolute',
-                                'left': '8px',
+                                'left': '6px',
                                 'top': '50%',
                                 'transform': 'translateY(-50%)',
                                 'color': '#94a3b8',
                                 'fontSize': '0.85rem',
-                                'pointerEvents': 'none'
+                                'background': 'transparent',
+                                'border': 'none',
+                                'padding': 0,
+                                'margin': 0,
+                                'lineHeight': '1',
+                                'cursor': 'pointer'
                             }
                         )
                     ], style={'position': 'relative'})
