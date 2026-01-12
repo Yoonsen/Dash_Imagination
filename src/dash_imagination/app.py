@@ -99,13 +99,24 @@ def load_places_frame(json_payload):
 def filter_places_search(df, search_term):
     if df is None or df.empty:
         return df
-    if not search_term or len(search_term.strip()) < 3:
+    if not search_term or not str(search_term).strip():
         return df
-    term = search_term.strip().lower()
-    mask = (
-        df['token'].astype(str).str.lower().str.startswith(term, na=False) |
-        df['name'].astype(str).str.lower().str.startswith(term, na=False)
-    )
+    import re
+    term = str(search_term).strip().lower()
+
+    if '*' in term:
+        # support simple wildcard: * -> any suffix
+        pattern = re.escape(term).replace(r'\*', '.*')
+        regex = re.compile(rf"^{pattern}", re.IGNORECASE)
+        mask = (
+            df['token'].astype(str).str.match(regex, na=False) |
+            df['name'].astype(str).str.match(regex, na=False)
+        )
+    else:
+        mask = (
+            df['token'].astype(str).str.lower().str.startswith(term, na=False) |
+            df['name'].astype(str).str.lower().str.startswith(term, na=False)
+        )
     return df[mask]
 
 
