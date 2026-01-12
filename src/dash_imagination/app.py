@@ -804,6 +804,14 @@ def create_collocation_controls():
         dcc.Loading(
             html.Div(id='collocation-results', className="text-muted", style={'minHeight': '1.5rem'}),
             type='default'
+        ),
+        dbc.Button(
+            "Filter korpus med kollokasjon",
+            id='filter-collocation-corpus',
+            color='primary',
+            outline=True,
+            size='sm',
+            className="mt-2"
         )
     ], className="collocation-controls", style={
         'flex': '0 0 auto',
@@ -3185,6 +3193,7 @@ def handle_size_buttons(n_clicks, store):
 @app.callback(
     Output('current-filters', 'data', allow_duplicate=True),
     Output('heatmap-subset-mode', 'data', allow_duplicate=True),
+    Output('current-dhlabids-store', 'data', allow_duplicate=True),
     Input('activate-places-frequency', 'n_clicks'),
     Input('activate-places-sampling', 'n_clicks'),
     Input('activate-places-collocations', 'n_clicks'),
@@ -3230,9 +3239,11 @@ def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks
     new_filters['places_source'] = mode
 
     # For collocations: filter books to those containing BOTH the collocation words and one of the selected place tokens
+    updated_books = current_books or []
+
     if mode == 'collocations':
         words = [w.strip() for w in (colloc_words_value or "").split(',') if w.strip()]
-        filtered_books = current_books or []
+        filtered_books = updated_books
         if words and filtered_books:
             from dash_imagination.utils.corpus_build import count_words
             try:
@@ -3263,6 +3274,7 @@ def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks
                 except Exception:
                     pass
         if filtered_books:
+            updated_books = filtered_books
             new_filters['books'] = filtered_books
             new_filters['corpus_source'] = 'Collocations'
         else:
@@ -3270,7 +3282,7 @@ def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks
     else:
         new_filters['corpus_source'] = 'Places'
     subset_mode = 'subset' if heatmap_subset_value else 'all'
-    return new_filters, subset_mode
+    return new_filters, subset_mode, updated_books
 
 
 @app.callback(
