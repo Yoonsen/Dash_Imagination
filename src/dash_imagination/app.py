@@ -3204,6 +3204,7 @@ def handle_size_buttons(n_clicks, store):
     Input('activate-places-frequency', 'n_clicks'),
     Input('activate-places-sampling', 'n_clicks'),
     Input('activate-places-collocations', 'n_clicks'),
+    Input('filter-collocation-corpus', 'n_clicks'),
     State('places-frequency-data', 'data'),
     State('places-sample-data', 'data'),
     State('places-collocation-data', 'data'),
@@ -3216,6 +3217,7 @@ def handle_size_buttons(n_clicks, store):
     prevent_initial_call=True
 )
 def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks,
+                        filter_colloc_clicks,
                         freq_json, sample_json, colloc_json,
                         heatmap_subset_value,
                         search_term, max_places, colloc_words_value, current_books, current_filters):
@@ -3229,7 +3231,7 @@ def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks
     elif trigger == 'activate-places-sampling':
         mode = 'sampling'
         df = load_places_frame(sample_json)
-    elif trigger == 'activate-places-collocations':
+    elif trigger in ('activate-places-collocations', 'filter-collocation-corpus'):
         mode = 'collocations'
         df = load_places_frame(colloc_json)
     else:
