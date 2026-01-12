@@ -228,7 +228,7 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                     [
                         html.I(
                             className="fas fa-filter me-2",
-                            style={'color': '#dc2626', 'opacity': 0.65}
+                            style={'color': '#dc2626', 'opacity': 0.45}
                         ),
                         "Tøm alle filtre"
                     ],
@@ -248,7 +248,7 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                         "Nullstill korpus",
                         html.I(
                             className="fas fa-trash-alt ms-2",
-                            style={'color': '#dc2626', 'opacity': 0.65}
+                            style={'color': '#dc2626', 'opacity': 0.45}
                         )
                     ],
                     id='reset-corpus-btn-builder',
