@@ -103,8 +103,8 @@ def filter_places_search(df, search_term):
         return df
     term = search_term.strip().lower()
     mask = (
-        df['token'].astype(str).str.lower().str.contains(term, na=False) |
-        df['name'].astype(str).str.lower().str.contains(term, na=False)
+        df['token'].astype(str).str.lower().str.startswith(term, na=False) |
+        df['name'].astype(str).str.lower().str.startswith(term, na=False)
     )
     return df[mask]
 
