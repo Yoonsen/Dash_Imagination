@@ -226,7 +226,10 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
             html.Div([
                 html.Button(
                     [
-                        html.I(className="fas fa-filter me-2", style={'color': '#dc2626'}),
+                        html.I(
+                            className="fas fa-filter me-2",
+                            style={'color': '#dc2626', 'opacity': 0.65}
+                        ),
                         "Tøm alle filtre"
                     ],
                     id='reset-filters-btn',
@@ -243,7 +246,10 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                 html.Button(
                     [
                         "Nullstill korpus",
-                        html.I(className="fas fa-trash-alt ms-2", style={'color': '#dc2626'})
+                        html.I(
+                            className="fas fa-trash-alt ms-2",
+                            style={'color': '#dc2626', 'opacity': 0.65}
+                        )
                     ],
                     id='reset-corpus-btn-builder',
                     title="Tøm korpus",
