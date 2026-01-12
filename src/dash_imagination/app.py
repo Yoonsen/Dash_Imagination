@@ -2960,6 +2960,7 @@ def style_places_mode_buttons(active_mode):
     Output('filtered-data', 'data', allow_duplicate=True),
     Input('places-frequency-data', 'data'),
     Input('place-search', 'value'),
+    Input('place-search-icon', 'n_clicks'),
     Input('places-sort-field', 'data'),
     Input('places-sort-dir', 'data'),
     Input('corpus-max-places-slider', 'value'),
@@ -2967,7 +2968,7 @@ def style_places_mode_buttons(active_mode):
     State('all-places-store', 'data'),
     prevent_initial_call=True
 )
-def display_frequency_places(freq_json, search_term, sort_field, sort_dir, max_places, selected_place, all_places_json):
+def display_frequency_places(freq_json, search_term, search_clicks, sort_field, sort_dir, max_places, selected_place, all_places_json):
     max_places = max_places or 500
     sort_field = sort_field or 'book_count'
     sort_dir = sort_dir or 'desc'
@@ -2978,7 +2979,7 @@ def display_frequency_places(freq_json, search_term, sort_field, sort_dir, max_p
     before = len(df)
     filtered_payload = dash.no_update
 
-    if search_term and len(search_term.strip()) >= 3:
+    if search_term:
         # Search across full corpus if available, otherwise current df
         search_df = df
         try:
@@ -2995,7 +2996,8 @@ def display_frequency_places(freq_json, search_term, sort_field, sort_dir, max_p
         filtered_payload = df.to_json(date_format='iso', orient='split')
         print(f"[places] freq table search '{search_term}': hits={len(hits)} (max {max_places})")
     else:
-        df = filter_places_search(df, search_term)
+        # No search term: reset to base frequency list (already head(max_places) above)
+        df = df.sort_values(by='frequency', ascending=False).head(max_places)
         after = len(df)
         if search_term:
             print(f"[places] freq table rows before/after search '{search_term}': {before}/{after}")
