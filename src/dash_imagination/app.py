@@ -1335,6 +1335,7 @@ def get_places_for_map(filters=None, books=None, return_total=False, selected_to
             LEFT JOIN books b ON sp.token = b.token
             JOIN selected_books sb ON b.dhlabid = sb.dhlabid
             GROUP BY sp.token, sp.name, sp.latitude, sp.longitude
+            ORDER BY frequency DESC
             """
             places_df = pd.read_sql_query(query, conn)
         else:
@@ -2018,19 +2019,6 @@ app.layout = html.Div([
         ),
         dbc.CardBody([
             html.Div([
-                dbc.Button(
-                    html.I(className="fas fa-eraser"),
-                    id='clear-selected-place',
-                    color='outline-secondary',
-                    size='sm',
-                    className='me-3 mb-2',
-                    style={
-                        'fontSize': '12px',
-                        'flex': '0 0 auto',
-                        'padding': '6px 8px'
-                    },
-                    title="Nullstill markering"
-                ),
                 html.Div([
                     html.Label("Search", className="form-label mb-1"),
                     dcc.Input(
@@ -2052,8 +2040,23 @@ app.layout = html.Div([
                         className="mb-1"
                     )
                 ], className="flex-fill")
-            ], className="mb-3 d-flex flex-column flex-md-row"),
+            ], className="mb-2 d-flex flex-column flex-md-row"),
             html.Div([
+                dbc.Button(
+                    html.I(className="fas fa-eraser"),
+                    id='clear-selected-place',
+                    color='link',
+                    size='sm',
+                    className='mb-2',
+                    style={
+                        'fontSize': '12px',
+                        'padding': '6px 8px',
+                        'color': '#475569',
+                        'border': 'none',
+                        'flex': '0 0 auto'
+                    },
+                    title="Nullstill markering"
+                ),
                 html.Div([
                     dbc.Checklist(
                         options=[{"label": "Bruk underliste i heatmap", "value": "subset"}],
@@ -2062,7 +2065,9 @@ app.layout = html.Div([
                         switch=True,
                         persistence=True
                     )
-                ], className="mb-2", style={'fontSize': '0.85rem', 'flex': '0 0 auto'}),
+                ], className="ms-3", style={'fontSize': '0.85rem', 'flex': '0 0 auto'})
+            ], className="mb-2 d-flex flex-row align-items-center"),
+            html.Div([
                 html.Div([
                     html.Div([
                         html.Span("Visning", className="places-mode-label"),
@@ -2206,6 +2211,8 @@ app.layout = html.Div([
     dcc.Store(id='places-frequency-data'),
     dcc.Store(id='places-sample-data'),
     dcc.Store(id='places-collocation-data'),
+    dcc.Store(id='places-sort-field', data='frequency'),
+    dcc.Store(id='places-sort-dir', data='desc'),
     dcc.Store(id='places-active-mode', data='frequency'),
     dcc.Store(id='heatmap-subset-mode', data='all'),
     dcc.Store(id='dialog-size-store', data=copy.deepcopy(DEFAULT_CARD_SIZES)),
@@ -2801,6 +2808,8 @@ def update_places_datasets(filtered_data_json, max_places, resample_n, collocati
         return empty_json, empty_json, empty_json
 
     df = load_places_frame(filtered_data_json)
+    df['frequency'] = pd.to_numeric(df.get('frequency'), errors='coerce')
+    df['book_count'] = pd.to_numeric(df.get('book_count'), errors='coerce')
     print(f"[places] source={triggered} rows={len(df)} max_places={max_places}")
     if df.empty:
         return empty_json, empty_json, empty_json
@@ -2896,23 +2905,28 @@ def style_places_mode_buttons(active_mode):
     Output('filtered-data', 'data', allow_duplicate=True),
     Input('places-frequency-data', 'data'),
     Input('place-search', 'value'),
+    Input('places-sort-field', 'data'),
+    Input('places-sort-dir', 'data'),
     State('selected-place', 'data'),
     State('all-places-store', 'data'),
     State('corpus-max-places-slider', 'value'),
     prevent_initial_call=True
 )
-def display_frequency_places(freq_json, search_term, selected_place, all_places_json, max_places):
+def display_frequency_places(freq_json, search_term, sort_field, sort_dir, selected_place, all_places_json, max_places):
     max_places = max_places or 500
+    sort_field = sort_field or 'frequency'
+    sort_dir = sort_dir or 'desc'
     df = load_places_frame(freq_json)
+    df['frequency'] = pd.to_numeric(df.get('frequency'), errors='coerce')
+    df['book_count'] = pd.to_numeric(df.get('book_count'), errors='coerce')
+    df = df.sort_values(by='frequency', ascending=False).head(max_places)
     before = len(df)
     filtered_payload = dash.no_update
 
     if search_term and len(search_term.strip()) >= 3 and all_places_json:
-        # search across full corpus places, not only the current visible subset
         df_all = load_places_frame(all_places_json)
         hits = filter_places_search(df_all, search_term)
         hits = hits.sort_values(by='frequency', ascending=False).head(max_places)
-        # merge: put hits first, then fill with top freq not already in hits
         base = df.sort_values(by='frequency', ascending=False)
         base = base[~base['token'].isin(hits['token'])]
         merged = (
@@ -2929,7 +2943,17 @@ def display_frequency_places(freq_json, search_term, selected_place, all_places_
         if search_term:
             print(f"[places] freq table rows before/after search '{search_term}': {before}/{after}")
 
-    summary, table = render_place_preview(df, selected_place, empty_message="Ingen steder tilgjengelig ennå.")
+    # Apply optional sort
+    if sort_field not in df.columns:
+        sort_field = 'frequency'
+    df = df.sort_values(by=sort_field, ascending=(sort_dir == 'asc'))
+    try:
+        top_tokens = df[['token', 'frequency']].head(5).to_dict('records')
+        print(f"[places] sort_field={sort_field} dir={sort_dir} top={top_tokens}")
+    except Exception:
+        pass
+
+    summary, table = render_place_preview(df, selected_place, empty_message="Ingen steder tilgjengelig ennå.", sort_field=sort_field, sort_dir=sort_dir)
     return summary, table, filtered_payload
 
 
@@ -2938,13 +2962,19 @@ def display_frequency_places(freq_json, search_term, selected_place, all_places_
     Output('places-sampling-table', 'children'),
     Input('places-sample-data', 'data'),
     Input('place-search', 'value'),
+    Input('places-sort-field', 'data'),
+    Input('places-sort-dir', 'data'),
     State('selected-place', 'data'),
     State('all-places-store', 'data'),
     State('corpus-max-places-slider', 'value')
 )
-def display_sampling_places(sample_json, search_term, selected_place, all_places_json, max_places):
+def display_sampling_places(sample_json, search_term, sort_field, sort_dir, selected_place, all_places_json, max_places):
     max_places = max_places or 500
+    sort_field = sort_field or 'frequency'
+    sort_dir = sort_dir or 'desc'
     df = load_places_frame(sample_json)
+    df['frequency'] = pd.to_numeric(df.get('frequency'), errors='coerce')
+    df['book_count'] = pd.to_numeric(df.get('book_count'), errors='coerce')
     before = len(df)
 
     if search_term and len(search_term.strip()) >= 3 and all_places_json:
@@ -2958,8 +2988,66 @@ def display_sampling_places(sample_json, search_term, selected_place, all_places
         if search_term:
             print(f"[places] sample table rows before/after search '{search_term}': {before}/{len(df)}")
 
-    summary, table = render_place_preview(df, selected_place, empty_message="Trykk «Resample Places» for å hente en ny liste.")
+    if sort_field not in df.columns:
+        sort_field = 'frequency'
+    df = df.sort_values(by=sort_field, ascending=(sort_dir == 'asc'))
+
+    summary, table = render_place_preview(df, selected_place, empty_message="Trykk «Resample Places» for å hente en ny liste.", sort_field=sort_field, sort_dir=sort_dir)
     return summary, table
+
+
+@app.callback(
+    Output('clear-selected-place', 'style'),
+    Input('selected-place', 'data')
+)
+def style_clear_button(selected_place):
+    base_style = {
+        'fontSize': '12px',
+        'padding': '6px 8px',
+        'color': '#475569',
+        'border': 'none',
+        'flex': '0 0 auto'
+    }
+    if selected_place:
+        base_style['color'] = '#dc2626'
+    return base_style
+
+
+@app.callback(
+    Output('places-sort-field', 'data'),
+    Output('places-sort-dir', 'data'),
+    Input({'type': 'places-sort-header', 'key': dash.ALL}, 'n_clicks'),
+    State('places-sort-field', 'data'),
+    State('places-sort-dir', 'data'),
+    prevent_initial_call=True
+)
+def sort_places_table(n_clicks, current_field, current_dir):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger = ctx.triggered[0]['prop_id'].split('.')[0]
+    try:
+        trigger_id = eval(trigger)
+    except Exception:
+        raise PreventUpdate
+    key = trigger_id.get('key')
+    if not key:
+        raise PreventUpdate
+    current_field = current_field or 'frequency'
+    current_dir = current_dir or 'desc'
+    new_dir = 'asc' if (current_field == key and current_dir == 'desc') else 'desc'
+    return key, new_dir
+
+
+@app.callback(
+    Output('places-sort-field', 'data', allow_duplicate=True),
+    Output('places-sort-dir', 'data', allow_duplicate=True),
+    Input('places-frequency-data', 'data'),
+    prevent_initial_call=True
+)
+def reset_places_sort_on_data(_):
+    # When the underlying dataset refreshes (e.g. new corpus/search), default to frequency/desc
+    return 'frequency', 'desc'
 
 
 @app.callback(

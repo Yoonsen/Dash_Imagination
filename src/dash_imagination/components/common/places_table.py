@@ -6,13 +6,20 @@ def render_place_preview(
     selected_place,
     empty_message="Ingen steder tilgjengelig.",
     *,
-    body_max_height=360
+    body_max_height=360,
+    sort_field=None,
+    sort_dir='desc'
 ):
     """
     Shared helper that renders a summary + scrollable table for place lists.
     """
     if df is None or df.empty:
         return html.Div(empty_message, className="text-muted"), html.Div()
+
+    if sort_field:
+        ascending = (sort_dir == 'asc')
+        if sort_field in df.columns:
+            df = df.sort_values(by=sort_field, ascending=ascending)
 
     df = df.copy()
     df['hover_text'] = df.apply(
@@ -29,6 +36,23 @@ def render_place_preview(
         f"{len(df):,} steder".replace(',', ' '),
         style={'fontSize': '0.85rem', 'fontWeight': 600, 'color': '#0f172a'}
     )
+
+    def header_cell(label, key):
+        return html.Button(
+            label,
+            id={'type': 'places-sort-header', 'key': key},
+            n_clicks=0,
+            style={
+                'flex': '1.2' if key in ('token', 'name') else '0.7',
+                'fontWeight': '600',
+                'padding': '8px',
+                'cursor': 'pointer',
+                'border': 'none',
+                'background': 'transparent',
+                'textAlign': 'left'
+            },
+            className="places-sort-header"
+        )
 
     rows = []
     for _, row in df.iterrows():
@@ -89,10 +113,10 @@ def render_place_preview(
         [
             html.Div(
                 [
-                    html.Div("Historisk", style={'flex': '1.2', 'fontWeight': '600', 'padding': '8px'}),
-                    html.Div("Moderne", style={'flex': '1.2', 'fontWeight': '600', 'padding': '8px'}),
-                    html.Div("📚", style={'flex': '0.7', 'fontWeight': '600', 'padding': '8px', 'textAlign': 'center'}),
-                    html.Div("📝", style={'flex': '0.7', 'fontWeight': '600', 'padding': '8px', 'textAlign': 'center'})
+                    header_cell("Historisk", 'token'),
+                    header_cell("Moderne", 'name'),
+                    header_cell("📚", 'book_count'),
+                    header_cell("📝", 'frequency')
                 ],
                 style={
                     'display': 'flex',
