@@ -2947,15 +2947,29 @@ def display_frequency_places(freq_json, search_term, sort_field, sort_dir, max_p
 
     # Apply optional sort
     if sort_field not in df.columns:
-        sort_field = 'frequency'
+        sort_field = 'book_count'
     df = df.sort_values(by=sort_field, ascending=(sort_dir == 'asc'))
     try:
-        top_tokens = df[['token', 'frequency']].head(5).to_dict('records')
+        top_tokens = df[['token', 'frequency', 'book_count']].head(5).to_dict('records')
         print(f"[places] sort_field={sort_field} dir={sort_dir} top={top_tokens}")
     except Exception:
         pass
 
-    summary, table = render_place_preview(df, selected_place, empty_message="Ingen steder tilgjengelig ennå.", sort_field=sort_field, sort_dir=sort_dir)
+    total_count = None
+    try:
+        if all_places_json:
+            total_count = len(load_places_frame(all_places_json))
+    except Exception:
+        pass
+
+    summary, table = render_place_preview(
+        df,
+        selected_place,
+        empty_message="Ingen steder tilgjengelig ennå.",
+        sort_field=sort_field,
+        sort_dir=sort_dir,
+        total_count=total_count
+    )
     return summary, table, filtered_payload
 
 
@@ -2993,8 +3007,20 @@ def display_sampling_places(sample_json, search_term, sort_field, sort_dir, max_
     if sort_field not in df.columns:
         sort_field = 'book_count'
     df = df.sort_values(by=sort_field, ascending=(sort_dir == 'asc'))
+    try:
+        top_tokens = df[['token', 'frequency', 'book_count']].head(5).to_dict('records')
+        print(f"[places] sample sort field={sort_field} dir={sort_dir} top={top_tokens}")
+    except Exception:
+        pass
 
-    summary, table = render_place_preview(df, selected_place, empty_message="Trykk «Resample Places» for å hente en ny liste.", sort_field=sort_field, sort_dir=sort_dir)
+    total_count = None
+    try:
+        if all_places_json:
+            total_count = len(load_places_frame(all_places_json))
+    except Exception:
+        pass
+
+    summary, table = render_place_preview(df, selected_place, empty_message="Trykk «Resample Places» for å hente en ny liste.", sort_field=sort_field, sort_dir=sort_dir, total_count=total_count)
     return summary, table
 
 
