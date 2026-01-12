@@ -2019,12 +2019,17 @@ app.layout = html.Div([
         dbc.CardBody([
             html.Div([
                 dbc.Button(
-                    "Nullstill markering",
+                    html.I(className="fas fa-eraser"),
                     id='clear-selected-place',
                     color='outline-secondary',
                     size='sm',
                     className='me-3 mb-2',
-                    style={'fontSize': '12px', 'flex': '0 0 auto'}
+                    style={
+                        'fontSize': '12px',
+                        'flex': '0 0 auto',
+                        'padding': '6px 8px'
+                    },
+                    title="Nullstill markering"
                 ),
                 html.Div([
                     html.Label("Search", className="form-label mb-1"),
@@ -2888,19 +2893,44 @@ def style_places_mode_buttons(active_mode):
 @app.callback(
     Output('places-frequency-summary', 'children'),
     Output('places-frequency-table', 'children'),
+    Output('filtered-data', 'data', allow_duplicate=True),
     Input('places-frequency-data', 'data'),
     Input('place-search', 'value'),
-    State('selected-place', 'data')
+    State('selected-place', 'data'),
+    State('all-places-store', 'data'),
+    State('corpus-max-places-slider', 'value'),
+    prevent_initial_call=True
 )
-def display_frequency_places(freq_json, search_term, selected_place):
+def display_frequency_places(freq_json, search_term, selected_place, all_places_json, max_places):
+    max_places = max_places or 500
     df = load_places_frame(freq_json)
     before = len(df)
-    df = filter_places_search(df, search_term)
-    after = len(df)
-    if search_term:
-        print(f"[places] freq table rows before/after search '{search_term}': {before}/{after}")
+    filtered_payload = dash.no_update
+
+    if search_term and len(search_term.strip()) >= 3 and all_places_json:
+        # search across full corpus places, not only the current visible subset
+        df_all = load_places_frame(all_places_json)
+        hits = filter_places_search(df_all, search_term)
+        hits = hits.sort_values(by='frequency', ascending=False).head(max_places)
+        # merge: put hits first, then fill with top freq not already in hits
+        base = df.sort_values(by='frequency', ascending=False)
+        base = base[~base['token'].isin(hits['token'])]
+        merged = (
+            pd.concat([hits, base], ignore_index=True)
+            .sort_values(by='frequency', ascending=False)
+            .head(max_places)
+        )
+        df = merged
+        filtered_payload = df.to_json(date_format='iso', orient='split')
+        print(f"[places] freq table search '{search_term}': hits={len(hits)} merged={len(df)} (max {max_places})")
+    else:
+        df = filter_places_search(df, search_term)
+        after = len(df)
+        if search_term:
+            print(f"[places] freq table rows before/after search '{search_term}': {before}/{after}")
+
     summary, table = render_place_preview(df, selected_place, empty_message="Ingen steder tilgjengelig ennå.")
-    return summary, table
+    return summary, table, filtered_payload
 
 
 @app.callback(
@@ -2908,14 +2938,26 @@ def display_frequency_places(freq_json, search_term, selected_place):
     Output('places-sampling-table', 'children'),
     Input('places-sample-data', 'data'),
     Input('place-search', 'value'),
-    State('selected-place', 'data')
+    State('selected-place', 'data'),
+    State('all-places-store', 'data'),
+    State('corpus-max-places-slider', 'value')
 )
-def display_sampling_places(sample_json, search_term, selected_place):
+def display_sampling_places(sample_json, search_term, selected_place, all_places_json, max_places):
+    max_places = max_places or 500
     df = load_places_frame(sample_json)
     before = len(df)
-    df = filter_places_search(df, search_term)
-    if search_term:
-        print(f"[places] sample table rows before/after search '{search_term}': {before}/{len(df)}")
+
+    if search_term and len(search_term.strip()) >= 3 and all_places_json:
+        df_all = load_places_frame(all_places_json)
+        df_all = filter_places_search(df_all, search_term)
+        df_all = df_all.sort_values(by='frequency', ascending=False)
+        df = df_all.head(max_places)
+        print(f"[places] sample table (full corpus) rows before/after search '{search_term}': {len(df_all)}/{len(df)}")
+    else:
+        df = filter_places_search(df, search_term)
+        if search_term:
+            print(f"[places] sample table rows before/after search '{search_term}': {before}/{len(df)}")
+
     summary, table = render_place_preview(df, selected_place, empty_message="Trykk «Resample Places» for å hente en ny liste.")
     return summary, table
 
@@ -5212,36 +5254,41 @@ def update_corpus_info_and_table(_, filter_data, current_books, current_filters)
     import pandas as pd
     conn = get_db_connection()
     try:
+        cur = conn.cursor()
+        cur.execute("DROP TABLE IF EXISTS tmp_corpus_view")
+        cur.execute("CREATE TEMP TABLE tmp_corpus_view (dhlabid INTEGER)")
+        cur.executemany("INSERT INTO tmp_corpus_view (dhlabid) VALUES (?)", [(int(b),) for b in books])
+
         # Info section
-        query = f"""
-        SELECT COUNT(DISTINCT dhlabid) as book_count,
-               COUNT(DISTINCT author) as author_count,
-               MIN(year) as min_year,
-               MAX(year) as max_year
-        FROM corpus
-        WHERE dhlabid IN ({','.join(['?'] * len(books))})
-        AND year IS NOT NULL
+        query = """
+        SELECT COUNT(DISTINCT c.dhlabid) as book_count,
+               COUNT(DISTINCT c.author) as author_count,
+               MIN(c.year) as min_year,
+               MAX(c.year) as max_year
+        FROM corpus c
+        JOIN tmp_corpus_view t ON c.dhlabid = t.dhlabid
+        WHERE c.year IS NOT NULL
         """
-        info = pd.read_sql_query(query, conn, params=tuple(books)).iloc[0]
+        info = pd.read_sql_query(query, conn).iloc[0]
         # Places count
-        places_query = f"""
+        places_query = """
         SELECT COUNT(DISTINCT b.token) as place_count
         FROM books b
+        JOIN tmp_corpus_view t ON b.dhlabid = t.dhlabid
         JOIN places p ON b.token = p.token
-        WHERE b.dhlabid IN ({','.join(['?'] * len(books))})
-          AND p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+        WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL
           AND CAST(p.latitude AS REAL) != 0
           AND CAST(p.longitude AS REAL) != 0
         """
-        place_count = pd.read_sql_query(places_query, conn, params=tuple(books))['place_count'].iloc[0]
+        place_count = pd.read_sql_query(places_query, conn)['place_count'].iloc[0]
         # Year range
         if pd.notnull(info['min_year']) and pd.notnull(info['max_year']):
             years = f"{int(info['min_year'])}–{int(info['max_year'])}"
         else:
             years = ""
         # --- Build SQL filter for the table ---
-        where_clauses = [f"c.dhlabid IN ({','.join(['?'] * len(books))})"]
-        params = list(books)
+        where_clauses = ["t.dhlabid = c.dhlabid"]
+        params = []
         if filter_data and filter_data.get('column') and filter_data.get('value') is not None:
             col = filter_data['column']
             val = filter_data['value']
@@ -5259,11 +5306,12 @@ def update_corpus_info_and_table(_, filter_data, current_books, current_filters)
         SELECT c.title, c.author, c.category, c.year, c.urn,
                (SELECT COUNT(DISTINCT b.token) FROM books b WHERE b.dhlabid = c.dhlabid) as placename_count
         FROM corpus c
+        JOIN tmp_corpus_view t ON c.dhlabid = t.dhlabid
         WHERE {where_sql}
         ORDER BY c.year DESC, c.title
         LIMIT 100
         '''
-        df = pd.read_sql_query(table_query, conn, params=tuple(params))
+        df = pd.read_sql_query(table_query, conn, params=tuple(params) if params else None)
         # placename_count filter (must be applied after fetch)
         if filter_data and filter_data.get('column') == 'placename_count' and filter_data.get('value') is not None:
             val = filter_data['value']
