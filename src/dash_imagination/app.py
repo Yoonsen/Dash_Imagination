@@ -3229,7 +3229,7 @@ def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks
     new_filters['max_places'] = max_places or len(tokens)
     new_filters['places_source'] = mode
 
-    # For collocations: filter books to those containing collocation words
+    # For collocations: filter books to those containing BOTH the collocation words and one of the selected place tokens
     if mode == 'collocations':
         words = [w.strip() for w in (colloc_words_value or "").split(',') if w.strip()]
         filtered_books = current_books or []
@@ -3242,6 +3242,26 @@ def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks
                     filtered_books = [int(d) for d, total in sums.items() if total >= 1]
             except Exception as e:
                 print(f"[collocation] count_words error: {e}")
+        # also require the book to contain one of the selected place tokens
+        if tokens and filtered_books:
+            try:
+                conn = get_db_connection()
+                placeholders = ','.join(['?'] * len(tokens))
+                book_place_query = f"""
+                    SELECT DISTINCT dhlabid
+                    FROM books
+                    WHERE token IN ({placeholders})
+                """
+                place_books_df = pd.read_sql_query(book_place_query, conn, params=tuple(tokens))
+                place_books = set(place_books_df['dhlabid'].dropna().astype(int).tolist())
+                filtered_books = [b for b in filtered_books if b in place_books]
+            except Exception as e:
+                print(f"[collocation] place/book filter error: {e}")
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
         if filtered_books:
             new_filters['books'] = filtered_books
             new_filters['corpus_source'] = 'Collocations'
