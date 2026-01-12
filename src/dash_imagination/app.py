@@ -2211,7 +2211,7 @@ app.layout = html.Div([
     dcc.Store(id='places-frequency-data'),
     dcc.Store(id='places-sample-data'),
     dcc.Store(id='places-collocation-data'),
-    dcc.Store(id='places-sort-field', data='frequency'),
+    dcc.Store(id='places-sort-field', data='book_count'),
     dcc.Store(id='places-sort-dir', data='desc'),
     dcc.Store(id='places-active-mode', data='frequency'),
     dcc.Store(id='heatmap-subset-mode', data='all'),
@@ -2914,7 +2914,7 @@ def style_places_mode_buttons(active_mode):
 )
 def display_frequency_places(freq_json, search_term, sort_field, sort_dir, selected_place, all_places_json, max_places):
     max_places = max_places or 500
-    sort_field = sort_field or 'frequency'
+    sort_field = sort_field or 'book_count'
     sort_dir = sort_dir or 'desc'
     df = load_places_frame(freq_json)
     df['frequency'] = pd.to_numeric(df.get('frequency'), errors='coerce')
@@ -2970,7 +2970,7 @@ def display_frequency_places(freq_json, search_term, sort_field, sort_dir, selec
 )
 def display_sampling_places(sample_json, search_term, sort_field, sort_dir, selected_place, all_places_json, max_places):
     max_places = max_places or 500
-    sort_field = sort_field or 'frequency'
+    sort_field = sort_field or 'book_count'
     sort_dir = sort_dir or 'desc'
     df = load_places_frame(sample_json)
     df['frequency'] = pd.to_numeric(df.get('frequency'), errors='coerce')
@@ -2989,7 +2989,7 @@ def display_sampling_places(sample_json, search_term, sort_field, sort_dir, sele
             print(f"[places] sample table rows before/after search '{search_term}': {before}/{len(df)}")
 
     if sort_field not in df.columns:
-        sort_field = 'frequency'
+        sort_field = 'book_count'
     df = df.sort_values(by=sort_field, ascending=(sort_dir == 'asc'))
 
     summary, table = render_place_preview(df, selected_place, empty_message="Trykk «Resample Places» for å hente en ny liste.", sort_field=sort_field, sort_dir=sort_dir)
@@ -3046,8 +3046,8 @@ def sort_places_table(n_clicks, current_field, current_dir):
     prevent_initial_call=True
 )
 def reset_places_sort_on_data(_):
-    # When the underlying dataset refreshes (e.g. new corpus/search), default to frequency/desc
-    return 'frequency', 'desc'
+    # When the underlying dataset refreshes (e.g. new corpus/search), default to book_count/desc
+    return 'book_count', 'desc'
 
 
 @app.callback(
