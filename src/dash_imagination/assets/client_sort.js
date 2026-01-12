@@ -71,6 +71,58 @@
       const el = document.getElementById(id);
       if (el) attachSorter(el);
     });
+    attachHtmlTableSorter("corpus-browse-table", {
+      title: "text",
+      author: "text",
+      category: "text",
+      year: "number",
+      placename_count: "number",
+    });
+  }
+
+  // Generic HTML table sorter for corpus view
+  function attachHtmlTableSorter(containerId, typeMap) {
+    const container = document.getElementById(containerId);
+    if (!container || container.__clientSorterAttached) return;
+    const table = container.querySelector("table");
+    if (!table) return;
+    const ths = table.querySelectorAll("th");
+    const tbody = table.querySelector("tbody");
+    if (!ths.length || !tbody) return;
+    const state = {};
+    ths.forEach((th, idx) => {
+      const key = Object.keys(typeMap || {})[idx];
+      if (!key) return;
+      state[key] = "desc";
+      th.style.cursor = "pointer";
+      th.addEventListener(
+        "click",
+        (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const rows = Array.from(tbody.querySelectorAll("tr"));
+          if (!rows.length) return;
+          const nextDir = state[key] === "desc" ? "asc" : "desc";
+          state[key] = nextDir;
+          rows.sort((a, b) => {
+            const va = a.children[idx]?.textContent?.trim() || "";
+            const vb = b.children[idx]?.textContent?.trim() || "";
+            const isNum = (typeMap || {})[key] === "number";
+            if (isNum) {
+              const na = Number(va) || 0;
+              const nb = Number(vb) || 0;
+              return nextDir === "asc" ? na - nb : nb - na;
+            }
+            return nextDir === "asc"
+              ? va.localeCompare(vb)
+              : vb.localeCompare(va);
+          });
+          rows.forEach((r) => tbody.appendChild(r));
+        },
+        { capture: true }
+      );
+    });
+    container.__clientSorterAttached = true;
   }
 
   document.addEventListener("DOMContentLoaded", () => {
