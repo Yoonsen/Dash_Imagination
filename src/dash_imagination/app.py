@@ -2033,7 +2033,8 @@ app.layout = html.Div([
                         id='place-search',
                         type='text',
                         placeholder='Type to search...',
-                        className="form-control"
+                        className="form-control",
+                        debounce=True
                     )
                 ], className="flex-fill me-md-3 mb-3 mb-md-0"),
                 html.Div([
