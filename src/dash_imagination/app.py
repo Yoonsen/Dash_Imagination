@@ -2993,7 +2993,6 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
         hits = filter_places_search(search_df, search_term)
         hits = hits.sort_values(by='frequency', ascending=False).head(max_places)
         df = hits
-        filtered_payload = df.to_json(date_format='iso', orient='split')
         print(f"[places] freq table search '{search_term}': hits={len(hits)} (max {max_places})")
     else:
         # No search term: reset to base frequency list (already head(max_places) above)
@@ -3001,7 +3000,7 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
         after = len(df)
         if search_term:
             print(f"[places] freq table rows before/after search '{search_term}': {before}/{after}")
-        filtered_payload = df.to_json(date_format='iso', orient='split')
+        filtered_payload = dash.no_update
 
     # Apply optional sort with secondary keys to avoid alpha-ties
     if sort_field not in df.columns:
