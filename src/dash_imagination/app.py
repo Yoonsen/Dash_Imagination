@@ -2972,10 +2972,11 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
     max_places = max_places or 500
     sort_field = sort_field or 'book_count'
     sort_dir = sort_dir or 'desc'
-    base_df = load_places_frame(freq_json)
-    base_df['frequency'] = pd.to_numeric(base_df.get('frequency'), errors='coerce')
-    base_df['book_count'] = pd.to_numeric(base_df.get('book_count'), errors='coerce')
-    base_df = base_df.sort_values(by='frequency', ascending=False).head(max_places)
+    full_df = load_places_frame(freq_json)
+    full_df['frequency'] = pd.to_numeric(full_df.get('frequency'), errors='coerce')
+    full_df['book_count'] = pd.to_numeric(full_df.get('book_count'), errors='coerce')
+    total_count = len(full_df)
+    base_df = full_df.sort_values(by='frequency', ascending=False).head(max_places)
     before = len(base_df)
     filtered_payload = base_df.to_json(date_format='iso', orient='split')
     df = base_df
@@ -3022,12 +3023,7 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
     except Exception:
         pass
 
-    total_count = len(df)
-    try:
-        if all_places_json:
-            total_count = len(load_places_frame(all_places_json))
-    except Exception:
-        pass
+    # total_count already from full_df (pre-head)
 
     summary, table = render_place_preview(
         df,
