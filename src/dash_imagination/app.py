@@ -2964,11 +2964,11 @@ def style_places_mode_buttons(active_mode):
     Input('places-sort-field', 'data'),
     Input('places-sort-dir', 'data'),
     Input('corpus-max-places-slider', 'value'),
+    Input('all-places-store', 'data'),
     State('selected-place', 'data'),
-    State('all-places-store', 'data'),
     prevent_initial_call=True
 )
-def display_frequency_places(freq_json, search_term, search_clicks, sort_field, sort_dir, max_places, selected_place, all_places_json):
+def display_frequency_places(freq_json, search_term, search_clicks, sort_field, sort_dir, max_places, all_places_json, selected_place):
     max_places = max_places or 500
     sort_field = sort_field or 'book_count'
     sort_dir = sort_dir or 'desc'
