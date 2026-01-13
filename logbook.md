@@ -51,6 +51,7 @@ This logbook tracks the development progress, decisions, and challenges of the I
 - Added client-side sorting for place, collocation, and corpus tables (assets/client_sort.js) to remove roundtrips.
 - Place search: prefix/wildcard (*on*) support; debounce on Enter/blur; inline search icon with tooltip. Clearing search restores full list and map markers.
 - Reset buttons in corpus builder restyle: gray text, red icons; “Tøm alle filtre” also clears content filter; “Nullstill korpus” clarified.
+- Note: Client-side sorting is per-render; when data re-renders (new corpus/slider/søk), headers rebind and base order resets (intended). In a future PWA/React client we can persist sort state and reapply automatically client-side.
 
 ### January 10, 2026 – Plan for JS/PWA rewrite (post-course)
 - Hold Dash stabil for masterkurset; etterpå migrere til React/Vite/TS PWA med FastAPI-backend for SQLite-data (behold orient='split' og set-op kontrakter).
