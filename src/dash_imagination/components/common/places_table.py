@@ -42,10 +42,8 @@ def render_place_preview(
     )
 
     def header_cell(label, key):
-        return html.Button(
+        return html.Span(
             label,
-            id={'type': 'places-sort-header', 'key': key},
-            n_clicks=0,
             style={
                 'flex': '1.2' if key in ('token', 'name') else '0.7',
                 'fontWeight': '600',
@@ -53,9 +51,11 @@ def render_place_preview(
                 'cursor': 'pointer',
                 'border': 'none',
                 'background': 'transparent',
-                'textAlign': 'left'
+                'textAlign': 'left',
+                'display': 'inline-block'
             },
-            className="places-sort-header"
+            className="places-sort-header",
+            **{'data-key': key, 'role': 'button', 'tabIndex': 0, 'aria-label': f"Sorter {label}"}
         )
 
     rows = []
