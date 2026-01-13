@@ -132,5 +132,7 @@
     initAll();
     const observer = new MutationObserver(() => initAll());
     observer.observe(document.body, { childList: true, subtree: true });
+    // Safety: periodic re-init in case mutations are not observed (Dash re-render)
+    setInterval(initAll, 1000);
   });
 })();
