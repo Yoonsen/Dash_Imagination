@@ -25,7 +25,7 @@
   }
 
   function attachSorter(container) {
-    if (!container || container.__clientSorterAttached) return;
+    if (!container) return;
     const headerButtons = container.querySelectorAll(".places-sort-header");
     if (!headerButtons.length) return;
 
@@ -35,38 +35,38 @@
       const key = parseHeaderKey(btn);
       if (!key) return;
       state.dir[key] = "desc";
+      const handler = (e) => {
+        // prevent Dash callbacks from re-sorting server-side; keep client-only
+        e.preventDefault();
+        e.stopPropagation();
+        const rows = Array.from(container.querySelectorAll(".place-item"));
+        if (!rows.length) return;
+        const parent = rows[0].parentNode;
+        const currentDir = state.dir[key] || "desc";
+        const nextDir = currentDir === "desc" ? "asc" : "desc";
+        state.dir[key] = nextDir;
 
-      btn.addEventListener(
-        "click",
-        (e) => {
-          // prevent Dash callbacks from re-sorting server-side; keep client-only
-          e.preventDefault();
-          e.stopPropagation();
-          const rows = Array.from(container.querySelectorAll(".place-item"));
-          if (!rows.length) return;
-          const parent = rows[0].parentNode;
-          const currentDir = state.dir[key] || "desc";
-          const nextDir = currentDir === "desc" ? "asc" : "desc";
-          state.dir[key] = nextDir;
+        rows.sort((a, b) => {
+          const va = getCellValue(a, key);
+          const vb = getCellValue(b, key);
+          if (va === vb) return 0;
+          if (typeof va === "number" && typeof vb === "number") {
+            return nextDir === "asc" ? va - vb : vb - va;
+          }
+          return nextDir === "asc"
+            ? String(va).localeCompare(String(vb))
+            : String(vb).localeCompare(String(va));
+        });
 
-          rows.sort((a, b) => {
-            const va = getCellValue(a, key);
-            const vb = getCellValue(b, key);
-            if (va === vb) return 0;
-            if (typeof va === "number" && typeof vb === "number") {
-              return nextDir === "asc" ? va - vb : vb - va;
-            }
-            return nextDir === "asc"
-              ? String(va).localeCompare(String(vb))
-              : String(vb).localeCompare(String(va));
-          });
+        rows.forEach((r) => parent.appendChild(r));
+      };
 
-          rows.forEach((r) => parent.appendChild(r));
-        },
-        { capture: true }
-      );
+      if (btn.__clientSortHandler) {
+        btn.removeEventListener("click", btn.__clientSortHandler, true);
+      }
+      btn.__clientSortHandler = handler;
+      btn.addEventListener("click", handler, { capture: true });
     });
-    container.__clientSorterAttached = true;
   }
 
   function initAll() {
@@ -86,7 +86,7 @@
   // Generic HTML table sorter for corpus view
   function attachHtmlTableSorter(containerId, typeMap) {
     const container = document.getElementById(containerId);
-    if (!container || container.__clientSorterAttached) return;
+    if (!container) return;
     const table = container.querySelector("table");
     if (!table) return;
     const ths = table.querySelectorAll("th");
@@ -98,34 +98,34 @@
       if (!key) return;
       state[key] = "desc";
       th.style.cursor = "pointer";
-      th.addEventListener(
-        "click",
-        (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const rows = Array.from(tbody.querySelectorAll("tr"));
-          if (!rows.length) return;
-          const nextDir = state[key] === "desc" ? "asc" : "desc";
-          state[key] = nextDir;
-          rows.sort((a, b) => {
-            const va = a.children[idx]?.textContent?.trim() || "";
-            const vb = b.children[idx]?.textContent?.trim() || "";
-            const isNum = (typeMap || {})[key] === "number";
-            if (isNum) {
-              const na = Number(va) || 0;
-              const nb = Number(vb) || 0;
-              return nextDir === "asc" ? na - nb : nb - na;
-            }
-            return nextDir === "asc"
-              ? va.localeCompare(vb)
-              : vb.localeCompare(va);
-          });
-          rows.forEach((r) => tbody.appendChild(r));
-        },
-        { capture: true }
-      );
+      const handler = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        if (!rows.length) return;
+        const nextDir = state[key] === "desc" ? "asc" : "desc";
+        state[key] = nextDir;
+        rows.sort((a, b) => {
+          const va = a.children[idx]?.textContent?.trim() || "";
+          const vb = b.children[idx]?.textContent?.trim() || "";
+          const isNum = (typeMap || {})[key] === "number";
+          if (isNum) {
+            const na = Number(va) || 0;
+            const nb = Number(vb) || 0;
+            return nextDir === "asc" ? na - nb : nb - na;
+          }
+          return nextDir === "asc"
+            ? va.localeCompare(vb)
+            : vb.localeCompare(va);
+        });
+        rows.forEach((r) => tbody.appendChild(r));
+      };
+      if (th.__clientSortHandler) {
+        th.removeEventListener("click", th.__clientSortHandler, true);
+      }
+      th.__clientSortHandler = handler;
+      th.addEventListener("click", handler, { capture: true });
     });
-    container.__clientSorterAttached = true;
   }
 
   document.addEventListener("DOMContentLoaded", () => {
