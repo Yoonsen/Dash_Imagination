@@ -2978,7 +2978,9 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
     total_count = len(full_df)
     try:
         if all_places_json:
-            total_count = len(load_places_frame(all_places_json))
+            loaded_all = load_places_frame(all_places_json)
+            if loaded_all is not None and not loaded_all.empty:
+                total_count = len(loaded_all)
     except Exception:
         pass
     base_df = full_df.sort_values(by='frequency', ascending=False).head(max_places)
