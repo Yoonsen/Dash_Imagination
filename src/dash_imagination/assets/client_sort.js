@@ -2,6 +2,8 @@
 // Sorts rendered rows in the browser to avoid server roundtrips.
 (function () {
   function parseHeaderKey(btn) {
+    const dataKey = btn.getAttribute("data-key");
+    if (dataKey) return dataKey;
     const rawId = btn.getAttribute("id");
     if (!rawId) return null;
     try {
