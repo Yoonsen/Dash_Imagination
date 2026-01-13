@@ -2976,6 +2976,11 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
     full_df['frequency'] = pd.to_numeric(full_df.get('frequency'), errors='coerce')
     full_df['book_count'] = pd.to_numeric(full_df.get('book_count'), errors='coerce')
     total_count = len(full_df)
+    try:
+        if all_places_json:
+            total_count = len(load_places_frame(all_places_json))
+    except Exception:
+        pass
     base_df = full_df.sort_values(by='frequency', ascending=False).head(max_places)
     before = len(base_df)
     filtered_payload = base_df.to_json(date_format='iso', orient='split')
