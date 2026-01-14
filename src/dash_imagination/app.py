@@ -2127,29 +2127,6 @@ app.layout = html.Div([
             html.Div([
                 html.Div([
                     html.Div([
-                        html.Span("Visning", className="places-mode-label"),
-                        dbc.ButtonGroup([
-                            dbc.Button(
-                                "Frekvens",
-                                id='places-mode-frequency',
-                                n_clicks=0,
-                                color="primary",
-                                outline=False,
-                                size="sm",
-                                className="places-mode-btn"
-                            ),
-                            dbc.Button(
-                                "Sampling",
-                                id='places-mode-sampling',
-                                n_clicks=0,
-                                color="light",
-                                outline=True,
-                                size="sm",
-                                className="places-mode-btn"
-                            )
-                        ], size="sm", className="places-mode-button-group")
-                    ], className="places-mode-toggle d-flex align-items-center justify-content-between flex-wrap gap-2"),
-                    html.Div([
                         html.Div(
                             build_places_tab(
                                 'places-frequency-summary',
@@ -2164,26 +2141,10 @@ app.layout = html.Div([
                             ),
                             id='places-frequency-panel',
                             style={'flex': '1 1 auto', 'minHeight': 0, 'display': 'flex'}
-                        ),
-                        html.Div(
-                            build_places_tab(
-                                'places-sampling-summary',
-                                'places-sampling-table',
-                                'download-places-sampling-btn',
-                                'download-places-sampling',
-                                'apply-places-sampling',
-                                include_resample=True,
-                                activate_btn_id='activate-places-sampling',
-                                source_key='sampling',
-                                activate_title="Vis eksempellisten på kartet"
-                            ),
-                            id='places-sampling-panel',
-                            style={'flex': '1 1 auto', 'minHeight': 0, 'display': 'none'}
                         )
-                    ], className="places-mode-panels flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'})
+                    ], className="places-mode-panels flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'}),
+                    dbc.Button(id='activate-places-frequency', style={'display': 'none'}, color='light')
                 ], className="flex-grow-1 d-flex flex-column", style={'minHeight': 0, 'gap': '0.75rem'}),
-                # Hidden frequency apply button to satisfy callbacks (frekvenskutt fjernet)
-                dbc.Button(id='activate-places-frequency', style={'display': 'none'}, color='light')
             ], id='place-names-list', style={
                 'flex': '1 1 auto',
                 'minHeight': 0,
@@ -2273,7 +2234,6 @@ app.layout = html.Div([
     dcc.Store(id='places-sort-field', data='book_count'),
     dcc.Store(id='places-sort-dir', data='desc'),
     dcc.Store(id='places-page', data=0),
-    dcc.Store(id='places-active-mode', data='frequency'),
     dcc.Store(id='heatmap-subset-mode', data='all'),
     dcc.Store(id='dialog-size-store', data=copy.deepcopy(DEFAULT_CARD_SIZES)),
     dcc.Store(id='place-summary-window-state', data={'minimized': False}),
@@ -2916,57 +2876,6 @@ def update_places_datasets(filtered_data_json, max_places, resample_n, collocati
 
 
 @app.callback(
-    Output('places-active-mode', 'data'),
-    Input('places-mode-frequency', 'n_clicks'),
-    Input('places-mode-sampling', 'n_clicks'),
-    State('places-active-mode', 'data'),
-    prevent_initial_call=True
-)
-def set_places_active_mode(freq_clicks, sampling_clicks, current_mode):
-    ctx = dash.callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-    trigger = ctx.triggered[0]['prop_id'].split('.')[0]
-    if trigger == 'places-mode-frequency':
-        return 'frequency'
-    if trigger == 'places-mode-sampling':
-        return 'sampling'
-    return current_mode or 'frequency'
-
-
-@app.callback(
-    Output('places-frequency-panel', 'style'),
-    Output('places-sampling-panel', 'style'),
-    Input('places-active-mode', 'data')
-)
-def toggle_places_mode_panels(active_mode):
-    freq_style = {'flex': '1 1 auto', 'minHeight': 0, 'display': 'flex'}
-    sample_style = {'flex': '1 1 auto', 'minHeight': 0, 'display': 'flex'}
-    if active_mode == 'sampling':
-        freq_style['display'] = 'none'
-    else:
-        sample_style['display'] = 'none'
-    return freq_style, sample_style
-
-
-@app.callback(
-    Output('places-mode-frequency', 'color'),
-    Output('places-mode-frequency', 'outline'),
-    Output('places-mode-sampling', 'color'),
-    Output('places-mode-sampling', 'outline'),
-    Input('places-active-mode', 'data')
-)
-def style_places_mode_buttons(active_mode):
-    freq_active = (active_mode != 'sampling')
-    sample_active = not freq_active
-    freq_color = 'primary' if freq_active else 'light'
-    sample_color = 'primary' if sample_active else 'light'
-    freq_outline = not freq_active
-    sample_outline = not sample_active
-    return freq_color, freq_outline, sample_color, sample_outline
-
-
-@app.callback(
     Output('places-frequency-summary', 'children'),
     Output('places-frequency-table', 'children'),
     Output('filtered-data', 'data', allow_duplicate=True),
@@ -3072,57 +2981,6 @@ def update_places_page(prev_clicks, next_clicks, search_clicks, freq_json, searc
     return current_page
 
 @app.callback(
-    Output('places-sampling-summary', 'children'),
-    Output('places-sampling-table', 'children'),
-    Input('places-sample-data', 'data'),
-    Input('place-search', 'value'),
-    Input('places-sort-field', 'data'),
-    Input('places-sort-dir', 'data'),
-    Input('corpus-max-places-slider', 'value'),
-    State('selected-place', 'data'),
-    State('all-places-store', 'data'),
-)
-def display_sampling_places(sample_json, search_term, sort_field, sort_dir, max_places, selected_place, all_places_json):
-    max_places = max_places or 500
-    sort_field = sort_field or 'book_count'
-    sort_dir = sort_dir or 'desc'
-    df = load_places_frame(sample_json)
-    df['frequency'] = pd.to_numeric(df.get('frequency'), errors='coerce')
-    df['book_count'] = pd.to_numeric(df.get('book_count'), errors='coerce')
-    before = len(df)
-
-    if search_term and len(search_term.strip()) >= 3 and all_places_json:
-        df_all = load_places_frame(all_places_json)
-        df_all = filter_places_search(df_all, search_term)
-        df_all = df_all.sort_values(by='frequency', ascending=False)
-        df = df_all.head(max_places)
-        print(f"[places] sample table (full corpus) rows before/after search '{search_term}': {len(df_all)}/{len(df)}")
-    else:
-        df = filter_places_search(df, search_term)
-        if search_term:
-            print(f"[places] sample table rows before/after search '{search_term}': {before}/{len(df)}")
-
-    if sort_field not in df.columns:
-        sort_field = 'book_count'
-    df = df.sort_values(by=sort_field, ascending=(sort_dir == 'asc'))
-    try:
-        top_tokens = df[['token', 'frequency', 'book_count']].head(5).to_dict('records')
-        print(f"[places] sample sort field={sort_field} dir={sort_dir} top={top_tokens}")
-    except Exception:
-        pass
-
-    total_count = None
-    try:
-        if all_places_json:
-            total_count = len(load_places_frame(all_places_json))
-    except Exception:
-        pass
-
-    summary, table = render_place_preview(df, selected_place, empty_message="Trykk «Resample Places» for å hente en ny liste.", sort_field=sort_field, sort_dir=sort_dir, total_count=total_count)
-    return summary, table
-
-
-@app.callback(
     Output('clear-selected-place', 'style'),
     Input('selected-place', 'data')
 )
@@ -3219,21 +3077,13 @@ def _download_places_frame(json_payload, filename_prefix):
 @app.callback(
     Output('download-places-frequency', 'data'),
     Input('download-places-frequency-btn', 'n_clicks'),
+    State('all-places-store', 'data'),
     State('places-frequency-data', 'data'),
     prevent_initial_call=True
 )
-def download_frequency_places(n_clicks, freq_json):
-    return _download_places_frame(freq_json, "places_frequency")
-
-
-@app.callback(
-    Output('download-places-sampling', 'data'),
-    Input('download-places-sampling-btn', 'n_clicks'),
-    State('places-sample-data', 'data'),
-    prevent_initial_call=True
-)
-def download_sampling_places(n_clicks, sample_json):
-    return _download_places_frame(sample_json, "places_sampling")
+def download_frequency_places(n_clicks, all_places_json, freq_json):
+    payload = all_places_json or freq_json
+    return _download_places_frame(payload, "places_frequency_all")
 
 
 @app.callback(
@@ -3276,11 +3126,9 @@ def handle_size_buttons(n_clicks, store):
     Output('heatmap-subset-mode', 'data', allow_duplicate=True),
     Output('current-dhlabids-store', 'data', allow_duplicate=True),
     Input('activate-places-frequency', 'n_clicks'),
-    Input('activate-places-sampling', 'n_clicks'),
     Input('activate-places-collocations', 'n_clicks'),
     Input('filter-collocation-corpus', 'n_clicks'),
     State('places-frequency-data', 'data'),
-    State('places-sample-data', 'data'),
     State('places-collocation-data', 'data'),
     State('heatmap-subset-checkbox', 'value'),
     State('place-search', 'value'),
@@ -3290,9 +3138,9 @@ def handle_size_buttons(n_clicks, store):
     State('current-filters', 'data'),
     prevent_initial_call=True
 )
-def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks,
+def apply_places_to_map(freq_lamp_clicks, colloc_lamp_clicks,
                         filter_colloc_clicks,
-                        freq_json, sample_json, colloc_json,
+                        freq_json, colloc_json,
                         heatmap_subset_value,
                         search_term, max_places, colloc_words_value, current_books, current_filters):
     ctx = dash.callback_context
@@ -3302,9 +3150,6 @@ def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks
     if trigger == 'activate-places-frequency':
         mode = 'frequency'
         df = load_places_frame(freq_json)
-    elif trigger == 'activate-places-sampling':
-        mode = 'sampling'
-        df = load_places_frame(sample_json)
     elif trigger in ('activate-places-collocations', 'filter-collocation-corpus'):
         mode = 'collocations'
         df = load_places_frame(colloc_json)
@@ -3375,8 +3220,6 @@ def apply_places_to_map(freq_lamp_clicks, sample_lamp_clicks, colloc_lamp_clicks
 @app.callback(
     Output('activate-places-frequency', 'children'),
     Output('activate-places-frequency', 'color'),
-    Output('activate-places-sampling', 'children'),
-    Output('activate-places-sampling', 'color'),
     Output('activate-places-collocations', 'children'),
     Output('activate-places-collocations', 'color'),
     Input('current-filters', 'data')
@@ -3391,9 +3234,8 @@ def update_places_lamps(current_filters):
         return html.I(className=icon_class), color
 
     freq_icon, freq_color = lamp_props('frequency')
-    sample_icon, sample_color = lamp_props('sampling')
     colloc_icon, colloc_color = lamp_props('collocations')
-    return freq_icon, freq_color, sample_icon, sample_color, colloc_icon, colloc_color
+    return freq_icon, freq_color, colloc_icon, colloc_color
 
 
 @app.callback(
