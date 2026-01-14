@@ -3044,7 +3044,7 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
     State('places-page', 'data'),
     prevent_initial_call=True
 )
-def update_places_page(prev_clicks, next_clicks, freq_json, search_term, max_places, all_places_json, current_page):
+def update_places_page(prev_clicks, next_clicks, search_clicks, freq_json, search_term, max_places, all_places_json, current_page):
     ctx = dash.callback_context
     if not ctx.triggered:
         raise PreventUpdate
