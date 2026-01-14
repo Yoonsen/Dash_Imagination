@@ -710,17 +710,6 @@ def build_places_tab(summary_id, table_id, download_btn_id, download_id, apply_b
                 n_clicks=0
             )
         )
-    if include_resample:
-        action_children.append(
-            dbc.Button(
-                html.I(className="fas fa-sync-alt"),
-                id='resample-places',
-                color="light",
-                size="sm",
-                className="places-icon-btn",
-                title="Resample places"
-            )
-        )
     action_children.append(
         dbc.Button(
             html.I(className="fas fa-arrow-down"),
@@ -2808,17 +2797,14 @@ def style_collocation_highlight_button(highlight_tokens):
 
 @app.callback(
     Output('places-frequency-data', 'data'),
-    Output('places-sample-data', 'data'),
     Output('places-collocation-data', 'data'),
     Input('filtered-data', 'data'),
     Input('corpus-max-places-slider', 'value'),
-    Input('resample-places', 'n_clicks'),
     Input('collocation-place-tokens', 'data'),
     Input('current-dhlabids-store', 'data'),
-    State('places-sample-data', 'data'),
     State('all-places-store', 'data')
 )
-def update_places_datasets(filtered_data_json, max_places, resample_n, collocation_tokens, current_books, current_sample_json, all_places_json):
+def update_places_datasets(filtered_data_json, max_places, collocation_tokens, current_books, all_places_json):
     import pandas as pd
     ctx = dash.callback_context
     triggered = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
@@ -2827,29 +2813,20 @@ def update_places_datasets(filtered_data_json, max_places, resample_n, collocati
     empty_json = pd.DataFrame(columns=base_columns).to_json(date_format='iso', orient='split')
 
     if not filtered_data_json:
-        return empty_json, empty_json, empty_json
+        return empty_json, empty_json
 
     df = load_places_frame(filtered_data_json)
     df['frequency'] = pd.to_numeric(df.get('frequency'), errors='coerce')
     df['book_count'] = pd.to_numeric(df.get('book_count'), errors='coerce')
     print(f"[places] source={triggered} rows={len(df)} max_places={max_places}")
     if df.empty:
-        return empty_json, empty_json, empty_json
+        return empty_json, empty_json
 
     freq_df = (
         df.sort_values(by='frequency', ascending=False)
         .head(max_places)
         .reset_index(drop=True)
     )
-    recompute_sample = triggered in ('resample-places', 'filtered-data') or current_sample_json is None
-    if recompute_sample:
-        sample_df = sample_places(df, n=max_places).reset_index(drop=True)
-    else:
-        sample_df = load_places_frame(current_sample_json)
-        if sample_df.empty:
-            sample_df = sample_places(df, n=max_places).reset_index(drop=True)
-        else:
-            sample_df = sample_df.head(max_places).reset_index(drop=True)
 
     tokens = set(collocation_tokens or [])
     if tokens:
@@ -2867,10 +2844,9 @@ def update_places_datasets(filtered_data_json, max_places, resample_n, collocati
     else:
         colloc_df = pd.DataFrame(columns=base_columns)
 
-    print(f"[places] freq={len(freq_df)} sample={len(sample_df)} colloc={len(colloc_df)}")
+    print(f"[places] freq={len(freq_df)} colloc={len(colloc_df)}")
     return (
         freq_df.to_json(date_format='iso', orient='split'),
-        sample_df.to_json(date_format='iso', orient='split'),
         colloc_df.to_json(date_format='iso', orient='split')
     )
 
