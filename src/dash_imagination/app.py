@@ -3033,9 +3033,6 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
         update_btn_color = 'primary'
         if ctx.triggered and ctx.triggered[0]['prop_id'].split('.')[0] == 'update-map-from-page':
             filtered_payload = df_page.to_json(date_format='iso', orient='split')
-            page_label += " – kart oppdatert"
-        else:
-            page_label = f"Side {page + 1} / {total_pages} – viser {len(df_page)} av {total_count} (Klikk «Oppdater kart» for denne siden)"
 
     summary, table = render_place_preview(
         df_page,
@@ -3891,15 +3888,11 @@ def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius,
         use_clustering = False
         if not sample_empty:
             # Logarithmic scale for marker sizes with constrained relative scaling
-            sizes = places_df['frequency'].fillna(1).copy()
-            sizes = np.log1p(sizes)  # Logarithmic transformation (log(1 + x))
-            min_size, max_size = sizes.min(), sizes.max()
-            base_size = marker_size if marker_size is not None else 8  # Use slider value as base size
-            size_range = 15  # Reduced range for more relative consistency
-            if min_size != max_size:
-                sizes = base_size + (sizes - min_size) / (max_size - min_size) * size_range
-            else:
-                sizes = [base_size] * len(sizes)
+            freq_vals = places_df['frequency'].fillna(1).copy()
+            base_size = marker_size if marker_size is not None else 8  # slider base
+            size_range = 15  # fixed range for absolute scaling
+            sizes = base_size + np.log1p(freq_vals)  # absolute log scale
+            sizes = np.clip(sizes, base_size, base_size + size_range)
 
             if not isinstance(sizes, pd.Series):
                 sizes = pd.Series(sizes, index=places_df.index)
