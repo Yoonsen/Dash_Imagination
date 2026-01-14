@@ -3622,12 +3622,13 @@ def style_map_mode_buttons(view_type):
      Input('cluster-size-slider', 'value'),
      Input('cluster-radius-slider', 'value'),
      Input('collocation-highlight', 'data')],
-    [State('all-places-store', 'data')],
+    [State('all-places-store', 'data'),
+     State('heatmap-subset-mode', 'data')],
     prevent_initial_call=True
 )
 def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius, heatmap_colorscale,
                cluster_toggle, selected_place, click_data, marker_size, cluster_size,
-               cluster_radius, collocation_highlight, all_places_json):
+               cluster_radius, collocation_highlight, all_places_json, heatmap_subset_mode):
     try:
         view_type = view_type or 'points'
 
@@ -3693,6 +3694,10 @@ def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius,
         if heatmap_df is not None:
             heatmap_df = heatmap_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', 'frequency'])
         else:
+            heatmap_df = places_df.copy()
+
+        # If subset mode is on, build heatmap from current subset/page
+        if (heatmap_subset_mode or 'all') == 'subset':
             heatmap_df = places_df.copy()
 
         sample_empty = places_df.empty
