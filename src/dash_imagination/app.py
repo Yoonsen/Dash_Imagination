@@ -3194,6 +3194,14 @@ def apply_places_to_map(freq_lamp_clicks, colloc_lamp_clicks,
 
 
 @app.callback(
+    Output('heatmap-subset-mode', 'data'),
+    Input('heatmap-subset-checkbox', 'value')
+)
+def sync_heatmap_subset_mode(checkbox_value):
+    return 'subset' if checkbox_value else 'all'
+
+
+@app.callback(
     Output('activate-places-frequency', 'children'),
     Output('activate-places-frequency', 'color'),
     Output('activate-places-collocations', 'children'),
@@ -3621,14 +3629,14 @@ def style_map_mode_buttons(view_type):
      Input('marker-size-slider', 'value'),
      Input('cluster-size-slider', 'value'),
      Input('cluster-radius-slider', 'value'),
-     Input('collocation-highlight', 'data')],
-    [State('all-places-store', 'data'),
-     State('heatmap-subset-mode', 'data')],
+     Input('collocation-highlight', 'data'),
+     Input('heatmap-subset-mode', 'data')],
+    [State('all-places-store', 'data')],
     prevent_initial_call=True
 )
 def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius, heatmap_colorscale,
                cluster_toggle, selected_place, click_data, marker_size, cluster_size,
-               cluster_radius, collocation_highlight, all_places_json, heatmap_subset_mode):
+               cluster_radius, collocation_highlight, heatmap_subset_mode, all_places_json):
     try:
         view_type = view_type or 'points'
 
