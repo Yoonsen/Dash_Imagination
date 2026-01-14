@@ -2971,6 +2971,7 @@ def style_places_mode_buttons(active_mode):
     Output('places-frequency-table', 'children'),
     Output('filtered-data', 'data', allow_duplicate=True),
     Output('places-page-label', 'children'),
+    Output('update-map-from-page', 'color'),
     Input('places-frequency-data', 'data'),
     Input('place-search', 'value'),
     Input('place-search-icon', 'n_clicks'),
@@ -3023,10 +3024,13 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
     page_label = f"Side {page + 1} / {total_pages} – viser {len(df_page)} av {total_count}"
 
     filtered_payload = dash.no_update
+    update_btn_color = 'secondary'
     ctx = dash.callback_context
     if max_places <= 500:
         filtered_payload = df_page.to_json(date_format='iso', orient='split')
+        update_btn_color = 'secondary'
     else:
+        update_btn_color = 'primary'
         if ctx.triggered and ctx.triggered[0]['prop_id'].split('.')[0] == 'update-map-from-page':
             filtered_payload = df_page.to_json(date_format='iso', orient='split')
             page_label += " – kart oppdatert"
@@ -3041,7 +3045,7 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
         sort_dir=sort_dir,
         total_count=total_count
     )
-    return summary, table, filtered_payload, page_label
+    return summary, table, filtered_payload, page_label, update_btn_color
 
 
 @app.callback(
