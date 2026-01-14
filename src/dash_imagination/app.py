@@ -2092,6 +2092,14 @@ app.layout = html.Div([
                 html.Span(id="places-page-label", style={'minWidth': '160px', 'textAlign': 'center', 'fontSize': '0.9rem'}),
                 html.Button("→", id="places-page-next", n_clicks=0, className="btn btn-outline-secondary btn-sm"),
                 dbc.Button(
+                    "Oppdater kart",
+                    id='update-map-from-page',
+                    n_clicks=0,
+                    color='secondary',
+                    size='sm',
+                    className='ms-2'
+                ),
+                dbc.Button(
                     html.I(className="fas fa-eraser"),
                     id='clear-selected-place',
                     color='link',
@@ -2971,10 +2979,11 @@ def style_places_mode_buttons(active_mode):
     Input('corpus-max-places-slider', 'value'),
     Input('all-places-store', 'data'),
     Input('places-page', 'data'),
+    Input('update-map-from-page', 'n_clicks'),
     State('selected-place', 'data'),
     prevent_initial_call=True
 )
-def display_frequency_places(freq_json, search_term, search_clicks, sort_field, sort_dir, max_places, all_places_json, page, selected_place):
+def display_frequency_places(freq_json, search_term, search_clicks, sort_field, sort_dir, max_places, all_places_json, page, update_map_clicks, selected_place):
     max_places = max_places or 500
     sort_field = sort_field or 'book_count'
     sort_dir = sort_dir or 'desc'
@@ -3013,13 +3022,16 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
     df_page = df_filtered.iloc[offset:offset + page_size]
     page_label = f"Side {page + 1} / {total_pages} – viser {len(df_page)} av {total_count}"
 
-    # Auto-update map only for small page sizes; require manual update otherwise
+    filtered_payload = dash.no_update
+    ctx = dash.callback_context
     if max_places <= 500:
         filtered_payload = df_page.to_json(date_format='iso', orient='split')
-        page_label = f"Side {page + 1} / {total_pages} – viser {len(df_page)} av {total_count}"
     else:
-        filtered_payload = dash.no_update
-        page_label = f"Side {page + 1} / {total_pages} – viser {len(df_page)} av {total_count} (Klikk «Oppdater kart» for denne siden)"
+        if ctx.triggered and ctx.triggered[0]['prop_id'].split('.')[0] == 'update-map-from-page':
+            filtered_payload = df_page.to_json(date_format='iso', orient='split')
+            page_label += " – kart oppdatert"
+        else:
+            page_label = f"Side {page + 1} / {total_pages} – viser {len(df_page)} av {total_count} (Klikk «Oppdater kart» for denne siden)"
 
     summary, table = render_place_preview(
         df_page,
