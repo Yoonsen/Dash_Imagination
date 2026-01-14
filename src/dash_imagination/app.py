@@ -3013,7 +3013,13 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
     df_page = df_filtered.iloc[offset:offset + page_size]
     page_label = f"Side {page + 1} / {total_pages} – viser {len(df_page)} av {total_count}"
 
-    filtered_payload = df_page.to_json(date_format='iso', orient='split')
+    # Auto-update map only for small page sizes; require manual update otherwise
+    if max_places <= 500:
+        filtered_payload = df_page.to_json(date_format='iso', orient='split')
+        page_label = f"Side {page + 1} / {total_pages} – viser {len(df_page)} av {total_count}"
+    else:
+        filtered_payload = dash.no_update
+        page_label = f"Side {page + 1} / {total_pages} – viser {len(df_page)} av {total_count} (Klikk «Oppdater kart» for denne siden)"
 
     summary, table = render_place_preview(
         df_page,
@@ -3030,6 +3036,7 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
     Output('places-page', 'data'),
     Input('places-page-prev', 'n_clicks'),
     Input('places-page-next', 'n_clicks'),
+    Input('place-search-icon', 'n_clicks'),
     Input('places-frequency-data', 'data'),
     Input('place-search', 'value'),
     Input('corpus-max-places-slider', 'value'),
@@ -3043,7 +3050,7 @@ def update_places_page(prev_clicks, next_clicks, freq_json, search_term, max_pla
         raise PreventUpdate
     trigger = ctx.triggered[0]['prop_id'].split('.')[0]
     current_page = current_page or 0
-    if trigger in ('places-frequency-data', 'place-search', 'corpus-max-places-slider', 'all-places-store'):
+    if trigger in ('places-frequency-data', 'place-search', 'place-search-icon', 'corpus-max-places-slider', 'all-places-store'):
         return 0
     if trigger == 'places-page-prev':
         return max(0, current_page - 1)
