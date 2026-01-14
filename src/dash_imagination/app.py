@@ -3861,6 +3861,15 @@ def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius,
                 if col not in heatmap_df.columns:
                     heatmap_df[col] = np.nan
 
+        # Ensure we can highlight selected place even if it's not in current page
+        if selected_place:
+            token_str = str(selected_place)
+            if token_str not in places_df['token'].astype(str).values:
+                extra_source = heatmap_df if heatmap_df is not None else places_df
+                extra_row = extra_source[extra_source['token'].astype(str) == token_str] if extra_source is not None else pd.DataFrame(columns=required_columns)
+                if extra_row is not None and not extra_row.empty:
+                    places_df = pd.concat([places_df, extra_row], ignore_index=True)
+
         # Clean datasets
         places_df = places_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', 'frequency'])
         if heatmap_df is not None:
