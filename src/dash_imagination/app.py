@@ -3756,13 +3756,17 @@ def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius,
         highlight_tokens = {str(t) for t in (collocation_highlight or []) if t}
         use_clustering = False
         if not sample_empty:
-            # Logarithmic scale for marker sizes with constrained relative scaling
+            # Logarithmic scale normalized per page for better spread
             freq_vals = places_df['frequency'].fillna(1).copy()
+            log_vals = np.log1p(freq_vals)
+            log_min, log_max = log_vals.min(), log_vals.max()
             base_size = marker_size if marker_size is not None else 8  # slider base
-            size_range = 20  # tighter absolute band for more uniform overview
-            scale = 6  # moderate multiplier on log scale
-            sizes = base_size + scale * np.log1p(freq_vals)  # absolute log scale with factor
-            sizes = np.clip(sizes, base_size, base_size + size_range)
+            size_range = 40  # available spread on the current page
+            if log_max == log_min:
+                sizes = pd.Series(base_size + size_range / 2, index=places_df.index)
+            else:
+                norm = (log_vals - log_min) / (log_max - log_min)
+                sizes = base_size + norm * size_range
 
             if not isinstance(sizes, pd.Series):
                 sizes = pd.Series(sizes, index=places_df.index)
