@@ -1,5 +1,11 @@
 # ImagiNation Development Logbook
 
+## Jan 9, 2026: Paging + marker scaling (deploy)
+- Place list paging: added direct page jump input; map store always reflects current page.
+- Marker sizing: normalized globally against `all-places-store` (log1p(freq), base 8, range 40) for consistent scale across pages.
+- Heatmap subset toggle wired; markers still follow page/manual update rules.
+- Deployed current `page-list-experiment` after marker-scale adjustments.
+
 ## June 12, 2024: Design Decision – Orthogonal Book/Place Operations
 - Discussed and agreed to treat book and place set operations (add, filter, subtract) as orthogonal, allowing users to manipulate books and places independently.
 - The app will not force synchronization between books and places after every operation. Users can perform operations in any order, with the understanding that some places may not be represented in the current corpus if the related books are removed, and vice versa.
