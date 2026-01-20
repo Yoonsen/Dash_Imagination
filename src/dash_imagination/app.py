@@ -2228,7 +2228,7 @@ app.layout = html.Div([
     dcc.Store(id='places-frequency-data'),
     dcc.Store(id='places-sample-data'),
     dcc.Store(id='places-collocation-data'),
-    dcc.Store(id='places-sort-field', data='book_count'),
+    dcc.Store(id='places-sort-field', data='frequency'),
     dcc.Store(id='places-sort-dir', data='desc'),
     dcc.Store(id='places-page', data=0),
     dcc.Store(id='heatmap-subset-mode', data='all'),
@@ -2879,7 +2879,7 @@ def update_places_datasets(filtered_data_json, max_places, collocation_tokens, c
 )
 def display_frequency_places(freq_json, search_term, search_clicks, sort_field, sort_dir, max_places, all_places_json, page, update_map_clicks, selected_place):
     max_places = max_places or 500
-    sort_field = sort_field or 'book_count'
+    sort_field = sort_field or 'frequency'
     sort_dir = sort_dir or 'desc'
     page = page or 0
     required_columns = ['token', 'name', 'latitude', 'longitude', 'frequency', 'book_count']
@@ -2901,7 +2901,7 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
         print(f"[places] freq table reset to base: {len(df_filtered)} rows")
 
     if sort_field not in df_filtered.columns:
-        sort_field = 'book_count'
+        sort_field = 'frequency'
     ascending_main = (sort_dir == 'asc')
     df_filtered = df_filtered.sort_values(
         by=[sort_field, 'frequency', 'book_count', 'token'],
@@ -3031,8 +3031,8 @@ def sort_places_table(n_clicks, current_field, current_dir):
     prevent_initial_call=True
 )
 def reset_places_sort_on_data(_, search_term, max_places):
-    # Reset sort to book_count/desc on data refresh, search change, or max-places change
-    return 'book_count', 'desc'
+    # Reset sort to frequency/desc on data refresh, search change, or max-places change
+    return 'frequency', 'desc'
 
 
 @app.callback(
