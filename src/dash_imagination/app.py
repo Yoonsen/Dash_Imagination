@@ -2080,6 +2080,14 @@ app.layout = html.Div([
                 html.Button("←", id="places-page-prev", n_clicks=0, className="btn btn-outline-secondary btn-sm"),
                 html.Span(id="places-page-label", style={'minWidth': '160px', 'textAlign': 'center', 'fontSize': '0.9rem'}),
                 html.Button("→", id="places-page-next", n_clicks=0, className="btn btn-outline-secondary btn-sm"),
+                dcc.Input(
+                    id='places-page-jump',
+                    type='number',
+                    placeholder='Gå til side',
+                    min=1,
+                    debounce=True,
+                    style={'width': '110px', 'height': '32px', 'fontSize': '0.9rem'}
+                ),
                 dbc.Button(
                     "Oppdater kart",
                     id='update-map-from-page',
@@ -2927,6 +2935,7 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
     Input('places-page-prev', 'n_clicks'),
     Input('places-page-next', 'n_clicks'),
     Input('place-search-icon', 'n_clicks'),
+    Input('places-page-jump', 'value'),
     Input('places-frequency-data', 'data'),
     Input('place-search', 'value'),
     Input('corpus-max-places-slider', 'value'),
@@ -2934,18 +2943,40 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
     State('places-page', 'data'),
     prevent_initial_call=True
 )
-def update_places_page(prev_clicks, next_clicks, search_clicks, freq_json, search_term, max_places, all_places_json, current_page):
+def update_places_page(prev_clicks, next_clicks, search_clicks, jump_value, freq_json, search_term, max_places, all_places_json, current_page):
     ctx = dash.callback_context
     if not ctx.triggered:
         raise PreventUpdate
     trigger = ctx.triggered[0]['prop_id'].split('.')[0]
     current_page = current_page or 0
+    max_places = max_places or 500
+
+    # Compute total pages for clamping
+    df = load_places_frame(all_places_json) if all_places_json else load_places_frame(freq_json)
+    if df is None:
+        df = pd.DataFrame()
+    if search_term:
+        try:
+            df = filter_places_search(df, search_term)
+        except Exception:
+            pass
+    total_pages = max(1, math.ceil(len(df) / max_places)) if max_places else 1
+
     if trigger in ('places-frequency-data', 'place-search', 'place-search-icon', 'corpus-max-places-slider', 'all-places-store'):
         return 0
     if trigger == 'places-page-prev':
         return max(0, current_page - 1)
     if trigger == 'places-page-next':
-        return current_page + 1
+        return min(total_pages - 1, current_page + 1)
+    if trigger == 'places-page-jump':
+        if jump_value is None:
+            raise PreventUpdate
+        try:
+            target = int(jump_value) - 1
+        except (TypeError, ValueError):
+            raise PreventUpdate
+        target = max(0, min(total_pages - 1, target))
+        return target
     return current_page
 
 @app.callback(
