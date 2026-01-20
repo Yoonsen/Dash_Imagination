@@ -3631,6 +3631,12 @@ def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius,
                cluster_radius, collocation_highlight, heatmap_subset_mode, all_places_json):
     try:
         view_type = view_type or 'points'
+        # Debug: log incoming sizes
+        try:
+            dbg_len = len(pd.read_json(io.StringIO(filtered_data_json), orient='split')) if filtered_data_json else 0
+        except Exception:
+            dbg_len = 0
+        print(f"[map] filtered len={dbg_len} all_places={'yes' if all_places_json else 'no'} subset={heatmap_subset_mode}")
 
         # Create base figure with default view of Norway
         fig = go.Figure()
