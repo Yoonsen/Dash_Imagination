@@ -2908,16 +2908,8 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
     df_page = df_filtered.iloc[offset:offset + page_size]
     page_label = f"Side {page + 1} / {total_pages} – viser {len(df_page)} av {total_count}"
 
-    filtered_payload = dash.no_update
-    update_btn_color = 'secondary'
-    ctx = dash.callback_context
-    if max_places <= 500:
-        filtered_payload = df_page.to_json(date_format='iso', orient='split')
-        update_btn_color = 'secondary'
-    else:
-        update_btn_color = 'primary'
-        if ctx.triggered and ctx.triggered[0]['prop_id'].split('.')[0] == 'update-map-from-page':
-            filtered_payload = df_page.to_json(date_format='iso', orient='split')
+    filtered_payload = df_page.to_json(date_format='iso', orient='split')
+    update_btn_color = 'secondary' if max_places <= 500 else 'primary'
 
     summary, table = render_place_preview(
         df_page,
