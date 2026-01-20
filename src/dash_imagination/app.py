@@ -3728,7 +3728,7 @@ def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius,
             # Logarithmic scale for marker sizes with constrained relative scaling
             freq_vals = places_df['frequency'].fillna(1).copy()
             base_size = marker_size if marker_size is not None else 8  # slider base
-            size_range = 25  # wider range for clearer size differences
+            size_range = 40  # even wider range for clearer size differences
             sizes = base_size + np.log1p(freq_vals)  # absolute log scale
             sizes = np.clip(sizes, base_size, base_size + size_range)
 
