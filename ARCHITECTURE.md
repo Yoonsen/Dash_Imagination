@@ -387,6 +387,7 @@ The manifest captures where the app is going; this architecture describes the cu
 
 - **Viktige callbacks (høydepunkt)**
   - Kart: `update_map` (scatter/heatmap) fra `filtered-data`, `view-type`, sliders m.m.
+    - Markørstørrelser: log1p(frequency) normalisert globalt mot `all-places-store` for å holde samme skala på tvers av paging. (Per-side normalisering ble droppet fordi senere sider ble kunstig store.)
   - Stedskort: `update_place_summary` (map click/selected-place → DB lookup → HTML via `_render_place_summary_from_search`).
   - Korpusbygging: filter + set-op i `corpus_builder_card.py`, samt `set_corpus_operation` i `app.py`.
   - Størrelse/minimering: `_toggle_window_minimize`, resize-callbacks per kort (lytter på `dialog-size-store`), klasse/farge for minimize/close.
