@@ -5073,7 +5073,7 @@ def update_global_search_results(n_submit, search_term):
             'borderRadius': '12px',
             'backgroundColor': '#f8fafc',
             'border': '1px solid rgba(148, 163, 184, 0.35)'
-        }, id={'type': 'search-section', 'category': key}, **{'data-target': f"search-section-{key}", 'id': f"search-section-{key}"})
+        }, id=f"search-section-{key}", **{'data-target': f"search-section-{key}"})
 
     if 'places' in selection_set and not places_df.empty:
         items = []
