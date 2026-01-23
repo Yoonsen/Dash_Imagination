@@ -2910,10 +2910,16 @@ def display_frequency_places(freq_json, search_term, search_clicks, colloc_json,
         mode_label = "Sample"
         print(f"[places] sample mode (toggle): {len(df_filtered)} rows (max_places={max_places})")
     elif mode_value == 'coll':
-        df_filtered = load_places_frame(colloc_json) if colloc_json else pd.DataFrame(columns=required_columns)
+        coll_df = load_places_frame(colloc_json) if colloc_json else pd.DataFrame(columns=required_columns)
+        if coll_df is None or coll_df.empty:
+            df_filtered = df_all
+            mode_label = "Kollokasjon (tom)"
+            print(f"[places] collocation mode (toggle) empty -> fallback to base: {len(df_filtered)} rows")
+        else:
+            df_filtered = coll_df
+            mode_label = "Kollokasjon"
+            print(f"[places] collocation mode (toggle): {len(df_filtered)} rows")
         page = 0
-        mode_label = "Kollokasjon"
-        print(f"[places] collocation mode (toggle): {len(df_filtered)} rows")
     elif mode_value == 'sim':
         df_filtered = load_places_frame(sim_json) if sim_json else pd.DataFrame(columns=required_columns)
         page = 0
