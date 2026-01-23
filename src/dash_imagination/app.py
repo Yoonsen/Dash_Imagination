@@ -2989,7 +2989,7 @@ def display_frequency_places(freq_json, search_term, search_clicks, colloc_json,
         sort_field=sort_field,
         sort_dir=sort_dir,
         total_count=total_count,
-        mode_label=mode_label,
+        show_mode_toggle=True,
         mode_value=mode_value
     )
     return summary, table, filtered_payload, page_label, update_btn_color
