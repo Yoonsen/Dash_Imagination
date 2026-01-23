@@ -2894,8 +2894,19 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
     df_all['book_count'] = pd.to_numeric(df_all.get('book_count'), errors='coerce')
 
     if search_term:
-        df_filtered = filter_places_search(df_all, search_term)
-        print(f"[places] freq table search '{search_term}': hits={len(df_filtered)}")
+        search_trim = search_term.strip()
+        if search_trim.lower().startswith('#sample'):
+            # Random sample up to max_places from full set; treat as its own view
+            df_filtered = df_all.sample(
+                n=min(max_places, len(df_all)),
+                replace=False,
+                random_state=None
+            )
+            page = 0  # restart paging for a sample
+            print(f"[places] sample mode: {len(df_filtered)} rows (max_places={max_places})")
+        else:
+            df_filtered = filter_places_search(df_all, search_term)
+            print(f"[places] freq table search '{search_term}': hits={len(df_filtered)}")
     else:
         df_filtered = df_all
         print(f"[places] freq table reset to base: {len(df_filtered)} rows")
