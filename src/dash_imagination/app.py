@@ -4888,11 +4888,12 @@ def load_filtered_data(books, filters):
 @app.callback(
     Output('global-search-results', 'style', allow_duplicate=True),
     Input('global-place-search', 'n_blur'),
-    Input('global-place-search', 'value'),
+    Input('global-place-search', 'n_submit'),
+    State('global-place-search', 'value'),
     State('global-search-results', 'style'),
     prevent_initial_call=True
 )
-def manage_search_results_visibility(n_blur, search_value, current_style):
+def manage_search_results_visibility(n_blur, n_submit, search_value, current_style):
     ctx = dash.callback_context
     if not ctx.triggered:
         raise PreventUpdate
@@ -4910,18 +4911,15 @@ def manage_search_results_visibility(n_blur, search_value, current_style):
         style['display'] = 'none'
         return style
 
-    # If value changed (and is long enough), show
-    if trigger_id == 'global-place-search' and 'value' in ctx.triggered[0]['prop_id']:
+    # If submit and term is long enough, show
+    if trigger_id == 'global-place-search' and 'n_submit' in ctx.triggered[0]['prop_id']:
         term = (search_value or '').strip()
+        style = dict(current_style or _search_results_style(False))
         if len(term) >= 2:
-            style = dict(current_style or _search_results_style(False))
             style['display'] = 'block'
-            return style
         else:
-             # Hide if search term is too short
-            style = dict(current_style or _search_results_style(False))
             style['display'] = 'none'
-            return style
+        return style
 
     raise PreventUpdate
 
@@ -4946,16 +4944,17 @@ app.clientside_callback(
 @app.callback(
     Output('global-search-results', 'children'),
     Output('global-search-results', 'style'),
-    Input('global-place-search', 'value'),
-    Input('global-search-filter-store', 'data'),
+    Input('global-place-search', 'n_submit'),
+    State('global-place-search', 'value'),
     prevent_initial_call=True
 )
-def update_global_search_results(search_term, filter_selection):
+def update_global_search_results(n_submit, search_term):
+    if not n_submit:
+        raise PreventUpdate
     term = (search_term or '').strip()
     if len(term) < 2:
         return [], _search_results_style(False)
-    selection_set = set(filter_selection or ['places', 'books', 'authors'])
-    selection_list = [cat for cat in ['places', 'books', 'authors'] if cat in selection_set]
+    selection_set = {'places', 'books', 'authors'}
 
     tokens = _normalize_search_tokens(term)
 
@@ -5190,30 +5189,7 @@ def update_global_search_results(search_term, filter_selection):
     )
 
     section_header = html.Div([
-        html.Span("Søketreff", style={'fontSize': '12px', 'color': '#64748b'}),
-        dcc.Checklist(
-            id='global-search-filter',
-            options=[
-                {'label': 'Steder', 'value': 'places'},
-                {'label': 'Bøker', 'value': 'books'},
-                {'label': 'Forfattere', 'value': 'authors'}
-            ],
-            value=selection_list,
-            labelStyle={
-                'display': 'inline-flex',
-                'alignItems': 'center',
-                'padding': '4px 10px',
-                'borderRadius': '999px',
-                'backgroundColor': '#e2e8f0',
-                'fontSize': '11px',
-                'textTransform': 'uppercase',
-                'letterSpacing': '0.08em',
-                'fontWeight': 600,
-                'marginRight': '8px',
-                'cursor': 'pointer'
-            },
-            inputStyle={'marginRight': '6px'}
-        )
+        html.Span("Søketreff", style={'fontSize': '12px', 'color': '#64748b'})
     ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'space-between'})
 
     return [section_header, columns_wrapper], _search_results_style(True)
@@ -5387,15 +5363,6 @@ def add_author_books_from_search(_, current_books):
     books = set(current_books or [])
     books.update(dhlabids)
     return sorted(books), _search_results_style(False)
-
-
-@app.callback(
-    Output('global-search-filter-store', 'data'),
-    Input('global-search-filter', 'value'),
-    prevent_initial_call=True
-)
-def persist_global_search_filter(selected):
-    return selected or []
 
 
 # Add a clientside callback for instant download status feedback
