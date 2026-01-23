@@ -2868,6 +2868,7 @@ def update_places_datasets(filtered_data_json, max_places, collocation_tokens, c
     Input('places-frequency-data', 'data'),
     Input('place-search', 'value'),
     Input('place-search-icon', 'n_clicks'),
+    Input('places-collocation-data', 'data'),
     Input('places-sort-field', 'data'),
     Input('places-sort-dir', 'data'),
     Input('corpus-max-places-slider', 'value'),
@@ -2877,7 +2878,7 @@ def update_places_datasets(filtered_data_json, max_places, collocation_tokens, c
     State('selected-place', 'data'),
     prevent_initial_call=True
 )
-def display_frequency_places(freq_json, search_term, search_clicks, sort_field, sort_dir, max_places, all_places_json, page, update_map_clicks, selected_place):
+def display_frequency_places(freq_json, search_term, search_clicks, colloc_json, sort_field, sort_dir, max_places, all_places_json, page, update_map_clicks, selected_place):
     max_places = max_places or 500
     sort_field = sort_field or 'frequency'
     sort_dir = sort_dir or 'desc'
@@ -2895,7 +2896,8 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
 
     if search_term:
         search_trim = search_term.strip()
-        if search_trim.lower().startswith('#sample'):
+        search_lower = search_trim.lower()
+        if search_lower.startswith('#sample'):
             # Random sample up to max_places from full set; treat as its own view
             df_filtered = df_all.sample(
                 n=min(max_places, len(df_all)),
@@ -2904,6 +2906,11 @@ def display_frequency_places(freq_json, search_term, search_clicks, sort_field, 
             )
             page = 0  # restart paging for a sample
             print(f"[places] sample mode: {len(df_filtered)} rows (max_places={max_places})")
+        elif search_lower.startswith('#coll'):
+            coll_df = load_places_frame(colloc_json) if colloc_json else pd.DataFrame(columns=required_columns)
+            df_filtered = coll_df
+            page = 0
+            print(f"[places] collocation mode: {len(df_filtered)} rows")
         else:
             df_filtered = filter_places_search(df_all, search_term)
             print(f"[places] freq table search '{search_term}': hits={len(df_filtered)}")
