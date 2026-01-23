@@ -2869,6 +2869,7 @@ def update_places_datasets(filtered_data_json, max_places, collocation_tokens, c
     Input('place-search', 'value'),
     Input('place-search-icon', 'n_clicks'),
     Input('places-collocation-data', 'data'),
+    Input('similarity-places-data', 'data'),
     Input('places-sort-field', 'data'),
     Input('places-sort-dir', 'data'),
     Input('corpus-max-places-slider', 'value'),
@@ -2878,7 +2879,7 @@ def update_places_datasets(filtered_data_json, max_places, collocation_tokens, c
     State('selected-place', 'data'),
     prevent_initial_call=True
 )
-def display_frequency_places(freq_json, search_term, search_clicks, colloc_json, sort_field, sort_dir, max_places, all_places_json, page, update_map_clicks, selected_place):
+def display_frequency_places(freq_json, search_term, search_clicks, colloc_json, sim_json, sort_field, sort_dir, max_places, all_places_json, page, update_map_clicks, selected_place):
     max_places = max_places or 500
     sort_field = sort_field or 'frequency'
     sort_dir = sort_dir or 'desc'
@@ -2914,6 +2915,12 @@ def display_frequency_places(freq_json, search_term, search_clicks, colloc_json,
             page = 0
             print(f"[places] collocation mode: {len(df_filtered)} rows")
             mode_label = "Kollokasjon"
+        elif search_lower.startswith('#sim'):
+            sim_df = load_places_frame(sim_json) if sim_json else pd.DataFrame(columns=required_columns)
+            df_filtered = sim_df
+            page = 0
+            print(f"[places] similarity mode: {len(df_filtered)} rows")
+            mode_label = "Similarity"
         else:
             df_filtered = filter_places_search(df_all, search_term)
             print(f"[places] freq table search '{search_term}': hits={len(df_filtered)}")
