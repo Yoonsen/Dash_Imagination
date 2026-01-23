@@ -9,7 +9,8 @@ def render_place_preview(
     body_max_height=360,
     sort_field=None,
     sort_dir='desc',
-    total_count=None
+    total_count=None,
+    mode_label=None
 ):
     """
     Shared helper that renders a summary + scrollable table for place lists.
@@ -36,8 +37,9 @@ def render_place_preview(
     count_text = f"{len(df):,} steder".replace(',', ' ')
     if total_count is not None:
         count_text = f"{len(df):,} av {total_count:,} steder".replace(',', ' ')
+    summary_text = count_text if not mode_label else f"{count_text} · {mode_label}"
     summary = html.Div(
-        count_text,
+        summary_text,
         style={'fontSize': '0.85rem', 'fontWeight': 600, 'color': '#0f172a'}
     )
 

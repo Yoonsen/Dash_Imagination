@@ -2894,6 +2894,7 @@ def display_frequency_places(freq_json, search_term, search_clicks, colloc_json,
     df_all['frequency'] = pd.to_numeric(df_all.get('frequency'), errors='coerce')
     df_all['book_count'] = pd.to_numeric(df_all.get('book_count'), errors='coerce')
 
+    mode_label = None
     if search_term:
         search_trim = search_term.strip()
         search_lower = search_trim.lower()
@@ -2906,11 +2907,13 @@ def display_frequency_places(freq_json, search_term, search_clicks, colloc_json,
             )
             page = 0  # restart paging for a sample
             print(f"[places] sample mode: {len(df_filtered)} rows (max_places={max_places})")
+            mode_label = "Sample"
         elif search_lower.startswith('#coll'):
             coll_df = load_places_frame(colloc_json) if colloc_json else pd.DataFrame(columns=required_columns)
             df_filtered = coll_df
             page = 0
             print(f"[places] collocation mode: {len(df_filtered)} rows")
+            mode_label = "Kollokasjon"
         else:
             df_filtered = filter_places_search(df_all, search_term)
             print(f"[places] freq table search '{search_term}': hits={len(df_filtered)}")
@@ -2943,7 +2946,8 @@ def display_frequency_places(freq_json, search_term, search_clicks, colloc_json,
         empty_message="Ingen steder tilgjengelig ennå.",
         sort_field=sort_field,
         sort_dir=sort_dir,
-        total_count=total_count
+        total_count=total_count,
+        mode_label=mode_label
     )
     return summary, table, filtered_payload, page_label, update_btn_color
 
