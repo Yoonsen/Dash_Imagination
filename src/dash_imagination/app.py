@@ -2986,7 +2986,7 @@ def display_frequency_places(freq_json, search_term, search_clicks, colloc_json,
 @app.callback(
     Output('places-mode', 'data'),
     Output('place-search', 'value'),
-    Output('places-page', 'data'),
+    Output('places-page', 'data', allow_duplicate=True),
     Input('places-mode-radio', 'value'),
     State('places-mode', 'data'),
     prevent_initial_call=True
