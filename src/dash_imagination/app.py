@@ -2921,10 +2921,16 @@ def display_frequency_places(freq_json, search_term, search_clicks, colloc_json,
             print(f"[places] collocation mode (toggle): {len(df_filtered)} rows")
         page = 0
     elif mode_value == 'sim':
-        df_filtered = load_places_frame(sim_json) if sim_json else pd.DataFrame(columns=required_columns)
+        sim_df = load_places_frame(sim_json) if sim_json else pd.DataFrame(columns=required_columns)
+        if sim_df is None or sim_df.empty:
+            df_filtered = df_all
+            mode_label = "Similarity (tom)"
+            print(f"[places] similarity mode (toggle) empty -> fallback to base: {len(df_filtered)} rows")
+        else:
+            df_filtered = sim_df
+            mode_label = "Similarity"
+            print(f"[places] similarity mode (toggle): {len(df_filtered)} rows")
         page = 0
-        mode_label = "Similarity"
-        print(f"[places] similarity mode (toggle): {len(df_filtered)} rows")
     else:
         if search_term:
             search_trim = search_term.strip()
