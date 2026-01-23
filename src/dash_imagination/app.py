@@ -5351,7 +5351,7 @@ def add_book_from_search(_, current_books):
 @app.callback(
     Output('current-dhlabids-store', 'data', allow_duplicate=True),
     Output('global-search-results', 'style', allow_duplicate=True),
-    Input({'type': 'search-author-action', 'author': ALL}, 'n_clicks'),
+    Input({'type': 'search-author-action', 'author_key': ALL, 'display_name': ALL}, 'n_clicks'),
     State('current-dhlabids-store', 'data'),
     prevent_initial_call=True
 )
