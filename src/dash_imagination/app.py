@@ -4941,6 +4941,30 @@ app.clientside_callback(
     Input('global-search-results', 'id')
 )
 
+# Client-side scroll to sections for omniboks
+app.clientside_callback(
+    """
+    function(btnClicks, btnIds) {
+        // Find which button was clicked
+        if (!btnClicks || !btnIds) { return window.dash_clientside.no_update; }
+        for (let i = 0; i < btnClicks.length; i++) {
+            if (btnClicks[i]) {
+                const target = btnIds[i].target;
+                const el = document.getElementById('search-section-' + target);
+                if (el) {
+                    el.scrollIntoView({behavior: 'smooth', block: 'start'});
+                }
+                break;
+            }
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output('global-search-results', 'role'),
+    Input({'type': 'search-scroll', 'target': ALL}, 'n_clicks'),
+    State({'type': 'search-scroll', 'target': ALL}, 'id')
+)
+
 @app.callback(
     Output('global-search-results', 'children'),
     Output('global-search-results', 'style'),
@@ -5049,7 +5073,7 @@ def update_global_search_results(n_submit, search_term):
             'borderRadius': '12px',
             'backgroundColor': '#f8fafc',
             'border': '1px solid rgba(148, 163, 184, 0.35)'
-        }, id={'type': 'search-section', 'category': key})
+        }, id={'type': 'search-section', 'category': key}, **{'data-target': f"search-section-{key}", 'id': f"search-section-{key}"})
 
     if 'places' in selection_set and not places_df.empty:
         items = []
@@ -5189,7 +5213,21 @@ def update_global_search_results(n_submit, search_term):
     )
 
     section_header = html.Div([
-        html.Span("Søketreff", style={'fontSize': '12px', 'color': '#64748b'})
+        html.Span("Søketreff", style={'fontSize': '12px', 'color': '#64748b'}),
+        html.Div([
+            html.Button("Steder", id={'type': 'search-scroll', 'target': 'places'}, n_clicks=0, style={
+                'border': 'none', 'backgroundColor': '#e2e8f0', 'color': '#0f172a',
+                'fontSize': '11px', 'padding': '4px 10px', 'borderRadius': '12px', 'cursor': 'pointer', 'marginRight': '6px'
+            }),
+            html.Button("Bøker", id={'type': 'search-scroll', 'target': 'books'}, n_clicks=0, style={
+                'border': 'none', 'backgroundColor': '#e2e8f0', 'color': '#0f172a',
+                'fontSize': '11px', 'padding': '4px 10px', 'borderRadius': '12px', 'cursor': 'pointer', 'marginRight': '6px'
+            }),
+            html.Button("Forfattere", id={'type': 'search-scroll', 'target': 'authors'}, n_clicks=0, style={
+                'border': 'none', 'backgroundColor': '#e2e8f0', 'color': '#0f172a',
+                'fontSize': '11px', 'padding': '4px 10px', 'borderRadius': '12px', 'cursor': 'pointer'
+            })
+        ], style={'display': 'flex', 'alignItems': 'center'})
     ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'space-between'})
 
     return [section_header, columns_wrapper], _search_results_style(True)
