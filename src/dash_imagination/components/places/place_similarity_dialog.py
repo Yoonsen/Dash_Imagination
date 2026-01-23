@@ -199,13 +199,14 @@ def handle_form_submit(submit):
     Output('similar-places-results', 'style'),
     Output('similarity-places-data', 'data'),
     Input('find-similar', 'n_clicks'),
+    Input('similar-place-input', 'n_submit'),
     State('similar-place-input', 'value'),
     State('similarity-threshold', 'value'),
     State('max-places', 'value'),
     prevent_initial_call=True
 )
-def handle_similar_places(n_clicks, search_word, threshold, max_places):
-    if not n_clicks:
+def handle_similar_places(n_clicks, n_submit, search_word, threshold, max_places):
+    if not (n_clicks or n_submit):
         return no_update, no_update, no_update
         
     if not search_word:
