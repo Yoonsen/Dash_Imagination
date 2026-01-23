@@ -5220,10 +5220,24 @@ def show_place_from_search(_, current_figure, summary_style):
         raise PreventUpdate
 
     fig = go.Figure(current_figure or go.Figure())
+    # Remove previous search selection trace
+    try:
+        fig.data = tuple(tr for tr in fig.data if getattr(tr, 'name', None) != 'Search selection')
+    except Exception:
+        pass
+    # Add green marker without changing viewport
     try:
         lat = float(place.get('latitude'))
         lon = float(place.get('longitude'))
-        fig.update_layout(map=dict(center=dict(lat=lat, lon=lon), zoom=8))
+        fig.add_trace(go.Scattermap(
+            lat=[lat],
+            lon=[lon],
+            mode='markers',
+            marker=dict(size=14, color='#10b981', opacity=0.95, sizemode='diameter'),
+            hoverinfo='text',
+            text=[place.get('token') or place.get('name') or 'Sted'],
+            name='Search selection'
+        ))
     except (TypeError, ValueError):
         pass
 
