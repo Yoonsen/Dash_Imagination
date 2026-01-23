@@ -1,4 +1,4 @@
-from dash import html
+from dash import html, dcc
 
 
 def render_place_preview(
@@ -10,7 +10,8 @@ def render_place_preview(
     sort_field=None,
     sort_dir='desc',
     total_count=None,
-    mode_label=None
+    mode_label=None,
+    mode_value='basis'
 ):
     """
     Shared helper that renders a summary + scrollable table for place lists.
@@ -39,8 +40,22 @@ def render_place_preview(
         count_text = f"{len(df):,} av {total_count:,} steder".replace(',', ' ')
     summary_text = count_text if not mode_label else f"{count_text} · {mode_label}"
     summary = html.Div(
-        summary_text,
-        style={'fontSize': '0.85rem', 'fontWeight': 600, 'color': '#0f172a'}
+        [
+            html.Span(summary_text, style={'fontSize': '0.85rem', 'fontWeight': 600, 'color': '#0f172a'}),
+            dcc.RadioItems(
+                id='places-mode-radio',
+                options=[
+                    {'label': 'Basis', 'value': 'basis'},
+                    {'label': 'Sample', 'value': 'sample'},
+                    {'label': 'Coll', 'value': 'coll'},
+                    {'label': 'Sim', 'value': 'sim'},
+                ],
+                value=mode_value or 'basis',
+                labelStyle={'marginRight': '10px', 'fontSize': '0.8rem', 'display': 'inline-flex', 'alignItems': 'center'},
+                style={'marginLeft': '12px'}
+            )
+        ],
+        style={'fontSize': '0.85rem', 'fontWeight': 600, 'color': '#0f172a', 'display': 'flex', 'alignItems': 'center', 'gap': '6px', 'flexWrap': 'wrap'}
     )
 
     def header_cell(label, key):

@@ -2228,6 +2228,7 @@ app.layout = html.Div([
     dcc.Store(id='places-frequency-data'),
     dcc.Store(id='places-sample-data'),
     dcc.Store(id='places-collocation-data'),
+    dcc.Store(id='places-mode', data='basis'),
     dcc.Store(id='places-sort-field', data='frequency'),
     dcc.Store(id='places-sort-dir', data='desc'),
     dcc.Store(id='places-page', data=0),
@@ -2870,6 +2871,7 @@ def update_places_datasets(filtered_data_json, max_places, collocation_tokens, c
     Input('place-search-icon', 'n_clicks'),
     Input('places-collocation-data', 'data'),
     Input('similarity-places-data', 'data'),
+    Input('places-mode', 'data'),
     Input('places-sort-field', 'data'),
     Input('places-sort-dir', 'data'),
     Input('corpus-max-places-slider', 'value'),
@@ -2879,7 +2881,7 @@ def update_places_datasets(filtered_data_json, max_places, collocation_tokens, c
     State('selected-place', 'data'),
     prevent_initial_call=True
 )
-def display_frequency_places(freq_json, search_term, search_clicks, colloc_json, sim_json, sort_field, sort_dir, max_places, all_places_json, page, update_map_clicks, selected_place):
+def display_frequency_places(freq_json, search_term, search_clicks, colloc_json, sim_json, mode_value, sort_field, sort_dir, max_places, all_places_json, page, update_map_clicks, selected_place):
     max_places = max_places or 500
     sort_field = sort_field or 'frequency'
     sort_dir = sort_dir or 'desc'
@@ -2895,38 +2897,59 @@ def display_frequency_places(freq_json, search_term, search_clicks, colloc_json,
     df_all['frequency'] = pd.to_numeric(df_all.get('frequency'), errors='coerce')
     df_all['book_count'] = pd.to_numeric(df_all.get('book_count'), errors='coerce')
 
+    mode_value = mode_value or 'basis'
     mode_label = None
-    if search_term:
-        search_trim = search_term.strip()
-        search_lower = search_trim.lower()
-        if search_lower.startswith('#sample'):
-            # Random sample up to max_places from full set; treat as its own view
-            df_filtered = df_all.sample(
-                n=min(max_places, len(df_all)),
-                replace=False,
-                random_state=None
-            )
-            page = 0  # restart paging for a sample
-            print(f"[places] sample mode: {len(df_filtered)} rows (max_places={max_places})")
-            mode_label = "Sample"
-        elif search_lower.startswith('#coll'):
-            coll_df = load_places_frame(colloc_json) if colloc_json else pd.DataFrame(columns=required_columns)
-            df_filtered = coll_df
-            page = 0
-            print(f"[places] collocation mode: {len(df_filtered)} rows")
-            mode_label = "Kollokasjon"
-        elif search_lower.startswith('#sim'):
-            sim_df = load_places_frame(sim_json) if sim_json else pd.DataFrame(columns=required_columns)
-            df_filtered = sim_df
-            page = 0
-            print(f"[places] similarity mode: {len(df_filtered)} rows")
-            mode_label = "Similarity"
-        else:
-            df_filtered = filter_places_search(df_all, search_term)
-            print(f"[places] freq table search '{search_term}': hits={len(df_filtered)}")
+
+    if mode_value == 'sample':
+        df_filtered = df_all.sample(
+            n=min(max_places, len(df_all)),
+            replace=False,
+            random_state=None
+        )
+        page = 0
+        mode_label = "Sample"
+        print(f"[places] sample mode (toggle): {len(df_filtered)} rows (max_places={max_places})")
+    elif mode_value == 'coll':
+        df_filtered = load_places_frame(colloc_json) if colloc_json else pd.DataFrame(columns=required_columns)
+        page = 0
+        mode_label = "Kollokasjon"
+        print(f"[places] collocation mode (toggle): {len(df_filtered)} rows")
+    elif mode_value == 'sim':
+        df_filtered = load_places_frame(sim_json) if sim_json else pd.DataFrame(columns=required_columns)
+        page = 0
+        mode_label = "Similarity"
+        print(f"[places] similarity mode (toggle): {len(df_filtered)} rows")
     else:
-        df_filtered = df_all
-        print(f"[places] freq table reset to base: {len(df_filtered)} rows")
+        if search_term:
+            search_trim = search_term.strip()
+            search_lower = search_trim.lower()
+            if search_lower.startswith('#sample'):
+                df_filtered = df_all.sample(
+                    n=min(max_places, len(df_all)),
+                    replace=False,
+                    random_state=None
+                )
+                page = 0
+                mode_label = "Sample"
+                print(f"[places] sample mode: {len(df_filtered)} rows (max_places={max_places})")
+            elif search_lower.startswith('#coll'):
+                coll_df = load_places_frame(colloc_json) if colloc_json else pd.DataFrame(columns=required_columns)
+                df_filtered = coll_df
+                page = 0
+                mode_label = "Kollokasjon"
+                print(f"[places] collocation mode: {len(df_filtered)} rows")
+            elif search_lower.startswith('#sim'):
+                sim_df = load_places_frame(sim_json) if sim_json else pd.DataFrame(columns=required_columns)
+                df_filtered = sim_df
+                page = 0
+                mode_label = "Similarity"
+                print(f"[places] similarity mode: {len(df_filtered)} rows")
+            else:
+                df_filtered = filter_places_search(df_all, search_term)
+                print(f"[places] freq table search '{search_term}': hits={len(df_filtered)}")
+        else:
+            df_filtered = df_all
+            print(f"[places] freq table reset to base: {len(df_filtered)} rows")
 
     if sort_field not in df_filtered.columns:
         sort_field = 'frequency'
@@ -2954,9 +2977,26 @@ def display_frequency_places(freq_json, search_term, search_clicks, colloc_json,
         sort_field=sort_field,
         sort_dir=sort_dir,
         total_count=total_count,
-        mode_label=mode_label
+        mode_label=mode_label,
+        mode_value=mode_value
     )
     return summary, table, filtered_payload, page_label, update_btn_color
+
+
+@app.callback(
+    Output('places-mode', 'data'),
+    Output('place-search', 'value'),
+    Output('places-page', 'data'),
+    Input('places-mode-radio', 'value'),
+    State('places-mode', 'data'),
+    prevent_initial_call=True
+)
+def set_places_mode(new_mode, current_mode):
+    if not new_mode:
+        raise PreventUpdate
+    if new_mode == current_mode:
+        raise PreventUpdate
+    return new_mode, '', 0
 
 
 @app.callback(
