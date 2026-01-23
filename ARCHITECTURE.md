@@ -347,6 +347,9 @@ Søk skjer i tre parallelle “univers” – vi splitter inputten i ord og matc
 
 ## 8. Evolution Notes
 
+- Omniboks: Enter-trigger, tre kolonner (steder/bøker/forfattere) med hurtigscroll-knapper. Stedvalg legger grønn markør uten å flytte kartet; bøker/forfattere kan legges til korpus.  
+- Place-list modes: basis/sample/coll/sim via radioknapp ved sammendrag; søk nullstilles ved modusbytte. `#sample/#coll/#sim` fungerer fortsatt i søkefeltet. Coll/Sim faller tilbake til basis hvis datasettene er tomme. Global markørskala (log1p freq) beholdes across paging.
+
 - The app originated as a **Streamlit** prototype and was later rewritten in Dash to gain:
   - finer control over layout and state,
   - better integration with complex callbacks and client-side stores.
