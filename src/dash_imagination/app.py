@@ -3743,13 +3743,14 @@ def style_map_mode_buttons(view_type):
      Input('cluster-size-slider', 'value'),
      Input('cluster-radius-slider', 'value'),
      Input('collocation-highlight', 'data'),
-     Input('heatmap-subset-mode', 'data')],
+     Input('heatmap-subset-mode', 'data'),
+     Input('places-mode', 'data')],
     [State('all-places-store', 'data')],
     prevent_initial_call=True
 )
 def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius, heatmap_colorscale,
                cluster_toggle, selected_place, click_data, marker_size, cluster_size,
-               cluster_radius, collocation_highlight, heatmap_subset_mode, all_places_json):
+               cluster_radius, collocation_highlight, heatmap_subset_mode, places_mode, all_places_json):
     try:
         view_type = view_type or 'points'
         # Debug: log incoming sizes
@@ -3817,9 +3818,10 @@ def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius,
                     places_df = pd.concat([places_df, extra_row], ignore_index=True)
 
         # Clean datasets
-        places_df = places_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', 'frequency'])
+        metric_field = 'collocation_count' if (places_mode == 'coll' and 'collocation_count' in places_df.columns) else 'frequency'
+        places_df = places_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', metric_field])
         if heatmap_df is not None:
-            heatmap_df = heatmap_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', 'frequency'])
+            heatmap_df = heatmap_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', metric_field])
         else:
             heatmap_df = places_df.copy()
 
@@ -3847,7 +3849,7 @@ def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius,
         use_clustering = False
         if not sample_empty:
             # Logarithmic scale normalized globally (all places) for consistent sizing
-            freq_vals = places_df['frequency'].fillna(1).copy()
+            metric_vals = places_df[metric_field].fillna(1).copy()
             base_size = marker_size if marker_size is not None else 8  # slider base
             size_range = 40  # spread relative to global range
 
@@ -3855,19 +3857,19 @@ def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius,
             try:
                 if all_places_json:
                     all_df = pd.read_json(io.StringIO(all_places_json), orient='split')
-                    all_log = np.log1p(all_df['frequency'].fillna(1))
+                    all_log = np.log1p(all_df[metric_field].fillna(1)) if metric_field in all_df.columns else np.log1p(all_df['frequency'].fillna(1))
                     log_min, log_max = all_log.min(), all_log.max()
                 else:
-                    log_vals = np.log1p(freq_vals)
+                    log_vals = np.log1p(metric_vals)
                     log_min, log_max = log_vals.min(), log_vals.max()
             except Exception:
-                log_vals = np.log1p(freq_vals)
+                log_vals = np.log1p(metric_vals)
                 log_min, log_max = log_vals.min(), log_vals.max()
 
             if log_max == log_min:
                 sizes = pd.Series(base_size + size_range / 2, index=places_df.index)
             else:
-                page_log = np.log1p(freq_vals)
+                page_log = np.log1p(metric_vals)
                 norm = (page_log - log_min) / (log_max - log_min)
                 sizes = base_size + norm * size_range
 
@@ -4140,8 +4142,8 @@ def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius,
             try:
                 x = heatmap_df['longitude'].values
                 y = heatmap_df['latitude'].values
-                z = heatmap_df['frequency'].fillna(1).values
-                z = np.log1p(z)
+                z_raw = heatmap_df[metric_field].fillna(1).values if metric_field in heatmap_df.columns else heatmap_df['frequency'].fillna(1).values
+                z = np.log1p(z_raw)
                 mask = (~np.isnan(x)) & (~np.isnan(y)) & (~np.isnan(z)) & (~np.isinf(x)) & (~np.isinf(y)) & (~np.isinf(z))
                 x, y, z = x[mask], y[mask], z[mask]
                 
