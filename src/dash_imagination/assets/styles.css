@@ -893,3 +893,11 @@ body {
 .image-gallery-link:hover {
     text-decoration: underline;
 }
+
+/* Concordance modal should overlay draggable cards */
+.concordance-modal {
+    z-index: 3000 !important;
+}
+.concordance-modal-backdrop {
+    z-index: 2950 !important;
+}

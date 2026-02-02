@@ -2018,7 +2018,9 @@ app.layout = html.Div([
         ],
         id='concordance-modal',
         is_open=False,
-        size='lg'
+        size='lg',
+        modal_class_name='concordance-modal',
+        backdrop_class_name='concordance-modal-backdrop'
     ),
     dcc.Download(id='download-concordance'),
     dcc.Store(id='concordance-data-store'),
