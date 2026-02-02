@@ -5133,7 +5133,8 @@ def update_loading_state(build_clicks, current_books, book_clicks, author_clicks
     if not ctx.triggered:
         raise PreventUpdate
     
-    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    triggered = ctx.triggered[0]
+    trigger_id = triggered['prop_id'].split('.')[0]
     
     # Show loading when build button is clicked
     if trigger_id == 'build-corpus-btn' and build_clicks:
@@ -5155,6 +5156,9 @@ def update_loading_state(build_clicks, current_books, book_clicks, author_clicks
     except Exception:
         parsed = None
     if isinstance(parsed, dict) and parsed.get('type') in ('search-book-action', 'search-author-action'):
+        # Only show overlay when a result button is actually clicked (n_clicks > 0)
+        if not triggered.get('value'):
+            raise PreventUpdate
         new_style = dict(current_style)
         new_style['display'] = 'flex'
         return new_style
