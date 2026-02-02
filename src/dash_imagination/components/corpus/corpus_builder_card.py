@@ -342,7 +342,19 @@ def create_corpus_builder_card(categories_list=None, authors_list=None, titles_l
                         type='text',
                         placeholder='e.g. krig, krigen',
                         className="form-control form-control-sm"
-                    )
+                    ),
+                    html.Div([
+                        html.Label("Min frekvens (sum ≥)", style={'fontSize': '0.8rem', 'color': '#475569'}),
+                        dbc.Input(
+                            id='content-minfreq-input',
+                            type='number',
+                            min=1,
+                            step=1,
+                            value=1,
+                            size='sm',
+                            style={'maxWidth': '140px'}
+                        )
+                    ], className="mt-2")
                 ], className="mb-3"),
 
                 html.Div([
@@ -557,6 +569,7 @@ def toggle_card_visibility(n1, n2, builder_style, window_state, body_style, cont
      State("corpus-year-range", "value"),
      State("corpus-max-places-slider", "value"),
      State("content-wordforms-input", "value"),
+     State("content-minfreq-input", "value"),
      State("current-filters", "data"),
      State("corpus-operation", "data"),
      State("current-dhlabids-store", "data")],
@@ -570,6 +583,7 @@ def build_corpus_and_show_stats(
     year_range,
     max_places,
     content_wordforms,
+    content_minfreq,
     current_filters,
     operation,
     current_books
@@ -594,6 +608,9 @@ def build_corpus_and_show_stats(
     new_filters['last_operation'] = op
 
     content_words = [w.strip() for w in (content_wordforms or '').split(',') if w.strip()]
+    min_freq = int(content_minfreq or 1)
+    if min_freq < 1:
+        min_freq = 1
     apply_content_filter = bool(content_words)
 
     metadata_filters_applied = bool(categories) or bool(authors) or (year_range != DEFAULT_YEAR_RANGE)
@@ -645,14 +662,16 @@ def build_corpus_and_show_stats(
         try:
             counts_df = count_words(content_pool, content_words)
             dhlabid_sums = counts_df.sum(axis=0)
-            content_books = [int(dhl) for dhl, total in dhlabid_sums.items() if total >= 1]
+            content_books = [int(dhl) for dhl, total in dhlabid_sums.items() if total >= min_freq]
         except Exception as e:
             error = html.Span(f"Error during content search: {e}", style={"color": "#dc2626"})
             return dash.no_update, error, dash.no_update
         incoming_books = sorted(content_books)
         new_filters['content_words'] = content_words
+        new_filters['content_minfreq'] = min_freq
     else:
         new_filters.pop('content_words', None)
+        new_filters.pop('content_minfreq', None)
 
     if not incoming_books:
         status_error = html.Span("Fant ingen bøker for valgte filter.", style={"color": "#dc2626", "fontWeight": "500"})
@@ -784,10 +803,11 @@ def reset_corpus_filters(n_clicks_timestamp, n_clicks, color, title):
     Output("corpus-year-range", "value", allow_duplicate=True),
     Output("corpus-max-places-slider", "value", allow_duplicate=True),
     Output("content-wordforms-input", "value", allow_duplicate=True),
+    Output("content-minfreq-input", "value", allow_duplicate=True),
     Input("reset-filters-btn", "n_clicks"),
     prevent_initial_call=True
 )
 def reset_filter_controls(n_clicks):
     if not n_clicks:
         raise PreventUpdate
-    return [], [], [], DEFAULT_YEAR_RANGE.copy(), 500, ""
+    return [], [], [], DEFAULT_YEAR_RANGE.copy(), 500, "", 1

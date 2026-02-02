@@ -357,6 +357,9 @@ Søk skjer i tre parallelle “univers” – vi splitter inputten i ord og matc
   - keep the **corpus** as the primary “knob”,
   - treat all views as different **projections** of places and books,
   - integrate analysis (DHLab) and discovery (Qdrant/NB.no) through stable identifiers (URNs).
+- Concordance flow: place cards open a modal manually; results are preview-only until the user clicks download. Downloads now include a `metadata` column (title/year/author/mentions) alongside URN and concordance text.
+- Collocations: default window is 10 tokens before/after (previously 50/50) to reduce noise in typical queries.
+- Corpus builder content filter: supports a minimum frequency threshold (sum ≥ N) for the provided wordforms, instead of a fixed ≥1.
 
 The manifest captures where the app is going; this architecture describes the current implementation and the path for incremental enhancements.
 

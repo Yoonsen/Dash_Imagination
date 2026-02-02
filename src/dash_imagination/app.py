@@ -801,7 +801,7 @@ def create_collocation_controls():
                 min=1,
                 max=200,
                 step=1,
-                value=50,
+                value=10,
                 size='sm',
                 style={'maxWidth': '90px'}
             ),
@@ -812,7 +812,7 @@ def create_collocation_controls():
                 min=1,
                 max=200,
                 step=1,
-                value=50,
+                value=10,
                 size='sm',
                 style={'maxWidth': '90px'}
             ),
@@ -2006,7 +2006,13 @@ app.layout = html.Div([
                 html.Div(id='concordance-output', style={'marginTop': '8px', 'maxHeight': '260px', 'overflowY': 'auto', 'fontSize': '13px'})
             ]),
             dbc.ModalFooter([
-                dbc.Button("Last ned CSV", id='download-concordance-btn', color='light', className='me-2'),
+                dbc.Button(
+                    "Last ned CSV",
+                    id='download-concordance-btn',
+                    color='light',
+                    className='me-2',
+                    disabled=True
+                ),
                 dbc.Button("Lukk", id='close-concordance', className='ms-auto')
             ])
         ],
@@ -2015,6 +2021,7 @@ app.layout = html.Div([
         size='lg'
     ),
     dcc.Download(id='download-concordance'),
+    dcc.Store(id='concordance-data-store'),
 
     # Place summary container
     dbc.Card([
@@ -4460,7 +4467,9 @@ def update_place_summary(click_data, selected_place, current_style, current_book
 @app.callback(
     Output('concordance-modal', 'is_open'),
     Output('concordance-query', 'value'),
-    Output('concordance-output', 'children'),
+    Output('concordance-output', 'children', allow_duplicate=True),
+    Output('concordance-data-store', 'data', allow_duplicate=True),
+    Output('download-concordance-btn', 'disabled', allow_duplicate=True),
     Input({'type': 'open-concordance', 'token': dash.ALL}, 'n_clicks'),
     Input('close-concordance', 'n_clicks'),
     State('concordance-modal', 'is_open'),
@@ -4472,8 +4481,20 @@ def toggle_concordance_modal(open_clicks, close_clicks, is_open):
         raise PreventUpdate
     trigger = ctx.triggered[0]['prop_id'].split('.')[0]
     if trigger == 'close-concordance':
-        return False, '', dash.no_update
+        return False, '', dash.no_update, None, True
     # open
+    trigger_value = ctx.triggered[0].get('value')
+    if not trigger_value:
+        raise PreventUpdate
+    try:
+        if isinstance(trigger_value, (list, tuple)):
+            if not any(trigger_value):
+                raise PreventUpdate
+        elif not trigger_value:
+            raise PreventUpdate
+    except Exception:
+        raise PreventUpdate
+
     try:
         trigger_id = json.loads(trigger)
     except Exception:
@@ -4481,12 +4502,13 @@ def toggle_concordance_modal(open_clicks, close_clicks, is_open):
     token = trigger_id.get('token')
     if not token:
         raise PreventUpdate
-    return True, token, ''
+    return True, token, '', None, True
 
 
 @app.callback(
     Output('concordance-output', 'children', allow_duplicate=True),
-    Output('download-concordance', 'data', allow_duplicate=True),
+    Output('concordance-data-store', 'data', allow_duplicate=True),
+    Output('download-concordance-btn', 'disabled', allow_duplicate=True),
     Input('run-concordance', 'n_clicks'),
     State('concordance-query', 'value'),
     State('concordance-window', 'value'),
@@ -4498,11 +4520,11 @@ def run_concordance(n_clicks, query, window, current_books):
         raise PreventUpdate
     query = (query or "").strip()
     if not query:
-        return html.Div("Tom søkestreng."), dash.no_update
+        return html.Div("Tom søkestreng."), None, True
     window = int(window or 25)
     current_books = current_books or []
     if not current_books:
-        return html.Div("Ingen bøker i korpus; kan ikke hente konkordanser.", style={'color': '#64748b'}), dash.no_update
+        return html.Div("Ingen bøker i korpus; kan ikke hente konkordanser.", style={'color': '#64748b'}), None, True
 
     conn = get_db_connection()
     try:
@@ -4523,30 +4545,113 @@ def run_concordance(n_clicks, query, window, current_books):
 
     urns = urn_df['urn'].dropna().unique().tolist() if not urn_df.empty else []
     if not urns:
-        return html.Div("Ingen URNs i korpuset; kan ikke hente konkordanser.", style={'color': '#64748b'}), dash.no_update
+        return html.Div("Ingen URNs i korpuset; kan ikke hente konkordanser.", style={'color': '#64748b'}), None, True
+
+    # Fetch metadata for these DHLaB IDs from corpus (mirror place-details source)
+    meta_df = pd.DataFrame()
+    try:
+        conn = get_db_connection()
+        dh_placeholders = ','.join(['?'] * len(current_books))
+        meta_df = pd.read_sql_query(
+            f"""
+            SELECT DISTINCT
+                c.urn,
+                c.title,
+                c.author,
+                c.year,
+                c.dhlabid,
+                COALESCE(b.book_count, 0) AS mention_count
+            FROM corpus c
+            LEFT JOIN books b ON b.dhlabid = c.dhlabid
+            WHERE c.dhlabid IN ({dh_placeholders})
+              AND c.urn IS NOT NULL
+            """,
+            conn,
+            params=tuple(current_books)
+        )
+    finally:
+        conn.close()
 
     try:
         conc = dh.Concordance(urns, query, window=window, limit=500)
         conc_df = conc.frame.copy()
     except Exception as e:
-        return html.Div(f"Feil ved henting av konkordanser: {e}", style={'color': '#dc2626'}), dash.no_update
+        return html.Div(f"Feil ved henting av konkordanser: {e}", style={'color': '#dc2626'}), None, True
 
     if conc_df is None or conc_df.empty:
-        return html.Div("Ingen konkordanser funnet.", style={'color': '#64748b'}), dash.no_update
+        return html.Div("Ingen konkordanser funnet.", style={'color': '#64748b'}), None, True
+
+    # Enrich with metadata for download/view
+    meta_map = {}
+    if 'meta_df' in locals() and not meta_df.empty:
+        for _, r in meta_df.iterrows():
+            urn_key = (r.get('urn') or '').strip()
+            if not urn_key:
+                continue
+            parts = []
+            if pd.notna(r.get('title')):
+                parts.append(str(r.get('title')))
+            if pd.notna(r.get('year')):
+                parts.append(f"({int(r.get('year'))})" if not pd.isna(r.get('year')) else "")
+            if pd.notna(r.get('author')):
+                parts.append(f"— {r.get('author')}")
+            if pd.notna(r.get('mention_count')):
+                try:
+                    parts.append(f"• {int(r.get('mention_count'))} mentions")
+                except Exception:
+                    pass
+            meta_map[urn_key] = " ".join(p for p in parts if p).strip()
+    conc_df['metadata'] = conc_df['urn'].map(meta_map).fillna('')
 
     preview = conc_df.head(10)
     rows = []
     for _, row in preview.iterrows():
+        urn = (row.get('urn') or '').strip()
+        book_href = f"https://www.nb.no/items/{urn}?searchText={query}" if urn else "#"
+        conc_text = (row.get('concordance') or '').strip()
+        if not conc_text:
+            left = (row.get('left') or '').strip()
+            keyword = (row.get('keyword') or '').strip()
+            right = (row.get('right') or '').strip()
+            conc_text = " ".join(part for part in [left, keyword, right] if part).strip()
         rows.append(html.Div([
-            html.Span(row.get('left', ''), style={'color': '#475569'}),
-            html.Span(row.get('keyword', ''), style={'fontWeight': 700, 'margin': '0 4px'}),
-            html.Span(row.get('right', ''), style={'color': '#475569'}),
-            html.Span(row.get('urn', ''), style={'color': '#94a3b8', 'fontSize': '12px', 'marginLeft': '6px'})
-        ], style={'padding': '4px 0', 'borderBottom': '1px solid #eee'}))
+            html.Div(
+                html.A("Åpne bok", href=book_href, target="_blank", style={'color': '#1a56db', 'textDecoration': 'none'}),
+                style={'minWidth': '120px'}
+            ),
+            html.Div([
+                html.Span(conc_text or "—", style={'color': '#475569'}),
+                html.Span(urn, style={'color': '#94a3b8', 'fontSize': '12px', 'marginLeft': '6px'})
+            ])
+        ], style={
+            'padding': '6px 0',
+            'borderBottom': '1px solid #eee',
+            'display': 'grid',
+            'gridTemplateColumns': '140px 1fr',
+            'columnGap': '12px',
+            'alignItems': 'start'
+        }))
 
     table = html.Div(rows, style={'maxHeight': '260px', 'overflowY': 'auto', 'fontSize': '13px'})
-    download = dcc.send_data_frame(conc_df.to_csv, f"concordance_{query}.csv", index=False)
-    return table, download
+    return table, conc_df.to_dict(orient='records'), False
+
+
+@app.callback(
+    Output('download-concordance', 'data'),
+    Input('download-concordance-btn', 'n_clicks'),
+    State('concordance-data-store', 'data'),
+    State('concordance-query', 'value'),
+    prevent_initial_call=True
+)
+def download_concordance(n_clicks, stored_conc, query):
+    if not n_clicks:
+        raise PreventUpdate
+    if not stored_conc:
+        raise PreventUpdate
+    conc_df = pd.DataFrame(stored_conc)
+    safe_query = (query or "concordance").strip() or "concordance"
+    safe_query = safe_query.replace(" ", "_")
+    return dcc.send_data_frame(conc_df.to_csv, f"concordance_{safe_query}.csv", index=False)
 
 
 @app.callback(
@@ -4597,6 +4702,32 @@ def fetch_place_concordance(n_clicks, current_books):
     if not urns:
         return html.Div("Ingen URNs for denne plassen i korpuset; kan ikke hente konkordanser.", style={'color': '#64748b'}), dash.no_update
 
+    # Metadata for URNs from corpus (mirror place-details)
+    meta_df = pd.DataFrame()
+    try:
+        conn = get_db_connection()
+        dh_placeholders = ','.join(['?'] * len(current_books))
+        meta_df = pd.read_sql_query(
+            f"""
+            SELECT DISTINCT
+                c.urn,
+                c.title,
+                c.author,
+                c.year,
+                c.dhlabid,
+                COALESCE(b.book_count, 0) AS mention_count
+            FROM corpus c
+            JOIN books b ON b.dhlabid = c.dhlabid
+            WHERE b.token = ?
+              AND b.dhlabid IN ({dh_placeholders})
+              AND c.urn IS NOT NULL
+            """,
+            conn,
+            params=tuple([token] + current_books)
+        )
+    finally:
+        conn.close()
+
     try:
         conc = dh.Concordance(urns, [token], before=25, after=25)
         conc_df = conc.frame.copy()
@@ -4606,15 +4737,55 @@ def fetch_place_concordance(n_clicks, current_books):
     if conc_df is None or conc_df.empty:
         return html.Div("Ingen konkordanser funnet.", style={'color': '#64748b'}), dash.no_update
 
+    meta_map = {}
+    if 'meta_df' in locals() and not meta_df.empty:
+        for _, r in meta_df.iterrows():
+            urn_key = (r.get('urn') or '').strip()
+            if not urn_key:
+                continue
+            parts = []
+            if pd.notna(r.get('title')):
+                parts.append(str(r.get('title')))
+            if pd.notna(r.get('year')):
+                parts.append(f"({int(r.get('year'))})" if not pd.isna(r.get('year')) else "")
+            if pd.notna(r.get('author')):
+                parts.append(f"— {r.get('author')}")
+            if pd.notna(r.get('mention_count')):
+                try:
+                    parts.append(f"• {int(r.get('mention_count'))} mentions")
+                except Exception:
+                    pass
+            meta_map[urn_key] = " ".join(p for p in parts if p).strip()
+    conc_df['metadata'] = conc_df['urn'].map(meta_map).fillna('')
+
     preview = conc_df.head(10)
     rows = []
     for _, row in preview.iterrows():
+        urn = (row.get('urn') or '').strip()
+        book_href = f"https://www.nb.no/items/{urn}?searchText={token}" if urn else "#"
+        conc_text = (row.get('concordance') or '').strip()
+        if not conc_text:
+            left = (row.get('left') or '').strip()
+            keyword = (row.get('keyword') or '').strip()
+            right = (row.get('right') or '').strip()
+            conc_text = " ".join(part for part in [left, keyword, right] if part).strip()
         rows.append(html.Div([
-            html.Span(row.get('left', ''), style={'color': '#475569'}),
-            html.Span(row.get('keyword', ''), style={'fontWeight': 700, 'margin': '0 4px'}),
-            html.Span(row.get('right', ''), style={'color': '#475569'}),
-            html.Span(row.get('urn', ''), style={'color': '#94a3b8', 'fontSize': '12px', 'marginLeft': '6px'})
-        ], style={'padding': '4px 0', 'borderBottom': '1px solid #eee'}))
+            html.Div(
+                html.A("Åpne bok", href=book_href, target="_blank", style={'color': '#1a56db', 'textDecoration': 'none'}),
+                style={'minWidth': '120px'}
+            ),
+            html.Div([
+                html.Span(conc_text or "—", style={'color': '#475569'}),
+                html.Span(urn, style={'color': '#94a3b8', 'fontSize': '12px', 'marginLeft': '6px'})
+            ])
+        ], style={
+            'padding': '6px 0',
+            'borderBottom': '1px solid #eee',
+            'display': 'grid',
+            'gridTemplateColumns': '140px 1fr',
+            'columnGap': '12px',
+            'alignItems': 'start'
+        }))
 
     table = html.Div(rows, style={'maxHeight': '260px', 'overflowY': 'auto', 'fontSize': '13px'})
     download = dcc.send_data_frame(conc_df.to_csv, f"concordance_{token}.csv", index=False)
