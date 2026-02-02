@@ -360,6 +360,7 @@ Søk skjer i tre parallelle “univers” – vi splitter inputten i ord og matc
 - Concordance flow: place cards open a modal manually; results are preview-only until the user clicks download. Downloads now include a `metadata` column (title/year/author/mentions) alongside URN and concordance text.
 - Collocations: default window is 10 tokens before/after (previously 50/50) to reduce noise in typical queries.
 - Corpus builder content filter: supports a minimum frequency threshold (sum ≥ N) for the provided wordforms, instead of a fixed ≥1.
+- Loading UX: a global overlay (“Oppdaterer korpus og steder …”) shows while corpus/place updates run (builder or omnibox add) and hides when the map finishes rendering, to make cloud latency visible without blocking initial empty state.
 
 The manifest captures where the app is going; this architecture describes the current implementation and the path for incremental enhancements.
 
