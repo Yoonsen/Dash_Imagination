@@ -4605,7 +4605,9 @@ def run_concordance(n_clicks, query, window, current_books):
             meta_map[urn_key] = " ".join(p for p in parts if p).strip()
     conc_df['metadata'] = conc_df['urn'].map(meta_map).fillna('')
 
-    preview = conc_df.head(10)
+    total_size = getattr(conc, 'size', len(conc_df))
+    preview_limit = 50
+    preview = conc_df.head(preview_limit)
     rows = []
     for _, row in preview.iterrows():
         urn = (row.get('urn') or '').strip()
@@ -4634,7 +4636,14 @@ def run_concordance(n_clicks, query, window, current_books):
             'alignItems': 'start'
         }))
 
-    table = html.Div(rows, style={'maxHeight': '260px', 'overflowY': 'auto', 'fontSize': '13px'})
+    summary = html.Div(
+        f"Viser topp {min(len(preview), preview_limit)} av {total_size} treff",
+        style={'color': '#475569', 'fontSize': '12px', 'marginBottom': '6px'}
+    )
+    table = html.Div([
+        summary,
+        html.Div(rows, style={'maxHeight': '260px', 'overflowY': 'auto', 'fontSize': '13px'})
+    ])
     return table, conc_df.to_dict(orient='records'), False
 
 
@@ -4760,7 +4769,9 @@ def fetch_place_concordance(n_clicks, current_books):
             meta_map[urn_key] = " ".join(p for p in parts if p).strip()
     conc_df['metadata'] = conc_df['urn'].map(meta_map).fillna('')
 
-    preview = conc_df.head(10)
+    total_size = getattr(conc, 'size', len(conc_df))
+    preview_limit = 50
+    preview = conc_df.head(preview_limit)
     rows = []
     for _, row in preview.iterrows():
         urn = (row.get('urn') or '').strip()
@@ -4789,7 +4800,14 @@ def fetch_place_concordance(n_clicks, current_books):
             'alignItems': 'start'
         }))
 
-    table = html.Div(rows, style={'maxHeight': '260px', 'overflowY': 'auto', 'fontSize': '13px'})
+    summary = html.Div(
+        f"Viser topp {min(len(preview), preview_limit)} av {total_size} treff",
+        style={'color': '#475569', 'fontSize': '12px', 'marginBottom': '6px'}
+    )
+    table = html.Div([
+        summary,
+        html.Div(rows, style={'maxHeight': '260px', 'overflowY': 'auto', 'fontSize': '13px'})
+    ])
     download = dcc.send_data_frame(conc_df.to_csv, f"concordance_{token}.csv", index=False)
     return table, download
 
