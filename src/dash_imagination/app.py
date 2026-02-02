@@ -2782,18 +2782,18 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
 
     matching_places = []
     for _, row in places_df[['token', 'name']].dropna().drop_duplicates().iterrows():
-        place_name = str(row['name'])
-        tokens = re.findall(r"[0-9A-Za-zÀ-ÖØ-öø-ÿ]+", place_name.lower())
+        corpus_token = str(row['token'])
+        tokens = re.findall(r"[0-9A-Za-zÀ-ÖØ-öø-ÿ]+", corpus_token.lower())
         tokens = [tok for tok in tokens if tok]
         if not tokens:
             continue
         if all(tok in collocate_tokens for tok in tokens):
             total_count = int(sum(word_counts[tok] for tok in tokens))
             matching_places.append({
-                'Place': place_name,
+                'Place': row.get('name') or corpus_token,
                 'Tokens': ", ".join(tokens),
                 'Total count': total_count,
-                'Token': row['token']
+                'Token': corpus_token
             })
 
     if not matching_places:
