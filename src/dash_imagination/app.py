@@ -4494,6 +4494,17 @@ def toggle_concordance_modal(open_clicks, close_clicks, is_open):
     if trigger == 'close-concordance':
         return False, '', dash.no_update, None, True
     # open
+    trigger_value = ctx.triggered[0].get('value')
+    try:
+        if isinstance(trigger_value, (list, tuple)):
+            if not any(v for v in trigger_value if v):
+                raise PreventUpdate
+        else:
+            if not trigger_value or int(trigger_value) <= 0:
+                raise PreventUpdate
+    except Exception:
+        raise PreventUpdate
+
     try:
         trigger_id = json.loads(trigger)
     except Exception:
