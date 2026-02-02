@@ -4605,8 +4605,12 @@ def run_concordance(n_clicks, query, window, current_books):
             meta_map[urn_key] = " ".join(p for p in parts if p).strip()
     conc_df['metadata'] = conc_df['urn'].map(meta_map).fillna('')
 
-    total_size = getattr(conc, 'size', len(conc_df))
     preview_limit = 50
+    raw_size = getattr(conc, 'size', None)
+    try:
+        total_size = int(raw_size) if raw_size is not None else len(conc_df)
+    except Exception:
+        total_size = len(conc_df)
     preview = conc_df.head(preview_limit)
     rows = []
     for _, row in preview.iterrows():
@@ -4636,8 +4640,9 @@ def run_concordance(n_clicks, query, window, current_books):
             'alignItems': 'start'
         }))
 
+    shown = min(len(preview), preview_limit, len(conc_df))
     summary = html.Div(
-        f"Viser topp {min(len(preview), preview_limit)} av {total_size} treff",
+        f"Viser topp {shown} av {total_size} treff",
         style={'color': '#475569', 'fontSize': '12px', 'marginBottom': '6px'}
     )
     table = html.Div([
@@ -4769,8 +4774,12 @@ def fetch_place_concordance(n_clicks, current_books):
             meta_map[urn_key] = " ".join(p for p in parts if p).strip()
     conc_df['metadata'] = conc_df['urn'].map(meta_map).fillna('')
 
-    total_size = getattr(conc, 'size', len(conc_df))
     preview_limit = 50
+    raw_size = getattr(conc, 'size', None)
+    try:
+        total_size = int(raw_size) if raw_size is not None else len(conc_df)
+    except Exception:
+        total_size = len(conc_df)
     preview = conc_df.head(preview_limit)
     rows = []
     for _, row in preview.iterrows():
@@ -4800,8 +4809,9 @@ def fetch_place_concordance(n_clicks, current_books):
             'alignItems': 'start'
         }))
 
+    shown = min(len(preview), preview_limit, len(conc_df))
     summary = html.Div(
-        f"Viser topp {min(len(preview), preview_limit)} av {total_size} treff",
+        f"Viser topp {shown} av {total_size} treff",
         style={'color': '#475569', 'fontSize': '12px', 'marginBottom': '6px'}
     )
     table = html.Div([
