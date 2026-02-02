@@ -3832,6 +3832,11 @@ def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius,
         sample_empty = places_df.empty
         heatmap_empty = heatmap_df.empty
 
+        # If current mode produced an empty sample but we still have heatmap data, fall back to that to avoid blank map
+        if sample_empty and not heatmap_empty:
+            places_df = heatmap_df.copy()
+            sample_empty = places_df.empty
+
         if sample_empty and (view_type != 'heatmap' or heatmap_empty):
             fig.update_layout(
                 map=dict(
