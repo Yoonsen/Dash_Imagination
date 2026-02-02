@@ -2228,6 +2228,7 @@ app.layout = html.Div([
     dcc.Store(id='places-frequency-data'),
     dcc.Store(id='places-sample-data'),
     dcc.Store(id='places-collocation-data'),
+    dcc.Store(id='collocation-place-counts', data={}),
     dcc.Store(id='places-mode', data='basis'),
     dcc.Store(id='places-sort-field', data='frequency'),
     dcc.Store(id='places-sort-dir', data='desc'),
@@ -2656,6 +2657,7 @@ def style_corpus_operation_similarity(operation):
 @app.callback(
     Output('collocation-results', 'children'),
     Output('collocation-place-tokens', 'data'),
+    Output('collocation-place-counts', 'data'),
     Input('run-collocations', 'n_clicks'),
     State('collocation-words-input', 'value'),
     State('collocation-before-input', 'value'),
@@ -2668,13 +2670,13 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
     if not n_clicks:
         raise PreventUpdate
     if not words_value:
-        return html.Div("Enter one or more keywords to analyse collocations.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
+        return html.Div("Enter one or more keywords to analyse collocations.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), [], {}
     if not current_books:
-        return html.Div("Corpus is empty. Build or upload a corpus first.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
+        return html.Div("Corpus is empty. Build or upload a corpus first.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), [], {}
 
     words = [w.strip() for w in words_value.split(',') if w.strip()]
     if not words:
-        return html.Div("No valid keywords provided.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
+        return html.Div("No valid keywords provided.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), [], {}
 
     before = int(before or 50)
     after = int(after or 50)
@@ -2693,7 +2695,7 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
         conn.close()
 
     if not urns:
-        return html.Div("No URNs found for the current corpus; collocations require identifiable texts.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
+        return html.Div("No URNs found for the current corpus; collocations require identifiable texts.", style={'color': '#dc2626', 'fontSize': '0.8rem'}), [], {}
 
     sample_size = min(len(urns), 5000)
 
@@ -2701,10 +2703,10 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
         coll = dh.Collocations(urns, words, before=before, after=after, samplesize=sample_size)
         coll_df = coll.frame.copy()
     except Exception as err:
-        return html.Div(f"Error retrieving collocations: {err}", style={'color': '#dc2626', 'fontSize': '0.8rem'}), []
+        return html.Div(f"Error retrieving collocations: {err}", style={'color': '#dc2626', 'fontSize': '0.8rem'}), [], {}
 
     if coll_df is None or coll_df.empty:
-        return html.Div("No collocations found for the selected keywords.", style={'color': '#475569', 'fontSize': '0.8rem'}), []
+        return html.Div("No collocations found for the selected keywords.", style={'color': '#475569', 'fontSize': '0.8rem'}), [], {}
 
     coll_df = coll_df.reset_index()
     if 'index' in coll_df.columns:
@@ -2746,7 +2748,7 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
             "Fant ingen steder som matcher dette kollokasjonssøket. Prøv andre søkeord eller vindu.",
             style={'color': '#475569', 'fontSize': '0.85rem'}
         )
-        return message, []
+        return message, [], {}
 
     match_df_raw = pd.DataFrame(matching_places)
 
@@ -2772,7 +2774,8 @@ def run_collocation_search(n_clicks, words_value, before, after, current_books, 
         f"Fant {len(tokens)} steder. Listen kan avkortes av Max places i stedsvisningen.",
         style={'color': '#0f172a', 'fontSize': '0.85rem'}
     )
-    return summary, tokens
+    count_map = match_df.set_index('Token')['Total count'].to_dict()
+    return summary, tokens, count_map
 
 @app.callback(
     Output('collocation-highlight', 'data'),
@@ -2810,10 +2813,11 @@ def style_collocation_highlight_button(highlight_tokens):
     Input('filtered-data', 'data'),
     Input('corpus-max-places-slider', 'value'),
     Input('collocation-place-tokens', 'data'),
+    Input('collocation-place-counts', 'data'),
     Input('current-dhlabids-store', 'data'),
     State('all-places-store', 'data')
 )
-def update_places_datasets(filtered_data_json, max_places, collocation_tokens, current_books, all_places_json):
+def update_places_datasets(filtered_data_json, max_places, collocation_tokens, collocation_counts, current_books, all_places_json):
     import pandas as pd
     ctx = dash.callback_context
     triggered = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
@@ -2838,6 +2842,7 @@ def update_places_datasets(filtered_data_json, max_places, collocation_tokens, c
     )
 
     tokens = set(collocation_tokens or [])
+    count_map = collocation_counts or {}
     if tokens:
         base_colloc_df = df
         if all_places_json:
@@ -2850,6 +2855,8 @@ def update_places_datasets(filtered_data_json, max_places, collocation_tokens, c
             .sort_values(by='frequency', ascending=False)
             .reset_index(drop=True)
         )
+        if not colloc_df.empty:
+            colloc_df['collocation_count'] = colloc_df['token'].astype(str).map(count_map).fillna(0).astype(int)
     else:
         colloc_df = pd.DataFrame(columns=base_columns)
 
@@ -2963,6 +2970,8 @@ def display_frequency_places(freq_json, search_term, search_clicks, colloc_json,
             df_filtered = df_all
             print(f"[places] freq table reset to base: {len(df_filtered)} rows")
 
+    if mode_value == 'coll' and 'collocation_count' in df_filtered.columns:
+        sort_field = 'collocation_count'
     if sort_field not in df_filtered.columns:
         sort_field = 'frequency'
     ascending_main = (sort_dir == 'asc')
