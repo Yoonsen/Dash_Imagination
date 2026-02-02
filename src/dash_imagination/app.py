@@ -4472,7 +4472,7 @@ def toggle_concordance_modal(open_clicks, close_clicks, is_open):
         raise PreventUpdate
     trigger = ctx.triggered[0]['prop_id'].split('.')[0]
     if trigger == 'close-concordance':
-        return False, dash.no_update, dash.no_update
+        return False, '', dash.no_update
     # open
     try:
         trigger_id = json.loads(trigger)
@@ -4481,7 +4481,7 @@ def toggle_concordance_modal(open_clicks, close_clicks, is_open):
     token = trigger_id.get('token')
     if not token:
         raise PreventUpdate
-    return True, token, dash.no_update
+    return True, token, ''
 
 
 @app.callback(
