@@ -5854,6 +5854,7 @@ def toggle_image_gallery(_, close_clicks, dismiss_clicks, place_images, author_i
 @app.callback(
     Output('current-dhlabids-store', 'data', allow_duplicate=True),
     Output('global-search-results', 'style', allow_duplicate=True),
+    Output('build-corpus-status', 'children', allow_duplicate=True),
     Input({'type': 'search-book-action', 'dhlabid': ALL}, 'n_clicks'),
     State('current-dhlabids-store', 'data'),
     prevent_initial_call=True
@@ -5875,12 +5876,17 @@ def add_book_from_search(_, current_books):
     dhlabid = int(trigger_id.get('dhlabid'))
     books = set(current_books or [])
     books.add(dhlabid)
-    return sorted(books), _search_results_style(False)
+    status = html.Span(
+        f"La til bok {dhlabid} fra omniboks",
+        style={"color": "#2563eb", "fontWeight": "500"}
+    )
+    return sorted(books), _search_results_style(False), status
 
 
 @app.callback(
     Output('current-dhlabids-store', 'data', allow_duplicate=True),
     Output('global-search-results', 'style', allow_duplicate=True),
+    Output('build-corpus-status', 'children', allow_duplicate=True),
     Input({'type': 'search-author-action', 'author_key': ALL, 'display_name': ALL}, 'n_clicks'),
     State('current-dhlabids-store', 'data'),
     prevent_initial_call=True
@@ -5906,7 +5912,11 @@ def add_author_books_from_search(_, current_books):
         raise PreventUpdate
     books = set(current_books or [])
     books.update(dhlabids)
-    return sorted(books), _search_results_style(False)
+    status = html.Span(
+        f"La til {len(dhlabids)} bøker fra {display_name or author_key} via omniboks",
+        style={"color": "#2563eb", "fontWeight": "500"}
+    )
+    return sorted(books), _search_results_style(False), status
 
 
 # Add a clientside callback for instant download status feedback
