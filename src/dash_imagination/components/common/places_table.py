@@ -59,57 +59,61 @@ def render_place_preview(
         style={'display': 'flex', 'alignItems': 'center', 'gap': '6px', 'flexWrap': 'wrap'}
     )
 
-def header_cell(label, key, flex=None):
-    return html.Span(
-        label,
-        style={
-            'flex': flex if flex is not None else ('1.2' if key in ('token', 'name') else '0.7'),
-            'fontWeight': '600',
-            'padding': '8px',
-            'cursor': 'pointer',
-            'border': 'none',
-            'background': 'transparent',
-            'textAlign': 'left',
-            'display': 'inline-block'
-        },
-        className="places-sort-header",
-        **{'data-key': key, 'role': 'button', 'tabIndex': 0, 'aria-label': f"Sorter {label}"}
-    )
+    def header_cell(label, key, flex=None):
+        return html.Span(
+            label,
+            style={
+                'flex': flex if flex is not None else ('1.2' if key in ('token', 'name') else '0.7'),
+                'fontWeight': '600',
+                'padding': '8px',
+                'cursor': 'pointer',
+                'border': 'none',
+                'background': 'transparent',
+                'textAlign': 'left',
+                'display': 'inline-block'
+            },
+            className="places-sort-header",
+            **{'data-key': key, 'role': 'button', 'tabIndex': 0, 'aria-label': f"Sorter {label}"}
+        )
 
     rows = []
     for _, row in df.iterrows():
+        cells = [
+            html.Div(
+                f"{row.get('token', '')}",
+                style={'flex': '1.2', 'padding': '8px', 'fontWeight': '500', 'fontSize': '0.9rem'}
+            ),
+            html.Div(
+                f"{row.get('name', '') or '—'}",
+                style={
+                    'flex': '1.2',
+                    'padding': '8px',
+                    'color': '#475569',
+                    'fontSize': '0.85rem',
+                    'overflow': 'hidden',
+                    'textOverflow': 'ellipsis',
+                    'whiteSpace': 'nowrap'
+                }
+            ),
+            html.Div(
+                f"{int(row.get('book_count', 0))}",
+                style={'flex': '0.7', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}
+            ),
+            html.Div(
+                f"{int(row.get('frequency', 0))}",
+                style={'flex': '0.7', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}
+            )
+        ]
+        if 'collocation_count' in df.columns:
+            cells.append(
+                html.Div(
+                    f"{int(row.get('collocation_count', 0))}",
+                    style={'flex': '0.7', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}
+                )
+            )
         rows.append(
             html.Div(
-                [
-                    html.Div(
-                        f"{row.get('token', '')}",
-                        style={'flex': '1.2', 'padding': '8px', 'fontWeight': '500', 'fontSize': '0.9rem'}
-                    ),
-                    html.Div(
-                        f"{row.get('name', '') or '—'}",
-                        style={
-                            'flex': '1.2',
-                            'padding': '8px',
-                            'color': '#475569',
-                            'fontSize': '0.85rem',
-                            'overflow': 'hidden',
-                            'textOverflow': 'ellipsis',
-                            'whiteSpace': 'nowrap'
-                        }
-                    ),
-                    html.Div(
-                        f"{int(row.get('book_count', 0))}",
-                        style={'flex': '0.7', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}
-                    ),
-                    html.Div(
-                        f"{int(row.get('frequency', 0))}",
-                        style={'flex': '0.7', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}
-                    ),
-                    html.Div(
-                        f"{int(row.get('collocation_count', 0))}",
-                        style={'flex': '0.7', 'padding': '8px', 'textAlign': 'center', 'fontSize': '0.9rem'}
-                    ) if 'collocation_count' in df.columns else None
-                ],
+                cells,
                 style={
                     'display': 'flex',
                     'borderBottom': '1px solid #eee',
@@ -138,13 +142,13 @@ def header_cell(label, key, flex=None):
     table = html.Div(
         [
             html.Div(
-                [
+                [c for c in [
                     header_cell("Historisk", 'token'),
                     header_cell("Moderne", 'name'),
                     header_cell("📚", 'book_count'),
                     header_cell("📝", 'frequency'),
                     header_cell("Coll", 'collocation_count') if 'collocation_count' in df.columns else None
-                ],
+                ] if c is not None],
                 style={
                     'display': 'flex',
                     'borderBottom': '2px solid #eee',
