@@ -4485,8 +4485,8 @@ def toggle_concordance_modal(open_clicks, close_clicks, is_open):
 
 
 @app.callback(
-    Output('concordance-output', 'children'),
-    Output('download-concordance', 'data'),
+    Output('concordance-output', 'children', allow_duplicate=True),
+    Output('download-concordance', 'data', allow_duplicate=True),
     Input('run-concordance', 'n_clicks'),
     State('concordance-query', 'value'),
     State('concordance-window', 'value'),
