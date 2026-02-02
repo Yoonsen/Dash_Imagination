@@ -2003,7 +2003,16 @@ app.layout = html.Div([
                 dbc.Input(id='concordance-query', type='text', placeholder='Søkestreng', size='sm'),
                 dbc.Input(id='concordance-window', type='number', min=1, max=200, step=1, value=25, size='sm', className='mt-2'),
                 dbc.Button("Hent konkordanser", id='run-concordance', color='secondary', size='sm', className='mt-2'),
-                html.Div(id='concordance-output', style={'marginTop': '8px', 'maxHeight': '260px', 'overflowY': 'auto', 'fontSize': '13px'})
+                dcc.Loading(
+                    id='concordance-loading',
+                    type='default',
+                    children=html.Div(id='concordance-output', style={
+                        'marginTop': '8px',
+                        'maxHeight': '260px',
+                        'overflowY': 'auto',
+                        'fontSize': '13px'
+                    })
+                )
             ]),
             dbc.ModalFooter([
                 dbc.Button(
