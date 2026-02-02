@@ -1852,6 +1852,17 @@ app.layout = html.Div([
                 "position": "relative"
             }),
 
+            html.Div(id='corpus-status-banner', style={
+                "fontSize": "12px",
+                "color": "#2563eb",
+                "padding": "4px 8px",
+                "backgroundColor": "rgba(37, 99, 235, 0.08)",
+                "borderRadius": "8px",
+                "boxShadow": "0 1px 3px rgba(0,0,0,0.08)",
+                "display": "none",
+                "flexShrink": "0"
+            }),
+
             # Buttons container
             html.Div([
                 html.Button(
@@ -5917,6 +5928,30 @@ def add_author_books_from_search(_, current_books):
         style={"color": "#2563eb", "fontWeight": "500"}
     )
     return sorted(books), _search_results_style(False), status
+
+
+@app.callback(
+    Output('corpus-status-banner', 'children'),
+    Output('corpus-status-banner', 'style'),
+    Input('current-dhlabids-store', 'data'),
+    prevent_initial_call=True
+)
+def show_corpus_status(current_books):
+    count = len(current_books or [])
+    msg = f"Korpus oppdatert ({count} bøker)" if count else "Korpus er tomt"
+    style = {
+        "fontSize": "12px",
+        "color": "#2563eb",
+        "padding": "4px 8px",
+        "backgroundColor": "rgba(37, 99, 235, 0.08)",
+        "borderRadius": "8px",
+        "boxShadow": "0 1px 3px rgba(0,0,0,0.08)",
+        "display": "inline-flex",
+        "alignItems": "center",
+        "gap": "6px",
+        "flexShrink": "0"
+    }
+    return msg, style
 
 
 # Add a clientside callback for instant download status feedback
