@@ -627,7 +627,30 @@ def _render_place_summary_from_search(place: dict) -> tuple[html.Div, list[dict]
         "No book details available", style={'color': '#475569'}
     )
 
-    summary = html.Div([header, gallery, html.Hr(style={'margin': '10px 0'}), book_list])
+    concordance_button = None
+    if place_token:
+        concordance_button = html.Button(
+            "Konkordans",
+            id={'type': 'open-concordance', 'token': place_token},
+            n_clicks=0,
+            style={
+                'border': '1px solid #e2e8f0',
+                'backgroundColor': '#f8fafc',
+                'color': '#0f172a',
+                'fontSize': '12px',
+                'padding': '6px 10px',
+                'borderRadius': '8px',
+                'cursor': 'pointer',
+                'alignSelf': 'flex-start'
+            }
+        )
+
+    summary_children = [header, gallery, html.Hr(style={'margin': '10px 0'})]
+    if concordance_button:
+        summary_children.append(concordance_button)
+    summary_children.append(book_list)
+
+    summary = html.Div(summary_children)
     return summary, images
 
 
@@ -1972,6 +1995,27 @@ app.layout = html.Div([
         'width': 'auto'
     }),
     
+    # Concordance modal (opens from Place Details)
+    dbc.Modal(
+        [
+            dbc.ModalHeader("Konkordans"),
+            dbc.ModalBody([
+                dbc.Input(id='concordance-query', type='text', placeholder='Søkestreng', size='sm'),
+                dbc.Input(id='concordance-window', type='number', min=1, max=200, step=1, value=25, size='sm', className='mt-2'),
+                dbc.Button("Hent konkordanser", id='run-concordance', color='secondary', size='sm', className='mt-2'),
+                html.Div(id='concordance-output', style={'marginTop': '8px', 'maxHeight': '260px', 'overflowY': 'auto', 'fontSize': '13px'})
+            ]),
+            dbc.ModalFooter([
+                dbc.Button("Last ned CSV", id='download-concordance-btn', color='light', className='me-2'),
+                dbc.Button("Lukk", id='close-concordance', className='ms-auto')
+            ])
+        ],
+        id='concordance-modal',
+        is_open=False,
+        size='lg'
+    ),
+    dcc.Download(id='download-concordance'),
+
     # Place summary container
     dbc.Card([
         dbc.CardHeader(
@@ -3819,9 +3863,9 @@ def update_map(filtered_data_json, view_type, heatmap_intensity, heatmap_radius,
 
         # Clean datasets
         metric_field = 'collocation_count' if (places_mode == 'coll' and 'collocation_count' in places_df.columns) else 'frequency'
-        places_df = places_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', metric_field])
+        places_df = places_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude'])
         if heatmap_df is not None:
-            heatmap_df = heatmap_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude', metric_field])
+            heatmap_df = heatmap_df.replace([np.inf, -np.inf], np.nan).dropna(subset=['latitude', 'longitude'])
         else:
             heatmap_df = places_df.copy()
 
@@ -4411,6 +4455,170 @@ def update_place_summary(click_data, selected_place, current_style, current_book
             return dash.no_update, dash.no_update, dash.no_update
     else:
         return dash.no_update, dash.no_update, dash.no_update
+
+
+@app.callback(
+    Output('concordance-modal', 'is_open'),
+    Output('concordance-query', 'value'),
+    Output('concordance-output', 'children'),
+    Input({'type': 'open-concordance', 'token': dash.ALL}, 'n_clicks'),
+    Input('close-concordance', 'n_clicks'),
+    State('concordance-modal', 'is_open'),
+    prevent_initial_call=True
+)
+def toggle_concordance_modal(open_clicks, close_clicks, is_open):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    trigger = ctx.triggered[0]['prop_id'].split('.')[0]
+    if trigger == 'close-concordance':
+        return False, dash.no_update, dash.no_update
+    # open
+    try:
+        trigger_id = json.loads(trigger)
+    except Exception:
+        raise PreventUpdate
+    token = trigger_id.get('token')
+    if not token:
+        raise PreventUpdate
+    return True, token, dash.no_update
+
+
+@app.callback(
+    Output('concordance-output', 'children'),
+    Output('download-concordance', 'data'),
+    Input('run-concordance', 'n_clicks'),
+    State('concordance-query', 'value'),
+    State('concordance-window', 'value'),
+    State('current-dhlabids-store', 'data'),
+    prevent_initial_call=True
+)
+def run_concordance(n_clicks, query, window, current_books):
+    if not n_clicks:
+        raise PreventUpdate
+    query = (query or "").strip()
+    if not query:
+        return html.Div("Tom søkestreng."), dash.no_update
+    window = int(window or 25)
+    current_books = current_books or []
+    if not current_books:
+        return html.Div("Ingen bøker i korpus; kan ikke hente konkordanser.", style={'color': '#64748b'}), dash.no_update
+
+    conn = get_db_connection()
+    try:
+        placeholders = ','.join(['?'] * len(current_books))
+        urn_df = pd.read_sql_query(
+            f"""
+            SELECT DISTINCT c.urn
+            FROM corpus c
+            JOIN books b ON c.dhlabid = b.dhlabid
+            WHERE c.dhlabid IN ({placeholders})
+              AND c.urn IS NOT NULL
+            """,
+            conn,
+            params=tuple(current_books)
+        )
+    finally:
+        conn.close()
+
+    urns = urn_df['urn'].dropna().unique().tolist() if not urn_df.empty else []
+    if not urns:
+        return html.Div("Ingen URNs i korpuset; kan ikke hente konkordanser.", style={'color': '#64748b'}), dash.no_update
+
+    try:
+        conc = dh.Concordance(urns, query, window=window, limit=500)
+        conc_df = conc.frame.copy()
+    except Exception as e:
+        return html.Div(f"Feil ved henting av konkordanser: {e}", style={'color': '#dc2626'}), dash.no_update
+
+    if conc_df is None or conc_df.empty:
+        return html.Div("Ingen konkordanser funnet.", style={'color': '#64748b'}), dash.no_update
+
+    preview = conc_df.head(10)
+    rows = []
+    for _, row in preview.iterrows():
+        rows.append(html.Div([
+            html.Span(row.get('left', ''), style={'color': '#475569'}),
+            html.Span(row.get('keyword', ''), style={'fontWeight': 700, 'margin': '0 4px'}),
+            html.Span(row.get('right', ''), style={'color': '#475569'}),
+            html.Span(row.get('urn', ''), style={'color': '#94a3b8', 'fontSize': '12px', 'marginLeft': '6px'})
+        ], style={'padding': '4px 0', 'borderBottom': '1px solid #eee'}))
+
+    table = html.Div(rows, style={'maxHeight': '260px', 'overflowY': 'auto', 'fontSize': '13px'})
+    download = dcc.send_data_frame(conc_df.to_csv, f"concordance_{query}.csv", index=False)
+    return table, download
+
+
+@app.callback(
+    Output('place-concordance-output', 'children'),
+    Output('download-place-concordance', 'data'),
+    Input({'type': 'place-concordance', 'token': dash.ALL}, 'n_clicks'),
+    State('current-dhlabids-store', 'data'),
+    prevent_initial_call=True
+)
+def fetch_place_concordance(n_clicks, current_books):
+    if not n_clicks or not any(n_clicks):
+        raise PreventUpdate
+    ctx = dash.callback_context
+    trigger = ctx.triggered[0] if ctx.triggered else None
+    if not trigger or not trigger.get('value'):
+        raise PreventUpdate
+    try:
+        trigger_id = json.loads(trigger['prop_id'].split('.')[0])
+    except Exception:
+        raise PreventUpdate
+    token = trigger_id.get('token')
+    if not token:
+        raise PreventUpdate
+
+    current_books = current_books or []
+    if not current_books:
+        return html.Div("Ingen bøker i korpus; kan ikke hente konkordanser.", style={'color': '#64748b'}), dash.no_update
+
+    conn = get_db_connection()
+    try:
+        placeholders = ','.join(['?'] * len(current_books))
+        urn_df = pd.read_sql_query(
+            f"""
+            SELECT DISTINCT c.urn
+            FROM corpus c
+            JOIN books b ON c.dhlabid = b.dhlabid
+            WHERE c.dhlabid IN ({placeholders})
+              AND b.token = ?
+              AND c.urn IS NOT NULL
+            """,
+            conn,
+            params=tuple(current_books + [token])
+        )
+    finally:
+        conn.close()
+
+    urns = urn_df['urn'].dropna().unique().tolist() if not urn_df.empty else []
+    if not urns:
+        return html.Div("Ingen URNs for denne plassen i korpuset; kan ikke hente konkordanser.", style={'color': '#64748b'}), dash.no_update
+
+    try:
+        conc = dh.Concordance(urns, [token], before=25, after=25)
+        conc_df = conc.frame.copy()
+    except Exception as e:
+        return html.Div(f"Feil ved henting av konkordanser: {e}", style={'color': '#dc2626'}), dash.no_update
+
+    if conc_df is None or conc_df.empty:
+        return html.Div("Ingen konkordanser funnet.", style={'color': '#64748b'}), dash.no_update
+
+    preview = conc_df.head(10)
+    rows = []
+    for _, row in preview.iterrows():
+        rows.append(html.Div([
+            html.Span(row.get('left', ''), style={'color': '#475569'}),
+            html.Span(row.get('keyword', ''), style={'fontWeight': 700, 'margin': '0 4px'}),
+            html.Span(row.get('right', ''), style={'color': '#475569'}),
+            html.Span(row.get('urn', ''), style={'color': '#94a3b8', 'fontSize': '12px', 'marginLeft': '6px'})
+        ], style={'padding': '4px 0', 'borderBottom': '1px solid #eee'}))
+
+    table = html.Div(rows, style={'maxHeight': '260px', 'overflowY': 'auto', 'fontSize': '13px'})
+    download = dcc.send_data_frame(conc_df.to_csv, f"concordance_{token}.csv", index=False)
+    return table, download
 
 # Callback for the close button on place summary
 app.clientside_callback(
