@@ -5122,18 +5122,20 @@ def create_rotated_ellipse(center_lat, center_lon, radius_km, bearing, points=10
     [
         Input('build-corpus-btn', 'n_clicks'),
         Input('current-dhlabids-store', 'data'),
+        Input({'type': 'search-book-action', 'dhlabid': ALL}, 'n_clicks'),
+        Input({'type': 'search-author-action', 'author_key': ALL, 'display_name': ALL}, 'n_clicks'),
         Input('main-map', 'figure')
     ],
     [State('loading-overlay', 'style')]
 )
-def update_loading_state(build_clicks, current_books, map_figure, current_style):
+def update_loading_state(build_clicks, current_books, book_clicks, author_clicks, map_figure, current_style):
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
     
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
-    # Show loading when build button is clicked or corpus changes (omnibox/build/etc.)
+    # Show loading when build button is clicked
     if trigger_id == 'build-corpus-btn' and build_clicks:
         new_style = dict(current_style)
         new_style['display'] = 'flex'
@@ -5147,6 +5149,16 @@ def update_loading_state(build_clicks, current_books, map_figure, current_style)
             # Initial empty corpus should not show overlay
             return current_style
     
+    # Show loading when omnibox add actions fire
+    try:
+        parsed = json.loads(trigger_id)
+    except Exception:
+        parsed = None
+    if isinstance(parsed, dict) and parsed.get('type') in ('search-book-action', 'search-author-action'):
+        new_style = dict(current_style)
+        new_style['display'] = 'flex'
+        return new_style
+
     # Hide loading when map is updated
     if trigger_id == 'main-map' and map_figure:
         new_style = dict(current_style)
