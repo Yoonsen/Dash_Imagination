@@ -5134,10 +5134,18 @@ def update_loading_state(build_clicks, current_books, map_figure, current_style)
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
     # Show loading when build button is clicked or corpus changes (omnibox/build/etc.)
-    if (trigger_id == 'build-corpus-btn' and build_clicks) or (trigger_id == 'current-dhlabids-store'):
+    if trigger_id == 'build-corpus-btn' and build_clicks:
         new_style = dict(current_style)
         new_style['display'] = 'flex'
         return new_style
+    if trigger_id == 'current-dhlabids-store':
+        if current_books and len(current_books) > 0:
+            new_style = dict(current_style)
+            new_style['display'] = 'flex'
+            return new_style
+        else:
+            # Initial empty corpus should not show overlay
+            return current_style
     
     # Hide loading when map is updated
     if trigger_id == 'main-map' and map_figure:
