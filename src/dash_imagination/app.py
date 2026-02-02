@@ -1783,7 +1783,7 @@ app.layout = html.Div([
         html.Div([
             html.Div([
                 html.I(className="fas fa-spinner fa-spin", style={'fontSize': '24px', 'marginRight': '10px'}),
-                html.Span("Preparing places...", style={'fontSize': '16px'})
+                html.Span("Oppdaterer korpus og steder …", style={'fontSize': '16px'})
             ], style={
                 'backgroundColor': 'rgba(255, 255, 255, 0.9)',
                 'padding': '15px 25px',
@@ -1850,17 +1850,6 @@ app.layout = html.Div([
                 "alignItems": "stretch",
                 "flexShrink": "0",
                 "position": "relative"
-            }),
-
-            html.Div(id='corpus-status-banner', style={
-                "fontSize": "12px",
-                "color": "#2563eb",
-                "padding": "4px 8px",
-                "backgroundColor": "rgba(37, 99, 235, 0.08)",
-                "borderRadius": "8px",
-                "boxShadow": "0 1px 3px rgba(0,0,0,0.08)",
-                "display": "none",
-                "flexShrink": "0"
             }),
 
             # Buttons container
@@ -5130,19 +5119,22 @@ def create_rotated_ellipse(center_lat, center_lon, radius_km, bearing, points=10
 # Add callback for loading state
 @app.callback(
     Output('loading-overlay', 'style'),
-    [Input('build-corpus-btn', 'n_clicks'),  # Changed from apply-filters to build-corpus-btn
-     Input('main-map', 'figure')],
+    [
+        Input('build-corpus-btn', 'n_clicks'),
+        Input('current-dhlabids-store', 'data'),
+        Input('main-map', 'figure')
+    ],
     [State('loading-overlay', 'style')]
 )
-def update_loading_state(build_clicks, map_figure, current_style):
+def update_loading_state(build_clicks, current_books, map_figure, current_style):
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
     
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
-    # Show loading when build button is clicked
-    if trigger_id == 'build-corpus-btn' and build_clicks:
+    # Show loading when build button is clicked or corpus changes (omnibox/build/etc.)
+    if (trigger_id == 'build-corpus-btn' and build_clicks) or (trigger_id == 'current-dhlabids-store'):
         new_style = dict(current_style)
         new_style['display'] = 'flex'
         return new_style
@@ -5930,28 +5922,6 @@ def add_author_books_from_search(_, current_books):
     return sorted(books), _search_results_style(False), status
 
 
-@app.callback(
-    Output('corpus-status-banner', 'children'),
-    Output('corpus-status-banner', 'style'),
-    Input('current-dhlabids-store', 'data'),
-    prevent_initial_call=True
-)
-def show_corpus_status(current_books):
-    count = len(current_books or [])
-    msg = f"Korpus oppdatert ({count} bøker)" if count else "Korpus er tomt"
-    style = {
-        "fontSize": "12px",
-        "color": "#2563eb",
-        "padding": "4px 8px",
-        "backgroundColor": "rgba(37, 99, 235, 0.08)",
-        "borderRadius": "8px",
-        "boxShadow": "0 1px 3px rgba(0,0,0,0.08)",
-        "display": "inline-flex",
-        "alignItems": "center",
-        "gap": "6px",
-        "flexShrink": "0"
-    }
-    return msg, style
 
 
 # Add a clientside callback for instant download status feedback
