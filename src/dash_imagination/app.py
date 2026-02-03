@@ -2016,7 +2016,7 @@ app.layout = html.Div([
             ]),
             dbc.ModalFooter([
                 dbc.Button(
-                    "Last ned CSV",
+                    "Last ned Excel",
                     id='download-concordance-btn',
                     color='light',
                     className='me-2',
