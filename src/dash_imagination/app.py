@@ -4630,10 +4630,11 @@ def run_concordance(n_clicks, query, window, current_books):
             keyword = (row.get('keyword') or '').strip()
             right = (row.get('right') or '').strip()
             conc_text = " ".join(part for part in [left, keyword, right] if part).strip()
+        link_label = (row.get('metadata') or '').strip() or "Åpne bok"
         rows.append(html.Div([
             html.Div(
-                html.A("Åpne bok", href=book_href, target="_blank", style={'color': '#1a56db', 'textDecoration': 'none'}),
-                style={'minWidth': '120px'}
+                html.A(link_label, href=book_href, target="_blank", style={'color': '#1a56db', 'textDecoration': 'none'}),
+                style={'minWidth': '200px'}
             ),
             html.Div([
                 html.Span(conc_text or "—", style={'color': '#475569'}),
@@ -4643,7 +4644,7 @@ def run_concordance(n_clicks, query, window, current_books):
             'padding': '6px 0',
             'borderBottom': '1px solid #eee',
             'display': 'grid',
-            'gridTemplateColumns': '140px 1fr',
+            'gridTemplateColumns': '220px 1fr',
             'columnGap': '12px',
             'alignItems': 'start'
         }))
@@ -4672,10 +4673,15 @@ def download_concordance(n_clicks, stored_conc, query):
         raise PreventUpdate
     if not stored_conc:
         raise PreventUpdate
+    import io
     conc_df = pd.DataFrame(stored_conc)
     safe_query = (query or "concordance").strip() or "concordance"
     safe_query = safe_query.replace(" ", "_")
-    return dcc.send_data_frame(conc_df.to_csv, f"concordance_{safe_query}.csv", index=False)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        conc_df.to_excel(writer, index=False, sheet_name='Concordance')
+    output.seek(0)
+    return dcc.send_bytes(lambda buf: buf.write(output.getvalue()), filename=f"concordance_{safe_query}.xlsx")
 
 
 @app.callback(
@@ -4799,10 +4805,11 @@ def fetch_place_concordance(n_clicks, current_books):
             keyword = (row.get('keyword') or '').strip()
             right = (row.get('right') or '').strip()
             conc_text = " ".join(part for part in [left, keyword, right] if part).strip()
+        link_label = (row.get('metadata') or '').strip() or "Åpne bok"
         rows.append(html.Div([
             html.Div(
-                html.A("Åpne bok", href=book_href, target="_blank", style={'color': '#1a56db', 'textDecoration': 'none'}),
-                style={'minWidth': '120px'}
+                html.A(link_label, href=book_href, target="_blank", style={'color': '#1a56db', 'textDecoration': 'none'}),
+                style={'minWidth': '200px'}
             ),
             html.Div([
                 html.Span(conc_text or "—", style={'color': '#475569'}),
@@ -4812,7 +4819,7 @@ def fetch_place_concordance(n_clicks, current_books):
             'padding': '6px 0',
             'borderBottom': '1px solid #eee',
             'display': 'grid',
-            'gridTemplateColumns': '140px 1fr',
+            'gridTemplateColumns': '220px 1fr',
             'columnGap': '12px',
             'alignItems': 'start'
         }))
@@ -4826,7 +4833,12 @@ def fetch_place_concordance(n_clicks, current_books):
         summary,
         html.Div(rows, style={'maxHeight': '260px', 'overflowY': 'auto', 'fontSize': '13px'})
     ])
-    download = dcc.send_data_frame(conc_df.to_csv, f"concordance_{token}.csv", index=False)
+    import io
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        conc_df.to_excel(writer, index=False, sheet_name='Concordance')
+    output.seek(0)
+    download = dcc.send_bytes(lambda buf: buf.write(output.getvalue()), filename=f"concordance_{token}.xlsx")
     return table, download
 
 # Callback for the close button on place summary
