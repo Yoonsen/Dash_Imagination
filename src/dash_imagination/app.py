@@ -4612,6 +4612,16 @@ def run_concordance(n_clicks, query, window, current_books):
                     pass
             meta_map[urn_key] = " ".join(p for p in parts if p).strip()
     conc_df['metadata'] = conc_df['urn'].map(meta_map).fillna('')
+    if 'dhlabid' not in conc_df.columns and not meta_df.empty and 'dhlabid' in meta_df.columns:
+        conc_df = conc_df.merge(meta_df[['urn', 'dhlabid']], on='urn', how='left')
+    if 'dhlabid' not in conc_df.columns and not meta_df.empty and 'dhlabid' in meta_df.columns:
+        conc_df = conc_df.merge(meta_df[['urn', 'dhlabid']], on='urn', how='left')
+    if 'dhlabid' in conc_df.columns:
+        pass
+    else:
+        # Add dhlabid column where possible by joining metadata
+        if not meta_df.empty and 'dhlabid' in meta_df.columns:
+            conc_df = conc_df.merge(meta_df[['urn', 'dhlabid']], on='urn', how='left')
 
     preview_limit = 50
     raw_size = getattr(conc, 'size', None)
